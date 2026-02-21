@@ -1,7 +1,7 @@
 # Clean the repo into it's initial state.
 [group('root')]
 [arg('destroy', long='destroy', value='true')]
-clean destroy='false':
+clean destroy="false":
   #!/usr/bin/env bash
   targets=(\
     ".next" \
