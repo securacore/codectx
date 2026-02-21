@@ -1,0 +1,26 @@
+FROM archlinux/archlinux:latest
+
+RUN \
+  pacman -Syu --noconfirm && \
+  pacman -S --noconfirm \
+  git \
+  go \
+  base-devel
+
+RUN \
+  useradd -m -G wheel -s /bin/bash user && \
+  echo "user ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+RUN \
+  mkdir -p \
+  /home/user/go \
+  /home/user/.cache/go-build && \
+  chown -R user:user /home/user
+
+USER user
+WORKDIR /home/user
+
+ENV HOME=/home/user
+ENV USER=user
+
+CMD [ "/bin/bash" ]

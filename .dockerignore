@@ -1,0 +1,11 @@
+.devbox
+.env*
+.git
+.dockerignore
+devbox.json
+devbox.lock
+compose.yml
+Dockerfile.*
+justfile
+bin
+README.md
