@@ -1,4 +1,6 @@
+alias cli := codectx
+
 # Run the built binary.
 [group('root')]
-cli *argv="":
+codectx *argv="":
   just docker cli {{argv}}
