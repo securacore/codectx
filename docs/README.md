@@ -24,6 +24,7 @@ At the start of every session, load [metadata.yml](metadata.yml) and all foundat
 | Directory                                 | Purpose                                  |
 | ----------------------------------------- | ---------------------------------------- |
 | [elysiajs](topics/elysiajs/README.md)     | ElysiaJS data-layer API conventions          |
+| [go](topics/go/README.md)                 | Go CLI conventions and patterns              |
 | [just](topics/just/README.md)             | Command runner conventions and structure     |
 | [nextjs](topics/nextjs/README.md)         | Next.js App Router conventions               |
 | [react](topics/react/README.md)           | React component conventions and patterns     |

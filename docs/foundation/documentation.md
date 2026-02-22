@@ -30,6 +30,8 @@ Every topic directory has a `README.md` as its entry point. For straightforward 
 
 A topic directory is warranted when a technology, tool, or domain has conventions specific enough to stand alone. Examples: a language with its own style rules, a framework with component patterns, a deployment tool with workflow conventions. Not every convention warrants its own directory. Create one when a topic has enough distinct rules to stand alone.
 
+Every topic directory starts with `README.md` as the sole document. As the topic grows and the content becomes large enough to warrant splitting, break all sections into individual kebab-case `.md` files within the directory simultaneously. Do not split incrementally (one file at a time); split all at once so the structure is consistent. After splitting, `README.md` becomes a concordance that outlines scope and links to child files. The threshold for splitting is a judgment call based on document length, section independence, and whether selective loading would benefit AI context management.
+
 Within any tier, split documents based on cohesion: when a document begins to cover multiple distinct concerns, break it into separate files that can be independently loaded and referenced.
 
 ### Specification Documentation

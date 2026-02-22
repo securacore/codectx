@@ -33,6 +33,7 @@ foundation:
       - just
       - tailwind
       - elysiajs
+      - go
 
   - id: markdown
     path: foundation/markdown.md
@@ -72,6 +73,7 @@ foundation:
       - just
       - tailwind
       - elysiajs
+      - go
 
   - id: ai-authoring
     path: foundation/ai-authoring.md
@@ -184,6 +186,16 @@ topics:
     path: topics/tailwind/README.md
     description: Tailwind CSS 4 conventions and design token system
     spec: topics/tailwind/spec/README.md
+    depends_on:
+      - philosophy
+      - specs
+    required_by: []
+    files: []
+
+  - id: go
+    path: topics/go/README.md
+    description: Go CLI conventions and patterns
+    spec: topics/go/spec/README.md
     depends_on:
       - philosophy
       - specs
