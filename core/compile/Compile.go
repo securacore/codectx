@@ -112,6 +112,13 @@ func Compile(cfg *config.Config) (*Result, error) {
 		return nil, fmt.Errorf("write unified manifest: %w", err)
 	}
 
+	// Generate and write compiled README.md.
+	readmeContent := generateReadme(unified)
+	readmePath := filepath.Join(outputDir, "README.md")
+	if err := os.WriteFile(readmePath, []byte(readmeContent), 0o644); err != nil {
+		return nil, fmt.Errorf("write compiled README.md: %w", err)
+	}
+
 	// Write lock file.
 	if err := lock.Write(lockFile, lck); err != nil {
 		return nil, fmt.Errorf("write lock file: %w", err)
