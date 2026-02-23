@@ -1,6 +1,8 @@
 package resolve
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -86,4 +88,89 @@ func TestParseSearchResponse_invalidJSON(t *testing.T) {
 	_, err := parseSearchResponse(strings.NewReader(body))
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "decode")
+}
+
+func TestParseSearchResponse_allFilteredOut(t *testing.T) {
+	body := `{
+		"total_count": 2,
+		"items": [
+			{
+				"full_name": "org/not-codectx",
+				"name": "not-codectx",
+				"description": "No prefix",
+				"html_url": "https://github.com/org/not-codectx",
+				"stargazers_count": 5,
+				"owner": {"login": "org"}
+			}
+		]
+	}`
+	results, err := parseSearchResponse(strings.NewReader(body))
+	require.NoError(t, err)
+	assert.Empty(t, results)
+}
+
+func TestParseSearchResponse_verifyURLField(t *testing.T) {
+	body := `{
+		"total_count": 1,
+		"items": [
+			{
+				"full_name": "org/codectx-react",
+				"name": "codectx-react",
+				"description": "React docs",
+				"html_url": "https://github.com/org/codectx-react",
+				"stargazers_count": 42,
+				"owner": {"login": "org"}
+			}
+		]
+	}`
+	results, err := parseSearchResponse(strings.NewReader(body))
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, "https://github.com/org/codectx-react", results[0].URL)
+}
+
+func TestDoSearch_nonOKStatus(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		w.Write([]byte("rate limited"))
+	}))
+	defer ts.Close()
+
+	_, err := doSearch(ts.URL)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "403")
+}
+
+func TestDoSearch_success(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "application/vnd.github.v3+json", r.Header.Get("Accept"))
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{
+			"total_count": 1,
+			"items": [{
+				"full_name": "org/codectx-react",
+				"name": "codectx-react",
+				"description": "React",
+				"html_url": "https://github.com/org/codectx-react",
+				"stargazers_count": 10,
+				"owner": {"login": "org"}
+			}]
+		}`))
+	}))
+	defer ts.Close()
+
+	results, err := doSearch(ts.URL)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, "react", results[0].Name)
+}
+
+func TestDoSearch_networkError(t *testing.T) {
+	// Use a closed server to cause a connection error.
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	ts.Close()
+
+	_, err := doSearch(ts.URL)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "search request")
 }

@@ -155,3 +155,31 @@ func TestIsGranular(t *testing.T) {
 		})
 	}
 }
+
+func TestUnmarshalYAML_invalidType(t *testing.T) {
+	var a Activation
+	err := yaml.Unmarshal([]byte(`42`), &a)
+	assert.Error(t, err)
+}
+
+func TestMarshalYAML_ambiguousMapAndMode(t *testing.T) {
+	// When both Map and Mode are set, MarshalYAML checks Map first (Map != nil),
+	// so it returns the Map. The round-trip should preserve granular activation.
+	a := Activation{
+		Mode: "all",
+		Map:  &ActivationMap{Topics: []string{"react"}},
+	}
+
+	data, err := yaml.Marshal(a)
+	require.NoError(t, err)
+
+	var roundtrip Activation
+	err = yaml.Unmarshal(data, &roundtrip)
+	require.NoError(t, err)
+
+	// Should round-trip as granular (Map), not as "all".
+	assert.True(t, roundtrip.IsGranular())
+	assert.Empty(t, roundtrip.Mode)
+	require.NotNil(t, roundtrip.Map)
+	assert.Equal(t, []string{"react"}, roundtrip.Map.Topics)
+}

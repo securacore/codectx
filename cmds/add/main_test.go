@@ -268,3 +268,214 @@ func TestSplitKey_noColon(t *testing.T) {
 	assert.Equal(t, "noprefix", section)
 	assert.Equal(t, "", id)
 }
+
+// --- parseActivateFlag edge cases ---
+
+func TestParseActivateFlag_emptyString(t *testing.T) {
+	_, err := parseActivateFlag("")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "expected section:id")
+}
+
+func TestParseActivateFlag_whitespace(t *testing.T) {
+	a, err := parseActivateFlag("topics:react , foundation:philosophy")
+	require.NoError(t, err)
+	require.NotNil(t, a.Map)
+	assert.Equal(t, []string{"react"}, a.Map.Topics)
+	assert.Equal(t, []string{"philosophy"}, a.Map.Foundation)
+}
+
+func TestParseActivateFlag_duplicateEntries(t *testing.T) {
+	a, err := parseActivateFlag("topics:react,topics:react")
+	require.NoError(t, err)
+	require.NotNil(t, a.Map)
+	assert.Equal(t, []string{"react", "react"}, a.Map.Topics)
+}
+
+func TestParseActivateFlag_colonInID(t *testing.T) {
+	a, err := parseActivateFlag("topics:my:id")
+	require.NoError(t, err)
+	require.NotNil(t, a.Map)
+	assert.Equal(t, []string{"my:id"}, a.Map.Topics)
+}
+
+// --- detectCollisions edge cases ---
+
+func TestDetectCollisions_noLocalManifest(t *testing.T) {
+	dir := t.TempDir()
+	docsDir := filepath.Join(dir, "docs")
+	require.NoError(t, os.MkdirAll(docsDir, 0o755))
+	// No package.yml in docsDir.
+
+	cfg := &config.Config{
+		Name: "test-project",
+		Config: &config.BuildConfig{
+			DocsDir: docsDir,
+		},
+		Packages: []config.PackageDep{},
+	}
+
+	newManifest := &manifest.Manifest{
+		Foundation: []manifest.FoundationEntry{
+			{ID: "unique-entry", Path: "foundation/unique.md"},
+		},
+	}
+
+	collisions := detectCollisions(cfg, newManifest, config.Activation{Mode: "all"})
+	assert.Empty(t, collisions)
+}
+
+func TestDetectCollisions_inactivePackageSkipped(t *testing.T) {
+	dir := t.TempDir()
+	docsDir := filepath.Join(dir, "docs")
+	require.NoError(t, os.MkdirAll(docsDir, 0o755))
+
+	// Create an installed package with manifest.
+	pkgDir := filepath.Join(docsDir, "packages", "mypkg@myauthor")
+	require.NoError(t, os.MkdirAll(pkgDir, 0o755))
+
+	pkgManifest := &manifest.Manifest{
+		Name:   "mypkg",
+		Author: "myauthor",
+		Topics: []manifest.TopicEntry{
+			{ID: "shared-topic", Path: "topics/shared/README.md"},
+		},
+	}
+	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "package.yml"), pkgManifest))
+
+	cfg := &config.Config{
+		Name: "test-project",
+		Config: &config.BuildConfig{
+			DocsDir: docsDir,
+		},
+		Packages: []config.PackageDep{
+			{
+				Name:   "mypkg",
+				Author: "myauthor",
+				Active: config.Activation{Mode: "none"},
+			},
+		},
+	}
+
+	// New manifest has the same topic ID as the inactive package.
+	newManifest := &manifest.Manifest{
+		Topics: []manifest.TopicEntry{
+			{ID: "shared-topic", Path: "topics/shared/README.md"},
+		},
+	}
+
+	collisions := detectCollisions(cfg, newManifest, config.Activation{Mode: "all"})
+	assert.Empty(t, collisions)
+}
+
+func TestDetectCollisions_noneActivation(t *testing.T) {
+	_, cfg := setupCollisionTest(t)
+
+	// New manifest has entries that would collide, but activation is "none".
+	newManifest := &manifest.Manifest{
+		Foundation: []manifest.FoundationEntry{
+			{ID: "philosophy", Path: "foundation/philosophy.md"},
+		},
+		Topics: []manifest.TopicEntry{
+			{ID: "react", Path: "topics/react/README.md"},
+		},
+	}
+
+	collisions := detectCollisions(cfg, newManifest, config.Activation{Mode: "none"})
+	assert.Empty(t, collisions)
+}
+
+// --- filterManifestForIDs edge cases ---
+
+func TestFilterManifestForIDs_promptsAndPlans(t *testing.T) {
+	m := &manifest.Manifest{
+		Prompts: []manifest.PromptEntry{
+			{ID: "lint", Path: "prompts/lint/README.md"},
+			{ID: "review", Path: "prompts/review/README.md"},
+		},
+		Plans: []manifest.PlanEntry{
+			{ID: "migration", Path: "plans/migration/README.md"},
+			{ID: "refactor", Path: "plans/refactor/README.md"},
+		},
+	}
+
+	activation := config.Activation{
+		Map: &config.ActivationMap{
+			Prompts: []string{"review"},
+			Plans:   []string{"migration"},
+		},
+	}
+
+	filtered := filterManifestForIDs(m, activation)
+	require.Len(t, filtered.Prompts, 1)
+	assert.Equal(t, "review", filtered.Prompts[0].ID)
+	require.Len(t, filtered.Plans, 1)
+	assert.Equal(t, "migration", filtered.Plans[0].ID)
+	assert.Empty(t, filtered.Foundation)
+	assert.Empty(t, filtered.Topics)
+}
+
+func TestFilterManifestForIDs_emptyActivationSlice(t *testing.T) {
+	m := &manifest.Manifest{
+		Foundation: []manifest.FoundationEntry{
+			{ID: "a"}, {ID: "b"},
+		},
+	}
+
+	activation := config.Activation{
+		Map: &config.ActivationMap{
+			Foundation: []string{},
+		},
+	}
+
+	filtered := filterManifestForIDs(m, activation)
+	assert.Empty(t, filtered.Foundation)
+}
+
+func TestFilterManifestForIDs_nonexistentIDs(t *testing.T) {
+	m := &manifest.Manifest{
+		Foundation: []manifest.FoundationEntry{
+			{ID: "a"}, {ID: "b"},
+		},
+		Topics: []manifest.TopicEntry{
+			{ID: "c"}, {ID: "d"},
+		},
+	}
+
+	activation := config.Activation{
+		Map: &config.ActivationMap{
+			Foundation: []string{"nonexistent"},
+			Topics:     []string{"also-missing"},
+		},
+	}
+
+	filtered := filterManifestForIDs(m, activation)
+	assert.Empty(t, filtered.Foundation)
+	assert.Empty(t, filtered.Topics)
+}
+
+// --- splitKey edge cases ---
+
+func TestSplitKey_emptyString(t *testing.T) {
+	section, id := splitKey("")
+	assert.Equal(t, "", section)
+	assert.Equal(t, "", id)
+}
+
+func TestSplitKey_multipleColons(t *testing.T) {
+	section, id := splitKey("a:b:c")
+	assert.Equal(t, "a", section)
+	assert.Equal(t, "b:c", id)
+}
+
+func TestSplitKey_colonAtStart(t *testing.T) {
+	section, id := splitKey(":foo")
+	assert.Equal(t, "", section)
+	assert.Equal(t, "foo", id)
+}
+
+func TestSplitKey_colonAtEnd(t *testing.T) {
+	section, id := splitKey("foo:")
+	assert.Equal(t, "foo", section)
+	assert.Equal(t, "", id)
+}

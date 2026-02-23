@@ -298,6 +298,93 @@ func TestCollectActiveIDs_empty(t *testing.T) {
 	assert.Empty(t, ids)
 }
 
+func TestMergeManifestDedup_topicConflict(t *testing.T) {
+	pkgA, pkgB := setupDedupDirs(t)
+
+	require.NoError(t, os.WriteFile(filepath.Join(pkgA, "topics/react.md"), []byte("v1"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(pkgB, "topics/react.md"), []byte("v2"), 0o644))
+
+	dst := &manifest.Manifest{
+		Topics: []manifest.TopicEntry{{ID: "react", Path: "topics/react.md"}},
+	}
+	src := &manifest.Manifest{
+		Topics: []manifest.TopicEntry{{ID: "react", Path: "topics/react.md"}},
+	}
+	seen := map[string]seenEntry{
+		"topics:react": {pkg: "local", hash: fileHash(filepath.Join(pkgA, "topics/react.md"))},
+	}
+
+	events := mergeManifestDedup(dst, src, pkgA, pkgB, "pkgB@org", seen)
+	require.Len(t, events, 1)
+	assert.Equal(t, "conflict", events[0].Reason)
+	assert.Equal(t, "topics", events[0].Section)
+}
+
+func TestMergeManifestDedup_bothHashesEmpty(t *testing.T) {
+	pkgA, pkgB := setupDedupDirs(t)
+	// Both files missing — hashes are both empty.
+	// "" == "" is true but "" != "" is false, so this hits the CONFLICT path.
+	dst := &manifest.Manifest{
+		Foundation: []manifest.FoundationEntry{{ID: "missing", Path: "foundation/missing.md"}},
+	}
+	src := &manifest.Manifest{
+		Foundation: []manifest.FoundationEntry{{ID: "missing", Path: "foundation/missing.md"}},
+	}
+	seen := map[string]seenEntry{
+		"foundation:missing": {pkg: "local", hash: ""},
+	}
+
+	events := mergeManifestDedup(dst, src, pkgA, pkgB, "pkgB@org", seen)
+	require.Len(t, events, 1)
+	assert.Equal(t, "conflict", events[0].Reason)
+}
+
+func TestMergeManifestDedup_mixedWithinSection(t *testing.T) {
+	pkgA, pkgB := setupDedupDirs(t)
+
+	sameContent := []byte("shared")
+	require.NoError(t, os.WriteFile(filepath.Join(pkgA, "foundation/a.md"), sameContent, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(pkgB, "foundation/a.md"), sameContent, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(pkgA, "foundation/b.md"), []byte("v1"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(pkgB, "foundation/b.md"), []byte("v2"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(pkgB, "foundation/c.md"), []byte("new"), 0o644))
+
+	dst := &manifest.Manifest{
+		Foundation: []manifest.FoundationEntry{
+			{ID: "a", Path: "foundation/a.md"},
+			{ID: "b", Path: "foundation/b.md"},
+		},
+	}
+	src := &manifest.Manifest{
+		Foundation: []manifest.FoundationEntry{
+			{ID: "a", Path: "foundation/a.md"}, // dedup
+			{ID: "b", Path: "foundation/b.md"}, // conflict
+			{ID: "c", Path: "foundation/c.md"}, // new
+		},
+	}
+	seen := map[string]seenEntry{
+		"foundation:a": {pkg: "local", hash: fileHash(filepath.Join(pkgA, "foundation/a.md"))},
+		"foundation:b": {pkg: "local", hash: fileHash(filepath.Join(pkgA, "foundation/b.md"))},
+	}
+
+	events := mergeManifestDedup(dst, src, pkgA, pkgB, "pkgB@org", seen)
+	require.Len(t, events, 2)
+	assert.Equal(t, "duplicate", events[0].Reason)
+	assert.Equal(t, "conflict", events[1].Reason)
+	// dst should have original 2 + new 1 = 3
+	require.Len(t, dst.Foundation, 3)
+	assert.Equal(t, "c", dst.Foundation[2].ID)
+}
+
+func TestFileHash_emptyFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "empty.txt")
+	require.NoError(t, os.WriteFile(path, []byte{}, 0o644))
+	h := fileHash(path)
+	assert.NotEmpty(t, h)
+	assert.Len(t, h, 64)
+}
+
 // --- keyID ---
 
 func TestKeyID(t *testing.T) {
@@ -341,4 +428,27 @@ func TestFileHash_differentContentDifferentHash(t *testing.T) {
 	require.NoError(t, os.WriteFile(path2, []byte("version B"), 0o644))
 
 	assert.NotEqual(t, fileHash(path1), fileHash(path2))
+}
+
+func TestCheckDedup_notFound(t *testing.T) {
+	seen := map[string]seenEntry{
+		"foundation:existing": {pkg: "local", hash: "abc123"},
+	}
+
+	ev, skip := checkDedup("foundation:missing", "foundation/missing.md", "foundation", "/src", "/dst", "pkg@org", seen)
+	assert.False(t, skip)
+	assert.Equal(t, ConflictEntry{}, ev)
+}
+
+func TestKeyID_multipleColons(t *testing.T) {
+	// Everything after the first colon should be returned.
+	assert.Equal(t, "a:b", keyID("foundation:a:b"))
+}
+
+func TestKeyID_emptyString(t *testing.T) {
+	assert.Equal(t, "", keyID(""))
+}
+
+func TestKeyID_colonAtStart(t *testing.T) {
+	assert.Equal(t, "foo", keyID(":foo"))
 }

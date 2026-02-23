@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 func TestRun_withName_createsDirectoryAndProject(t *testing.T) {
@@ -209,4 +210,105 @@ func TestEnsureGit_skipsIfGitExists(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
 	require.NoError(t, err)
 	assert.Contains(t, string(data), ".codectx/")
+}
+
+func TestEnsureGitignore_noTrailingNewline(t *testing.T) {
+	dir := t.TempDir()
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer os.Chdir(origDir)
+	require.NoError(t, os.Chdir(dir))
+
+	// Write .gitignore without trailing newline.
+	err = os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("node_modules/"), 0o644)
+	require.NoError(t, err)
+
+	err = ensureGitignore()
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	require.NoError(t, err)
+	content := string(data)
+	assert.Equal(t, "node_modules/\n.codectx/\n", content)
+}
+
+func TestEnsureGitignore_substringNoFalsePositive(t *testing.T) {
+	dir := t.TempDir()
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer os.Chdir(origDir)
+	require.NoError(t, os.Chdir(dir))
+
+	// Write .gitignore with a substring that contains ".codectx/" but isn't an exact line match.
+	err = os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(".codectx/subfolder\n"), 0o644)
+	require.NoError(t, err)
+
+	err = ensureGitignore()
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	require.NoError(t, err)
+	content := string(data)
+	// The exact ".codectx/" line should have been appended.
+	assert.Contains(t, content, ".codectx/subfolder\n")
+	assert.Contains(t, content, "\n.codectx/\n")
+}
+
+func TestSplitLines_mixedLineEndings(t *testing.T) {
+	result := splitLines("a\nb\r\nc")
+	assert.Equal(t, []string{"a", "b", "c"}, result)
+}
+
+func TestSplitLines_consecutiveNewlines(t *testing.T) {
+	result := splitLines("a\n\nb")
+	assert.Equal(t, []string{"a", "", "b"}, result)
+}
+
+func TestSplitLines_onlyNewlines(t *testing.T) {
+	result := splitLines("\n\n")
+	assert.Equal(t, []string{"", ""}, result)
+}
+
+func TestRun_withName_configContent(t *testing.T) {
+	dir := t.TempDir()
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer os.Chdir(origDir)
+	require.NoError(t, os.Chdir(dir))
+
+	err = run("my-project")
+	require.NoError(t, err)
+
+	projectDir := filepath.Join(dir, "my-project")
+
+	// Verify codectx.yml content.
+	codectxData, err := os.ReadFile(filepath.Join(projectDir, "codectx.yml"))
+	require.NoError(t, err)
+
+	var codectxYAML struct {
+		Name     string `yaml:"name"`
+		Packages []any  `yaml:"packages"`
+	}
+	err = yaml.Unmarshal(codectxData, &codectxYAML)
+	require.NoError(t, err)
+	assert.Equal(t, "my-project", codectxYAML.Name)
+	assert.Empty(t, codectxYAML.Packages)
+
+	// Verify docs/package.yml content.
+	pkgData, err := os.ReadFile(filepath.Join(projectDir, "docs", "package.yml"))
+	require.NoError(t, err)
+
+	var pkgYAML struct {
+		Name        string `yaml:"name"`
+		Version     string `yaml:"version"`
+		Description string `yaml:"description"`
+	}
+	err = yaml.Unmarshal(pkgData, &pkgYAML)
+	require.NoError(t, err)
+	assert.Equal(t, "my-project", pkgYAML.Name)
+	assert.Equal(t, "0.1.0", pkgYAML.Version)
+	assert.Equal(t, "Documentation package for my-project", pkgYAML.Description)
 }

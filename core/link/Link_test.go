@@ -125,3 +125,60 @@ func TestLink_emptyTools(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, results)
 }
+
+func TestLink_contentFormat(t *testing.T) {
+	dir := t.TempDir()
+	outputDir := filepath.Join(dir, ".codectx")
+	require.NoError(t, os.MkdirAll(outputDir, 0o755))
+
+	filePath := filepath.Join(dir, "TEST.md")
+	tools := []Tool{
+		{Name: "Test Tool", File: filePath},
+	}
+
+	results, err := Link(tools, outputDir)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+
+	content, err := os.ReadFile(filePath)
+	require.NoError(t, err)
+
+	expected := "Read [README.md](" + filepath.Join(outputDir, "README.md") + ") before continuing.\n"
+	assert.Equal(t, expected, string(content))
+}
+
+func TestTools_count(t *testing.T) {
+	assert.Len(t, Tools, 5)
+
+	names := make(map[string]bool)
+	for _, tool := range Tools {
+		names[tool.Name] = true
+	}
+
+	assert.True(t, names["Claude Code"], "should contain Claude Code")
+	assert.True(t, names["Agents"], "should contain Agents")
+	assert.True(t, names["Cursor"], "should contain Cursor")
+	assert.True(t, names["Windsurf"], "should contain Windsurf")
+	assert.True(t, names["GitHub Copilot"], "should contain GitHub Copilot")
+}
+
+func TestTools_entries(t *testing.T) {
+	expected := []struct {
+		Name   string
+		File   string
+		SubDir string
+	}{
+		{Name: "Claude Code", File: "CLAUDE.md", SubDir: ""},
+		{Name: "Agents", File: "AGENTS.md", SubDir: ""},
+		{Name: "Cursor", File: ".cursorrules", SubDir: ""},
+		{Name: "Windsurf", File: ".windsurfrules", SubDir: ""},
+		{Name: "GitHub Copilot", File: "copilot-instructions.md", SubDir: ".github"},
+	}
+
+	require.Len(t, Tools, len(expected))
+	for i, exp := range expected {
+		assert.Equal(t, exp.Name, Tools[i].Name, "tool %d Name", i)
+		assert.Equal(t, exp.File, Tools[i].File, "tool %d File", i)
+		assert.Equal(t, exp.SubDir, Tools[i].SubDir, "tool %d SubDir", i)
+	}
+}

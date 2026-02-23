@@ -111,3 +111,69 @@ func TestValidate_unknownSchema(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "read embedded schema")
 }
+
+func TestValidate_validState(t *testing.T) {
+	v := map[string]any{
+		"plan":    "migration",
+		"status":  "in_progress",
+		"summary": "halfway done",
+	}
+	err := Validate(StateSchemaFile, v)
+	assert.NoError(t, err)
+}
+
+func TestValidate_invalidState_badStatus(t *testing.T) {
+	v := map[string]any{
+		"plan":    "migration",
+		"status":  "unknown",
+		"summary": "halfway done",
+	}
+	err := Validate(StateSchemaFile, v)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "validation failed")
+}
+
+func TestValidate_packageWithPromptsPlans(t *testing.T) {
+	v := map[string]any{
+		"name":        "test-pkg",
+		"author":      "test-author",
+		"version":     "1.0.0",
+		"description": "A test package",
+		"prompts": []any{
+			map[string]any{
+				"id":          "review",
+				"path":        "prompts/review/README.md",
+				"description": "Code review prompt",
+			},
+		},
+		"plans": []any{
+			map[string]any{
+				"id":          "migration",
+				"path":        "plans/migration/README.md",
+				"state":       "plans/migration/state.yml",
+				"description": "Migration plan",
+			},
+		},
+	}
+	err := Validate(PackageSchemaFile, v)
+	assert.NoError(t, err)
+}
+
+func TestValidate_packageWithDependsOn(t *testing.T) {
+	v := map[string]any{
+		"name":        "test-pkg",
+		"author":      "test-author",
+		"version":     "1.0.0",
+		"description": "A test package",
+		"foundation": []any{
+			map[string]any{
+				"id":          "conventions",
+				"path":        "foundation/conventions.md",
+				"description": "Coding conventions",
+				"depends_on":  []any{"other"},
+			},
+		},
+	}
+	err := Validate(PackageSchemaFile, v)
+	assert.NoError(t, err)
+}

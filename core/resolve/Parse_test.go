@@ -53,6 +53,30 @@ func TestParse_exactVersion(t *testing.T) {
 	assert.Equal(t, "1.2.3", ref.Version)
 }
 
+func TestParse_hyphenatedName(t *testing.T) {
+	ref, err := Parse("my-lib@org:^1.0.0")
+	require.NoError(t, err)
+	assert.Equal(t, "my-lib", ref.Name)
+	assert.Equal(t, "org", ref.Author)
+	assert.Equal(t, "^1.0.0", ref.Version)
+}
+
+func TestParse_multipleAtSigns(t *testing.T) {
+	// lastIndex finds the LAST @, so "a@b@c" -> name="a@b", author="c"
+	ref, err := Parse("a@b@c")
+	require.NoError(t, err)
+	assert.Equal(t, "a@b", ref.Name)
+	assert.Equal(t, "c", ref.Author)
+}
+
+func TestParse_multipleColons(t *testing.T) {
+	// lastIndex finds the LAST :, so "a:b:c" -> nameAuthor="a:b", version="c"
+	ref, err := Parse("a:b:c")
+	require.NoError(t, err)
+	assert.Equal(t, "a:b", ref.Name)
+	assert.Equal(t, "c", ref.Version)
+}
+
 func TestParse_errors(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -72,4 +96,30 @@ func TestParse_errors(t *testing.T) {
 			assert.Error(t, err)
 		})
 	}
+}
+
+// --- lastIndex ---
+
+func TestLastIndex_found(t *testing.T) {
+	assert.Equal(t, 5, lastIndex("hello@world", '@'))
+}
+
+func TestLastIndex_multiple(t *testing.T) {
+	assert.Equal(t, 3, lastIndex("a@b@c", '@'))
+}
+
+func TestLastIndex_notFound(t *testing.T) {
+	assert.Equal(t, -1, lastIndex("hello", '@'))
+}
+
+func TestLastIndex_atStart(t *testing.T) {
+	assert.Equal(t, 0, lastIndex("@start", '@'))
+}
+
+func TestLastIndex_atEnd(t *testing.T) {
+	assert.Equal(t, 3, lastIndex("end@", '@'))
+}
+
+func TestLastIndex_emptyString(t *testing.T) {
+	assert.Equal(t, -1, lastIndex("", '@'))
 }
