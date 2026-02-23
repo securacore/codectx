@@ -4,45 +4,83 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"securacore/codectx/core/config"
 	"securacore/codectx/core/manifest"
 	"securacore/codectx/core/schema"
 
+	"github.com/charmbracelet/huh"
 	"github.com/urfave/cli/v3"
 )
 
 const configFile = "codectx.yml"
 const packageFile = "package.yml"
+const gitignoreContent = ".codectx/\n"
 
 var Command = &cli.Command{
-	Name:  "init",
-	Usage: "Initialize a new codectx project",
-	Flags: []cli.Flag{
-		&cli.StringFlag{
-			Name:  "name",
-			Usage: "Project name",
-		},
-	},
+	Name:      "init",
+	Usage:     "Initialize a new codectx project",
+	ArgsUsage: "[name]",
 	Action: func(ctx context.Context, c *cli.Command) error {
-		return run(c.String("name"))
+		return run(c.Args().First())
 	},
 }
 
 func run(name string) error {
+	// If a name is provided as argument, create the directory and work inside it.
+	if name != "" {
+		if err := os.MkdirAll(name, 0o755); err != nil {
+			return fmt.Errorf("create directory %s: %w", name, err)
+		}
+		if err := os.Chdir(name); err != nil {
+			return fmt.Errorf("enter directory %s: %w", name, err)
+		}
+	}
+
 	// Guard: check if already initialized.
 	if _, err := os.Stat(configFile); err == nil {
 		return fmt.Errorf("%s already exists: project is already initialized", configFile)
 	}
 
-	// Infer project name from current directory if not provided.
+	// If no name provided, prompt interactively.
 	if name == "" {
+		defaultName := ""
 		wd, err := os.Getwd()
-		if err != nil {
-			return fmt.Errorf("get working directory: %w", err)
+		if err == nil {
+			defaultName = filepath.Base(wd)
 		}
-		name = filepath.Base(wd)
+
+		var prompted string
+		form := huh.NewForm(
+			huh.NewGroup(
+				huh.NewInput().
+					Title("Project name").
+					Description("Name for this codectx project").
+					Placeholder(defaultName).
+					Value(&prompted),
+			),
+		)
+
+		if err := form.Run(); err != nil {
+			return fmt.Errorf("prompt: %w", err)
+		}
+
+		if prompted != "" {
+			name = prompted
+		} else {
+			name = defaultName
+		}
+
+		if name == "" {
+			return fmt.Errorf("project name is required")
+		}
+	}
+
+	// Initialize git if no .git directory exists.
+	if err := ensureGit(); err != nil {
+		return err
 	}
 
 	// Create docs directory structure.
@@ -95,9 +133,78 @@ func run(name string) error {
 	fmt.Println("Created:")
 	fmt.Printf("  %s\n", configFile)
 	fmt.Printf("  %s\n", packagePath)
+	fmt.Printf("  %s\n", ".gitignore")
 	for _, dir := range dirs {
 		fmt.Printf("  %s/\n", dir)
 	}
 
 	return nil
+}
+
+// ensureGit initializes a git repository and writes a .gitignore
+// if no .git directory exists in the current directory.
+func ensureGit() error {
+	if _, err := os.Stat(".git"); err == nil {
+		// Git already initialized; ensure .gitignore has .codectx/ entry.
+		return ensureGitignore()
+	}
+
+	cmd := exec.Command("git", "init")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("git init: %w", err)
+	}
+
+	return ensureGitignore()
+}
+
+// ensureGitignore creates or appends to .gitignore to include .codectx/.
+func ensureGitignore() error {
+	const entry = ".codectx/"
+	path := ".gitignore"
+
+	// Check if .gitignore already exists and contains the entry.
+	if data, err := os.ReadFile(path); err == nil {
+		content := string(data)
+		for _, line := range splitLines(content) {
+			if line == entry {
+				return nil // already present
+			}
+		}
+		// Append the entry.
+		f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
+		if err != nil {
+			return fmt.Errorf("open .gitignore: %w", err)
+		}
+		defer f.Close()
+		if len(data) > 0 && data[len(data)-1] != '\n' {
+			f.WriteString("\n")
+		}
+		f.WriteString(entry + "\n")
+		return nil
+	}
+
+	// Create new .gitignore.
+	return os.WriteFile(path, []byte(gitignoreContent), 0o644)
+}
+
+// splitLines splits a string into lines, handling both \n and \r\n.
+func splitLines(s string) []string {
+	var lines []string
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\n' {
+			line := s[start:i]
+			if len(line) > 0 && line[len(line)-1] == '\r' {
+				line = line[:len(line)-1]
+			}
+			lines = append(lines, line)
+			start = i + 1
+		}
+	}
+	if start < len(s) {
+		lines = append(lines, s[start:])
+	}
+	return lines
 }

@@ -8,6 +8,7 @@ import (
 	"securacore/codectx/cmds/compile"
 	initialize "securacore/codectx/cmds/init"
 	"securacore/codectx/cmds/link"
+	"securacore/codectx/cmds/search"
 	"securacore/codectx/cmds/version"
 
 	"github.com/urfave/cli/v3"
@@ -22,6 +23,7 @@ func main() {
 			compile.Command,
 			initialize.Command,
 			link.Command,
+			search.Command,
 			version.Command,
 		},
 	}

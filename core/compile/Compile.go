@@ -47,6 +47,10 @@ func Compile(cfg *config.Config) (*Result, error) {
 
 	totalCopied := 0
 
+	// Initialize deduplication tracking.
+	seen := make(map[string]seenEntry)
+	var report DeduplicationReport
+
 	// Phase 1: Combine local package.
 	// All local entries are included (the local package is always fully active).
 	copied, err := copyManifestFiles(localManifest, docsDir, outputDir)
@@ -54,7 +58,7 @@ func Compile(cfg *config.Config) (*Result, error) {
 		return nil, fmt.Errorf("copy local package files: %w", err)
 	}
 	totalCopied += copied
-	mergeManifest(unified, localManifest)
+	mergeManifestDedup(unified, localManifest, docsDir, docsDir, "local", seen)
 
 	// Phase 1 continued: Combine installed packages.
 	lck := &lock.Lock{
@@ -93,8 +97,16 @@ func Compile(cfg *config.Config) (*Result, error) {
 		}
 		totalCopied += copied
 
-		// Phase 2: Align by merging activated entries into unified manifest.
-		mergeManifest(unified, filtered)
+		// Phase 2: Align by merging activated entries with dedup.
+		pkgLabel := fmt.Sprintf("%s@%s", pkg.Name, pkg.Author)
+		events := mergeManifestDedup(unified, filtered, outputDir, pkgDir, pkgLabel, seen)
+		for _, ev := range events {
+			if ev.Reason == "duplicate" {
+				report.Duplicates = append(report.Duplicates, ev)
+			} else {
+				report.Conflicts = append(report.Conflicts, ev)
+			}
+		}
 		packagesProcessed++
 
 		lck.Packages = append(lck.Packages, lock.LockedPackage{
@@ -128,5 +140,6 @@ func Compile(cfg *config.Config) (*Result, error) {
 		OutputDir:   outputDir,
 		FilesCopied: totalCopied,
 		Packages:    packagesProcessed,
+		Dedup:       report,
 	}, nil
 }

@@ -5,4 +5,5 @@ type Result struct {
 	OutputDir   string
 	FilesCopied int
 	Packages    int
+	Dedup       DeduplicationReport
 }

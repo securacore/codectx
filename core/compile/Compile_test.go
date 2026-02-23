@@ -161,3 +161,103 @@ func TestCompile_writesLockFile(t *testing.T) {
 	_, err = os.Stat(filepath.Join(dir, "codectx.lock"))
 	assert.NoError(t, err)
 }
+
+func TestCompile_dedupsSameContent(t *testing.T) {
+	_, cfg := setupTestProject(t)
+	docsDir := cfg.DocsDir()
+
+	// Write a foundation doc to the local package.
+	sharedContent := []byte("# Shared Philosophy\nThis is shared across packages.\n")
+	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "foundation", "philosophy.md"), sharedContent, 0o644))
+
+	localManifest := &manifest.Manifest{
+		Name:        "test-project",
+		Author:      "tester",
+		Version:     "1.0.0",
+		Description: "Test",
+		Foundation: []manifest.FoundationEntry{
+			{ID: "philosophy", Path: "foundation/philosophy.md", Description: "Shared philosophy", Load: "always"},
+		},
+	}
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), localManifest))
+
+	// Create installed package with same foundation entry and same content.
+	pkgDir := filepath.Join(docsDir, "packages", "react@org")
+	require.NoError(t, os.MkdirAll(filepath.Join(pkgDir, "foundation"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(pkgDir, "foundation", "philosophy.md"), sharedContent, 0o644))
+
+	pkgManifest := &manifest.Manifest{
+		Name:    "react",
+		Author:  "org",
+		Version: "1.0.0",
+		Foundation: []manifest.FoundationEntry{
+			{ID: "philosophy", Path: "foundation/philosophy.md", Description: "Shared philosophy"},
+		},
+	}
+	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "package.yml"), pkgManifest))
+
+	cfg.Packages = []config.PackageDep{
+		{Name: "react", Author: "org", Version: "^1.0.0", Active: config.Activation{Mode: "all"}},
+	}
+
+	result, err := Compile(cfg)
+	require.NoError(t, err)
+
+	// Should report 1 duplicate, 0 conflicts.
+	assert.Len(t, result.Dedup.Duplicates, 1)
+	assert.Empty(t, result.Dedup.Conflicts)
+	assert.Equal(t, "philosophy", result.Dedup.Duplicates[0].ID)
+	assert.Equal(t, "duplicate", result.Dedup.Duplicates[0].Reason)
+}
+
+func TestCompile_conflictDifferentContent(t *testing.T) {
+	_, cfg := setupTestProject(t)
+	docsDir := cfg.DocsDir()
+
+	// Local has version A of the doc.
+	require.NoError(t, os.WriteFile(
+		filepath.Join(docsDir, "foundation", "conventions.md"),
+		[]byte("# Local Conventions\n"), 0o644))
+
+	localManifest := &manifest.Manifest{
+		Name:    "test-project",
+		Author:  "tester",
+		Version: "1.0.0",
+		Foundation: []manifest.FoundationEntry{
+			{ID: "conventions", Path: "foundation/conventions.md", Description: "Local conventions"},
+		},
+	}
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), localManifest))
+
+	// Installed package has version B of the doc (different content).
+	pkgDir := filepath.Join(docsDir, "packages", "go@org")
+	require.NoError(t, os.MkdirAll(filepath.Join(pkgDir, "foundation"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(pkgDir, "foundation", "conventions.md"),
+		[]byte("# Go Conventions\n"), 0o644))
+
+	pkgManifest := &manifest.Manifest{
+		Name:    "go",
+		Author:  "org",
+		Version: "1.0.0",
+		Foundation: []manifest.FoundationEntry{
+			{ID: "conventions", Path: "foundation/conventions.md", Description: "Go conventions"},
+		},
+	}
+	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "package.yml"), pkgManifest))
+
+	cfg.Packages = []config.PackageDep{
+		{Name: "go", Author: "org", Version: "^1.0.0", Active: config.Activation{Mode: "all"}},
+	}
+
+	result, err := Compile(cfg)
+	require.NoError(t, err)
+
+	// Should report 1 conflict, 0 duplicates.
+	assert.Empty(t, result.Dedup.Duplicates)
+	require.Len(t, result.Dedup.Conflicts, 1)
+	assert.Equal(t, "conventions", result.Dedup.Conflicts[0].ID)
+	assert.Equal(t, "conflict", result.Dedup.Conflicts[0].Reason)
+	assert.Equal(t, "local", result.Dedup.Conflicts[0].WinnerPkg)
+	assert.Equal(t, "go@org", result.Dedup.Conflicts[0].SkippedPkg)
+}

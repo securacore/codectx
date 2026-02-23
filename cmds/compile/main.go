@@ -35,5 +35,18 @@ func run() error {
 	fmt.Printf("  Files copied: %d\n", result.FilesCopied)
 	fmt.Printf("  Packages:     %d\n", result.Packages)
 
+	if result.Dedup.Total() > 0 {
+		if len(result.Dedup.Duplicates) > 0 {
+			fmt.Printf("  Deduplicated: %d\n", len(result.Dedup.Duplicates))
+		}
+		if result.Dedup.HasConflicts() {
+			fmt.Printf("\nWarnings (%d conflict(s)):\n", len(result.Dedup.Conflicts))
+			for _, c := range result.Dedup.Conflicts {
+				fmt.Printf("  [%s] %s: kept from %s, skipped from %s\n",
+					c.Section, c.ID, c.WinnerPkg, c.SkippedPkg)
+			}
+		}
+	}
+
 	return nil
 }
