@@ -1,5 +1,7 @@
 FROM archlinux/archlinux:latest
 
+RUN echo 'DisableSandbox' >> /etc/pacman.conf
+
 RUN \
   pacman -Syu --noconfirm && \
   pacman -S --noconfirm \
