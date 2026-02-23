@@ -1,6 +1,6 @@
 # Markdown
 
-This document defines markdown conventions for documentation files in this repository. It governs files within `docs/` and any documentation-specific markdown. General-purpose markdown files (e.g., a future README) may follow lighter conventions but should not contradict these.
+This document defines markdown conventions for documentation files in this repository. It governs files within `docs/` and any documentation-specific markdown. General-purpose markdown files (e.g., a future README) may follow lighter conventions but must not contradict these.
 
 These conventions are chosen with AI consumption as a primary concern. Structure, consistency, and predictability aid both human readers and AI agents that parse these files as instructions.
 
@@ -8,10 +8,14 @@ These conventions are chosen with AI consumption as a primary concern. Structure
 
 These guidelines improve how AI agents parse, navigate, and act on documentation. They directly affect markdown structure and style choices.
 
+<rules>
+
 - **Descriptive heading text.** Headings serve as semantic anchors for AI navigation. A heading like "Configuration" is ambiguous across documents; "Database Configuration" is directly navigable. Write headings that can stand alone without surrounding context.
 - **No positional references.** Avoid phrases like "see above," "as mentioned earlier," or "the following section." AI may load documents partially, out of order, or in isolation. Use explicit section names (e.g., "as defined in the Prose section") or inline links to the referenced location.
-- **Front-load intent.** The introductory paragraph after H1 and the opening sentence of each section should state what the section covers. AI uses these to decide whether to read deeper or skip ahead. A section that buries its purpose three paragraphs in is harder for AI to triage.
+- **Front-load intent.** The introductory paragraph after H1 and the opening sentence of each section states what the section covers. AI uses these to decide whether to read deeper or skip ahead. A section that buries its purpose three paragraphs in is harder for AI to triage.
 - **Consistent terminology.** Use the same term for the same concept throughout all documentation. Alternating between synonyms (e.g., "config" vs "configuration" vs "settings" for the same thing) degrades AI pattern-matching and search reliability. Pick one term and use it everywhere.
+
+</rules>
 
 For linguistic patterns and cross-model authoring conventions (imperative language, positive framing, explicit defaults, examples), see [ai-authoring.md](ai-authoring.md).
 
@@ -27,7 +31,7 @@ Use lowercase, descriptive tag names that reflect the section's role. Common mar
 
 Semantic markers wrap content _inside_ a section, not around headings. Place the opening tag after the heading and any introductory prose. Place the closing tag before the next heading or at the end of the section.
 
-These tags are not rendered visually in standard markdown viewers. They exist solely for AI parsing and should not be removed during formatting cleanup. When editing a document that contains semantic markers, preserve them. When creating a document intended for AI consumption, add them where the distinction between "do this," "follow this rule," and "know this" would otherwise depend on the reader inferring intent from prose.
+These tags are not rendered visually in standard markdown viewers. They exist solely for AI parsing. Do not remove them during formatting cleanup. When editing a document that contains semantic markers, preserve them. When creating a document intended for AI consumption, add them where the distinction between "do this," "follow this rule," and "know this" would otherwise depend on the reader inferring intent from prose.
 
 ## File Conventions
 

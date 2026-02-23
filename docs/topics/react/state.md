@@ -7,7 +7,7 @@ State management hierarchy and conventions. State is managed through three mecha
 <rules>
 
 - **`useState` is the first choice.** Use it for state that lives and dies with a single component. Most component state is `useState`.
-- **Jotai is the first choice when state needs to exist beyond a single component.** Atoms provide granular subscriptions: only the specific consumers of a changed atom re-render. Use Jotai when multiple components need the same state but re-renders should be targeted.
+- **Jotai is the first choice when state needs to exist beyond a single component.** Atoms provide granular subscriptions: only the specific consumers of a changed atom re-render. Use Jotai when multiple components need the same state but targeted re-renders matter.
 - **React Context is for cross-component state where broad re-rendering is the correct behavior.** When a state change fundamentally affects an entire subtree (not just individual consumers), Context's wide-net re-render is intentional, not a limitation. Use Context for compound component internal state, theme, locale, and similar subtree-scoped concerns.
 
 </rules>
@@ -33,7 +33,7 @@ const SearchContext = createContext("");     // WRONG: every consumer re-renders
 ### Escalation Triggers
 
 - `useState` to Jotai: another component needs this state.
-- Jotai to Context: this state change should re-render the whole subtree, not just individual consumers.
+- Jotai to Context: this state change re-renders the whole subtree, not just individual consumers.
 
 ### Jotai Conventions
 
@@ -64,7 +64,7 @@ export const Counter: FC<Props> = () => {
 
 <rules>
 
-- Use Context for state scoped to a component subtree where all children should re-render on change.
+- Use Context for state scoped to a component subtree where all children re-render on change.
 - Context is the correct mechanism for compound component internal state (e.g., a `Disclosure` parent sharing open/closed state with its children).
 - Context is acceptable for infrequently-changing subtree configuration: theme, locale, feature flags.
 - Do not use Context for frequently-changing state shared across unrelated components. Use Jotai instead.

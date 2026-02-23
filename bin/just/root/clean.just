@@ -10,6 +10,9 @@ clean destroy="false":
     ".DS_Store" \
   )
 
+  echo "Cleaning container(s), please wait..."
+  just docker down
+
   echo "Cleaning cached packages, please wait..."
   devbox run -- nix store gc --extra-experimental-features nix-command
 

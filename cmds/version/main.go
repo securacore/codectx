@@ -1,4 +1,4 @@
-package cmd_version
+package version
 
 import (
 	"context"
@@ -7,11 +7,13 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
+var Version = "dev"
+
 var Command = &cli.Command{
 	Name:  "version",
-	Usage: "CLI version",
+	Usage: "Display the CLI version",
 	Action: func(ctx context.Context, c *cli.Command) error {
-		fmt.Println("VERSION")
+		fmt.Println(Version)
 		return nil
 	},
 }

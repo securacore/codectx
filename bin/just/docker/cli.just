@@ -5,6 +5,6 @@ cli *args='':
 
   docker compose exec archlinux \
     /bin/bash -c \
-    "go run main.go {{args}}"
+    "cd /workspace && go install . && cd /home/user/project && codectx {{args}}"
 
   exit 0

@@ -13,7 +13,7 @@ Error handling and loading states use the same two-tier architecture: route-leve
 
 - Use the `react-error-boundary` package. Do not write custom class-based Error Boundary components.
 - Use a single `ErrorBoundary` component with a configurable `fallback` prop. Do not create a taxonomy of specialized boundary components (`ApiErrorBoundary`, `FeatureErrorBoundary`, etc.).
-- Place Error Boundaries at isolation boundaries: points where an independent feature's failure should be contained rather than propagating upward.
+- Place Error Boundaries at isolation boundaries: points where an independent feature's failure is contained rather than propagating upward.
 - Place Error Boundaries around `"use client"` islands embedded in Server Component trees.
 - Place Error Boundaries around third-party integration components (maps, charts, embeds).
 - Place Error Boundaries around independently-loadable feature sections on a page.

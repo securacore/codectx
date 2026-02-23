@@ -1,6 +1,6 @@
 # Philosophy
 
-This section describes the conceptual philosophy that guides decision-making in this codebase. These are not concrete rules; architectural patterns, file organization, and implementation specifics are documented separately. The principles below inform _why_ those concrete rules exist.
+This section describes the conceptual philosophy that guides decision-making in this codebase. These are not concrete rules; architectural patterns, file organization, and implementation specifics are documented separately. The principles in the Guiding Principles section inform _why_ those concrete rules exist.
 
 ## Guiding Principles
 
@@ -10,7 +10,7 @@ Follow SOLID and DRY as the foundation for maintainable, extensible code. These 
 
 ### 2. Consistency
 
-The codebase is a consensus on approach. When an established pattern exists, follow it. Deviation requires a pragmatic reason: one that demonstrably improves clarity, performance, or maintainability. Such deviations may reveal blind spots in current design and should inform updates to the documented approach.
+The codebase is a consensus on approach. When an established pattern exists, follow it. Deviation requires a pragmatic reason: one that demonstrably improves clarity, performance, or maintainability. Such deviations reveal blind spots in current design and inform updates to the documented approach.
 
 ### 3. Clarity Over Dogma
 

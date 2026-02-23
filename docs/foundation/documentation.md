@@ -42,15 +42,23 @@ Topic directories may contain a `spec/` subdirectory that captures the reasoning
 
 Documentation must remain valid independent of the current state of application code. This means:
 
+<rules>
+
 - **No implementation samples.** Never include code that mirrors or references application code. When the code changes, the documentation becomes a liability.
 - **Conceptual examples only.** When a sample aids understanding, it must illustrate the _concept_, not the application. Samples are supplementary. They exist to convey an idea, not to demonstrate how specifics are done in this codebase.
 - **Configuration references, not duplication.** When documentation needs to reference configuration, point to the configuration file itself. Do not copy configuration values into documentation as examples. Per [philosophy.md](philosophy.md), when documentation and configuration conflict, configuration wins. Avoid creating opportunities for conflict.
+
+</rules>
 
 ## Code Comments vs. Documentation
 
 Code comments and documentation files serve different purposes:
 
+<rules>
+
 - **Code comments** explain _intent_: why this specific code exists and what it is meant to accomplish. They are local to the code they annotate.
 - **Documentation files** explain _process_: the conventions, patterns, and decisions that govern how code is written. They are independent of any specific code location.
 
-If information is only relevant when reading a particular piece of code, it belongs in a comment. If it governs how code should be written across the project, it belongs in documentation.
+If information is only relevant when reading a particular piece of code, it belongs in a comment. If it governs how code is written across the project, it belongs in documentation.
+
+</rules>

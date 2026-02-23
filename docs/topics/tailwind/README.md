@@ -259,7 +259,7 @@ export const Button: FC<Props> = ({ variant, size, className, children }) => (
 <rules>
 
 - Mobile-first. Build for mobile viewports, then layer styles for larger viewports using Tailwind's `min-width` breakpoint utilities (`sm:`, `md:`, `lg:`, `xl:`, `2xl:`).
-- Use Tailwind's default breakpoint system. Do not define custom breakpoints unless the application's layout requirements genuinely demand them (this would be a design system exception requiring the scrutiny process described above).
+- Use Tailwind's default breakpoint system. Do not define custom breakpoints unless the application's layout requirements genuinely demand them (this would be a design system exception requiring the scrutiny process defined in the Design System Exceptions section).
 - Responsive utilities are applied inline alongside other utilities. Do not create separate mobile/desktop component variants unless the layouts are fundamentally different in structure, not just styling.
 
 </rules>

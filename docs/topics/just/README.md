@@ -50,7 +50,7 @@ Example flow for `just save`:
 
 <rules>
 
-- One recipe per file. The file name matches the recipe name (`save.just` contains the `save` recipe).
+- One recipe per file. The filename matches the recipe name (`save.just` contains the `save` recipe).
 - Every module directory has a `.mod.just` file as its entry point. This file imports `settings.just` and all recipe files in the directory.
 - `settings.just` lives at `bin/just/settings.just`. Every `.mod.just` imports it.
 - All Just files live under `bin/just/`. The only exception is the root `Justfile` at the project root.
@@ -104,7 +104,7 @@ Example flow for `just save`:
 2. Create `<name>.just` in each AI backend directory, calling the `prompt` recipe with the prompt directory name.
 3. Create `<name>.just` in `bin/just/ai/` to dispatch to `just {{ai_bin}} <name>`.
 4. Import the new file in each `.mod.just`.
-5. Optionally create a root recipe in `bin/just/root/` if the command should be user-facing.
+5. Optionally create a root recipe in `bin/just/root/` if the command is user-facing.
 
 ## Configuration Reference
 

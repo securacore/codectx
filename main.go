@@ -4,7 +4,9 @@ import (
 	"context"
 	"log"
 	"os"
-	cmd_version "securacore/codectx/cmds/version"
+	"securacore/codectx/cmds/compile"
+	initialize "securacore/codectx/cmds/init"
+	"securacore/codectx/cmds/version"
 
 	"github.com/urfave/cli/v3"
 )
@@ -14,7 +16,9 @@ func main() {
 		Name:  "codectx",
 		Usage: "AI Code Documentation Package Manager",
 		Commands: []*cli.Command{
-			cmd_version.Command,
+			compile.Command,
+			initialize.Command,
+			version.Command,
 		},
 	}
 

@@ -13,6 +13,7 @@ RUN \
 
 RUN \
   mkdir -p \
+  /home/user/project \
   /home/user/go \
   /home/user/.cache/go-build && \
   chown -R user:user /home/user
@@ -22,5 +23,7 @@ WORKDIR /home/user
 
 ENV HOME=/home/user
 ENV USER=user
+ENV GOPATH=/home/user/go
+ENV PATH="/home/user/go/bin:${PATH}"
 
 CMD [ "/bin/bash" ]

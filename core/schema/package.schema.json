@@ -1,27 +1,32 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Documentation Metadata",
-  "description": "Schema for docs/metadata.yml. Validates the documentation manifest that governs relationships, portability, and AI-first lookup across all documentation.",
+  "title": "Documentation Package",
+  "description": "Schema for package.yml. Validates documentation package manifests that serve as data maps for AI-driven documentation navigation and loading. Every package (local project, installed dependency, compiled output) uses this format.",
   "type": "object",
-  "required": ["version", "foundation", "topics", "prompts"],
+  "required": ["name", "author", "version", "description"],
   "additionalProperties": false,
   "properties": {
+    "name": {
+      "type": "string",
+      "description": "Package name."
+    },
+    "author": {
+      "type": "string",
+      "description": "Package author/creator."
+    },
     "version": {
       "type": "string",
-      "description": "Schema version identifier."
+      "description": "Package version in semver format (e.g., '1.0.0')."
+    },
+    "description": {
+      "type": "string",
+      "description": "One-line package description."
     },
     "foundation": {
       "type": "array",
-      "description": "Foundational documents loaded into every AI context.",
+      "description": "Foundational documents. Loaded into AI context based on the load field.",
       "items": {
         "$ref": "#/$defs/foundationEntry"
-      }
-    },
-    "product": {
-      "type": "array",
-      "description": "Product architecture and design documentation.",
-      "items": {
-        "$ref": "#/$defs/productEntry"
       }
     },
     "topics": {
@@ -37,6 +42,13 @@
       "items": {
         "$ref": "#/$defs/promptEntry"
       }
+    },
+    "plans": {
+      "type": "array",
+      "description": "Implementation plans with state tracking.",
+      "items": {
+        "$ref": "#/$defs/planEntry"
+      }
     }
   },
   "$defs": {
@@ -51,12 +63,12 @@
         },
         "path": {
           "type": "string",
-          "description": "File path relative to the docs/ directory."
+          "description": "File path relative to the package root."
         },
         "load": {
           "type": "string",
           "enum": ["always", "documentation"],
-          "description": "When to load this document into AI context. 'always' loads every session. 'documentation' loads only when the task involves writing, editing, reviewing, or restructuring files under docs/."
+          "description": "When to load into AI context. 'always' loads every session. 'documentation' loads only for documentation tasks."
         },
         "description": {
           "type": "string",
@@ -65,50 +77,12 @@
         "depends_on": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "IDs of documents this entry depends on."
+          "description": "IDs of entries this depends on."
         },
         "required_by": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "IDs of documents that depend on this entry."
-        }
-      }
-    },
-    "productEntry": {
-      "type": "object",
-      "required": ["id", "path", "description"],
-      "additionalProperties": false,
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier across all sections. Used in depends_on and required_by."
-        },
-        "path": {
-          "type": "string",
-          "description": "File path to the product document, relative to the docs/ directory."
-        },
-        "load": {
-          "type": "string",
-          "enum": ["always", "documentation"],
-          "description": "When to load this document into AI context. 'always' loads every session. 'documentation' loads only for documentation tasks."
-        },
-        "description": {
-          "type": "string",
-          "description": "One-line purpose statement."
-        },
-        "spec": {
-          "type": "string",
-          "description": "File path to the product spec, relative to the docs/ directory."
-        },
-        "depends_on": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "IDs of documents this entry depends on."
-        },
-        "required_by": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "IDs of documents that depend on this entry."
+          "description": "IDs of entries that depend on this."
         }
       }
     },
@@ -123,7 +97,7 @@
         },
         "path": {
           "type": "string",
-          "description": "File path to the topic README.md, relative to the docs/ directory."
+          "description": "File path to the topic README.md, relative to the package root."
         },
         "description": {
           "type": "string",
@@ -131,22 +105,22 @@
         },
         "spec": {
           "type": "string",
-          "description": "File path to the topic spec, relative to the docs/ directory."
+          "description": "File path to the topic spec, relative to the package root."
         },
         "depends_on": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "IDs of documents this topic depends on."
+          "description": "IDs of entries this depends on."
         },
         "required_by": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "IDs of documents that depend on this topic."
+          "description": "IDs of entries that depend on this."
         },
         "files": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "Sub-files for concordance topics, relative to the docs/ directory. Empty array for single-file topics."
+          "description": "Sub-files for concordance topics, relative to the package root. Empty array for single-file topics."
         }
       }
     },
@@ -161,7 +135,7 @@
         },
         "path": {
           "type": "string",
-          "description": "File path to the prompt README.md, relative to the docs/ directory."
+          "description": "File path to the prompt README.md, relative to the package root."
         },
         "description": {
           "type": "string",
@@ -170,12 +144,45 @@
         "depends_on": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "IDs of documents this prompt depends on."
+          "description": "IDs of entries this depends on."
         },
         "required_by": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "IDs of documents that depend on this prompt."
+          "description": "IDs of entries that depend on this."
+        }
+      }
+    },
+    "planEntry": {
+      "type": "object",
+      "required": ["id", "path", "state", "description"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier across all sections. Used in depends_on and required_by."
+        },
+        "path": {
+          "type": "string",
+          "description": "File path to the plan README.md, relative to the package root."
+        },
+        "state": {
+          "type": "string",
+          "description": "File path to the plan state.yml, relative to the package root."
+        },
+        "description": {
+          "type": "string",
+          "description": "One-line purpose statement."
+        },
+        "depends_on": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "IDs of entries this depends on."
+        },
+        "required_by": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "IDs of entries that depend on this."
         }
       }
     }

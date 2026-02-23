@@ -34,6 +34,7 @@ foundation:
       - tailwind
       - elysiajs
       - go
+      - product
 
   - id: markdown
     path: foundation/markdown.md
@@ -74,6 +75,7 @@ foundation:
       - tailwind
       - elysiajs
       - go
+      - product
 
   - id: ai-authoring
     path: foundation/ai-authoring.md
@@ -103,6 +105,17 @@ foundation:
     description: Metadata manifest conventions and maintenance
     depends_on:
       - documentation
+    required_by: []
+
+product:
+  - id: product
+    path: product/README.md
+    load: always
+    description: Product architecture and design
+    spec: product/spec/README.md
+    depends_on:
+      - philosophy
+      - specs
     required_by: []
 
 topics:

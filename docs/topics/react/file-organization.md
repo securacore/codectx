@@ -5,7 +5,7 @@ Directory structure, barrel conventions, and the recursive component pattern. Fo
 <rules>
 
 - Every unit (component, hook, utility, provider) lives in its own named directory with its own `index.ts` barrel.
-- The file name matches the unit name. `Button/Button.tsx`, `useCardApi/useCardApi.ts`, `formatCardData/formatCardData.ts`.
+- The filename matches the unit name. `Button/Button.tsx`, `useCardApi/useCardApi.ts`, `formatCardData/formatCardData.ts`.
 - No flat files in organizational directories. A hook is never a bare file inside `hooks/`. It is always `hooks/useHookName/useHookName.ts`.
 - Start minimal. A simple component is just the component file and a barrel. Add internal structure only when needed.
 - Test files are colocated with their unit (`Button.test.tsx`). Testing conventions are in `docs/topics/testing/` (future).
@@ -38,7 +38,7 @@ components/
 
 ## Scaled Component
 
-When a component needs sub-components, hooks, utilities, or providers, its internal directory mirrors the `src/` structure. Every internal sub-directory follows the same conventions: one unit per directory, barrels, named exports.
+When a component needs sub-components, hooks, utilities, or providers, its internal directory mirrors the `src/` structure. Every internal subdirectory follows the same conventions: one unit per directory, barrels, named exports.
 
 ```text
 Card/
