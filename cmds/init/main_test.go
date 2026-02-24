@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/securacore/codectx/core/preferences"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
@@ -18,7 +20,7 @@ func TestRun_withName_createsDirectoryAndProject(t *testing.T) {
 	defer func() { _ = os.Chdir(origDir) }()
 	require.NoError(t, os.Chdir(dir))
 
-	err = run("test-project")
+	err = run("test-project", preferences.BoolPtr(true))
 	require.NoError(t, err)
 
 	projectDir := filepath.Join(dir, "test-project")
@@ -71,6 +73,12 @@ func TestRun_withName_createsDirectoryAndProject(t *testing.T) {
 		_, err := os.Stat(filepath.Join(projectDir, f))
 		assert.NoError(t, err, "schema %s should exist", f)
 	}
+
+	// Verify .codectx/ directory and preferences.yml were created.
+	_, err = os.Stat(filepath.Join(projectDir, ".codectx"))
+	assert.NoError(t, err)
+	_, err = os.Stat(filepath.Join(projectDir, ".codectx", "preferences.yml"))
+	assert.NoError(t, err)
 }
 
 func TestRun_failsIfAlreadyInitialized(t *testing.T) {
@@ -82,14 +90,14 @@ func TestRun_failsIfAlreadyInitialized(t *testing.T) {
 	require.NoError(t, os.Chdir(dir))
 
 	// First init succeeds.
-	err = run("test-project")
+	err = run("test-project", preferences.BoolPtr(true))
 	require.NoError(t, err)
 
 	// Chdir into the project dir so the second init detects it.
 	require.NoError(t, os.Chdir(filepath.Join(dir, "test-project")))
 
 	// Second init fails (codectx.yml exists in cwd).
-	err = run("")
+	err = run("", preferences.BoolPtr(true))
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "already exists")
 }
@@ -279,7 +287,7 @@ func TestRun_withName_configContent(t *testing.T) {
 	defer func() { _ = os.Chdir(origDir) }()
 	require.NoError(t, os.Chdir(dir))
 
-	err = run("my-project")
+	err = run("my-project", preferences.BoolPtr(false))
 	require.NoError(t, err)
 
 	projectDir := filepath.Join(dir, "my-project")
@@ -311,4 +319,34 @@ func TestRun_withName_configContent(t *testing.T) {
 	assert.Equal(t, "my-project", pkgYAML.Name)
 	assert.Equal(t, "0.1.0", pkgYAML.Version)
 	assert.Equal(t, "Documentation package for my-project", pkgYAML.Description)
+
+	// Verify preferences.yml content.
+	prefs, err := preferences.Load(filepath.Join(projectDir, ".codectx"))
+	require.NoError(t, err)
+	require.NotNil(t, prefs.AutoCompile)
+	assert.False(t, *prefs.AutoCompile) // We passed BoolPtr(false).
+}
+
+func TestRun_withName_preferencesAutoCompileTrue(t *testing.T) {
+	dir := t.TempDir()
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(dir))
+
+	err = run("pref-test", preferences.BoolPtr(true))
+	require.NoError(t, err)
+
+	projectDir := filepath.Join(dir, "pref-test")
+
+	// Verify preferences.yml was created with auto_compile: true.
+	prefs, err := preferences.Load(filepath.Join(projectDir, ".codectx"))
+	require.NoError(t, err)
+	require.NotNil(t, prefs.AutoCompile)
+	assert.True(t, *prefs.AutoCompile)
+
+	// Verify the preferences file exists on disk.
+	_, err = os.Stat(filepath.Join(projectDir, ".codectx", "preferences.yml"))
+	assert.NoError(t, err)
 }

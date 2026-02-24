@@ -200,3 +200,156 @@ func TestValidate_packageWithDependsOn(t *testing.T) {
 	err := Validate(PackageSchemaFile, v)
 	assert.NoError(t, err)
 }
+
+// --- Compiled manifest schema ---
+
+func TestValidate_validCompiledManifest(t *testing.T) {
+	v := map[string]any{
+		"name":        "test-project",
+		"description": "Compiled output",
+		"foundation": []any{
+			map[string]any{
+				"id":          "philosophy",
+				"object":      "objects/a1b2c3d4e5f67890.md",
+				"description": "Core philosophy",
+				"load":        "always",
+				"source":      "local",
+			},
+		},
+		"topics": []any{
+			map[string]any{
+				"id":          "go",
+				"object":      "objects/b2c3d4e5f6789012.md",
+				"description": "Go conventions",
+				"source":      "go@org",
+				"spec":        "objects/c3d4e5f678901234.md",
+			},
+		},
+	}
+	err := Validate(CompiledSchemaFile, v)
+	assert.NoError(t, err)
+}
+
+func TestValidate_compiledManifest_withManifestRefs(t *testing.T) {
+	v := map[string]any{
+		"name": "decomposed-project",
+		"foundation": []any{
+			map[string]any{
+				"id":          "philosophy",
+				"object":      "objects/a1b2c3d4e5f67890.md",
+				"description": "Philosophy",
+				"load":        "always",
+				"source":      "local",
+			},
+		},
+		"manifests": []any{
+			map[string]any{
+				"section":          "topics",
+				"path":             "manifests/topics.yml",
+				"entries":          25,
+				"estimated_tokens": 30000,
+				"description":      "Technology and domain conventions",
+			},
+		},
+	}
+	err := Validate(CompiledSchemaFile, v)
+	assert.NoError(t, err)
+}
+
+func TestValidate_compiledManifest_invalidObjectPath(t *testing.T) {
+	v := map[string]any{
+		"name": "test",
+		"foundation": []any{
+			map[string]any{
+				"id":          "a",
+				"object":      "bad/path.md",
+				"description": "A",
+				"source":      "local",
+			},
+		},
+	}
+	err := Validate(CompiledSchemaFile, v)
+	assert.Error(t, err)
+}
+
+func TestValidate_compiledManifest_missingSource(t *testing.T) {
+	v := map[string]any{
+		"name": "test",
+		"foundation": []any{
+			map[string]any{
+				"id":          "a",
+				"object":      "objects/a1b2c3d4e5f67890.md",
+				"description": "A",
+				// source is required
+			},
+		},
+	}
+	err := Validate(CompiledSchemaFile, v)
+	assert.Error(t, err)
+}
+
+// --- Heuristics schema ---
+
+func TestValidate_validHeuristics(t *testing.T) {
+	v := map[string]any{
+		"compiled_at": "2026-02-23T12:00:00Z",
+		"totals": map[string]any{
+			"entries":          10,
+			"objects":          8,
+			"size_bytes":       50000,
+			"estimated_tokens": 12500,
+			"always_load":      2,
+		},
+		"sections": map[string]any{
+			"foundation": map[string]any{
+				"entries":          3,
+				"size_bytes":       15000,
+				"estimated_tokens": 3750,
+				"always_load":      2,
+			},
+			"topics": map[string]any{
+				"entries":          5,
+				"size_bytes":       25000,
+				"estimated_tokens": 6250,
+			},
+		},
+		"packages": []any{
+			map[string]any{
+				"name":             "local",
+				"entries":          6,
+				"size_bytes":       30000,
+				"estimated_tokens": 7500,
+			},
+		},
+	}
+	err := Validate(HeuristicsSchemaFile, v)
+	assert.NoError(t, err)
+}
+
+func TestValidate_heuristics_missingTotals(t *testing.T) {
+	v := map[string]any{
+		"compiled_at": "2026-02-23T12:00:00Z",
+		// missing totals
+		"sections": map[string]any{},
+		"packages": []any{},
+	}
+	err := Validate(HeuristicsSchemaFile, v)
+	assert.Error(t, err)
+}
+
+func TestValidate_heuristics_emptySections(t *testing.T) {
+	v := map[string]any{
+		"compiled_at": "2026-02-23T12:00:00Z",
+		"totals": map[string]any{
+			"entries":          0,
+			"objects":          0,
+			"size_bytes":       0,
+			"estimated_tokens": 0,
+			"always_load":      0,
+		},
+		"sections": map[string]any{},
+		"packages": []any{},
+	}
+	err := Validate(HeuristicsSchemaFile, v)
+	assert.NoError(t, err)
+}

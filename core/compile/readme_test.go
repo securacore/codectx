@@ -14,7 +14,7 @@ func TestGenerateReadme_noSections(t *testing.T) {
 		Name: "empty-project",
 	}
 
-	result := generateReadme(m)
+	result := generateReadme(m, nil)
 
 	assert.Contains(t, result, "# empty-project")
 	assert.Contains(t, result, "## Loading Protocol")
@@ -39,7 +39,7 @@ func TestGenerateReadme_allSections(t *testing.T) {
 		},
 	}
 
-	result := generateReadme(m)
+	result := generateReadme(m, nil)
 
 	assert.Contains(t, result, "# full-project")
 	assert.Contains(t, result, "## Loading Protocol")
@@ -48,7 +48,7 @@ func TestGenerateReadme_allSections(t *testing.T) {
 	assert.Contains(t, result, "**Topics**: 1 entry")
 	assert.Contains(t, result, "**Prompts**: 1 entry")
 	assert.Contains(t, result, "**Plans**: 1 entry")
-	assert.Contains(t, result, "Read `state.yml` before loading full plans")
+	assert.Contains(t, result, "Implementation plans with state tracking")
 }
 
 func TestGenerateReadme_partialSections(t *testing.T) {
@@ -59,7 +59,7 @@ func TestGenerateReadme_partialSections(t *testing.T) {
 		},
 	}
 
-	result := generateReadme(m)
+	result := generateReadme(m, nil)
 
 	assert.Contains(t, result, "## Sections")
 	assert.Contains(t, result, "**Foundation**: 1 document")
@@ -70,19 +70,94 @@ func TestGenerateReadme_partialSections(t *testing.T) {
 
 func TestGenerateReadme_loadingProtocol(t *testing.T) {
 	m := &manifest.Manifest{Name: "test"}
-	result := generateReadme(m)
+	result := generateReadme(m, nil)
 
 	// Verify all 4 loading steps.
 	assert.Contains(t, result, "1. Load this file (done).")
-	assert.Contains(t, result, "2. Load [package.yml](package.yml)")
+	assert.Contains(t, result, "2. Load [manifest.yml](manifest.yml)")
 	assert.Contains(t, result, "3. Load all foundation entries")
 	assert.Contains(t, result, "4. As the task progresses")
 }
 
 func TestGenerateReadme_startsWithH1(t *testing.T) {
 	m := &manifest.Manifest{Name: "my-project"}
-	result := generateReadme(m)
+	result := generateReadme(m, nil)
 	assert.True(t, strings.HasPrefix(result, "# my-project\n"))
+}
+
+func TestGenerateReadme_withHeuristics(t *testing.T) {
+	m := &manifest.Manifest{
+		Name: "heuristics-project",
+		Foundation: []manifest.FoundationEntry{
+			{ID: "a", Path: "foundation/a.md", Description: "A", Load: "always"},
+			{ID: "b", Path: "foundation/b.md", Description: "B"},
+		},
+		Topics: []manifest.TopicEntry{
+			{ID: "c", Path: "topics/c/README.md", Description: "C"},
+		},
+	}
+
+	h := &Heuristics{
+		Totals: HeuristicsTotals{
+			Entries:         3,
+			Objects:         3,
+			SizeBytes:       12000,
+			EstimatedTokens: 3000,
+			AlwaysLoad:      1,
+		},
+		Sections: HeuristicsSections{
+			Foundation: &SectionStats{
+				Entries:         2,
+				SizeBytes:       8000,
+				EstimatedTokens: 2000,
+				AlwaysLoad:      1,
+			},
+			Topics: &SectionStats{
+				Entries:         1,
+				SizeBytes:       4000,
+				EstimatedTokens: 1000,
+			},
+		},
+	}
+
+	result := generateReadme(m, h)
+
+	// Token estimates appear in section lines.
+	assert.Contains(t, result, "~2k tokens")
+	assert.Contains(t, result, "~1k tokens")
+	assert.Contains(t, result, "1 is auto-loaded")
+	assert.Contains(t, result, "Total documentation: ~3k tokens across 3 objects")
+}
+
+func TestGenerateReadme_withHeuristicsMultipleAlwaysLoad(t *testing.T) {
+	m := &manifest.Manifest{
+		Name: "multi-always",
+		Foundation: []manifest.FoundationEntry{
+			{ID: "a", Path: "foundation/a.md", Load: "always"},
+			{ID: "b", Path: "foundation/b.md", Load: "always"},
+		},
+	}
+
+	h := &Heuristics{
+		Totals: HeuristicsTotals{
+			Entries:         2,
+			Objects:         2,
+			SizeBytes:       4000,
+			EstimatedTokens: 1000,
+			AlwaysLoad:      2,
+		},
+		Sections: HeuristicsSections{
+			Foundation: &SectionStats{
+				Entries:         2,
+				SizeBytes:       4000,
+				EstimatedTokens: 1000,
+				AlwaysLoad:      2,
+			},
+		},
+	}
+
+	result := generateReadme(m, h)
+	assert.Contains(t, result, "2 are auto-loaded")
 }
 
 // --- pluralize ---

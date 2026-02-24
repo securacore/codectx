@@ -1,0 +1,248 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Compiled Manifest",
+  "description": "Schema for manifest.yml. Validates compiled documentation manifests written to .codectx/manifest.yml during compilation. Contains content-addressed object references, provenance tracking, and optional sub-manifest decomposition.",
+  "type": "object",
+  "required": ["name"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Project or sub-manifest name."
+    },
+    "description": {
+      "type": "string",
+      "description": "Project or sub-manifest description."
+    },
+    "foundation": {
+      "type": "array",
+      "description": "Compiled foundation entries with content-addressed object references.",
+      "items": {
+        "$ref": "#/$defs/compiledFoundationEntry"
+      }
+    },
+    "topics": {
+      "type": "array",
+      "description": "Compiled topic entries with content-addressed object references.",
+      "items": {
+        "$ref": "#/$defs/compiledTopicEntry"
+      }
+    },
+    "prompts": {
+      "type": "array",
+      "description": "Compiled prompt entries with content-addressed object references.",
+      "items": {
+        "$ref": "#/$defs/compiledPromptEntry"
+      }
+    },
+    "plans": {
+      "type": "array",
+      "description": "Compiled plan entries with content-addressed object references and mutable state.",
+      "items": {
+        "$ref": "#/$defs/compiledPlanEntry"
+      }
+    },
+    "manifests": {
+      "type": "array",
+      "description": "Sub-manifest references for decomposed documentation sets. Present when the manifest exceeds decomposition thresholds.",
+      "items": {
+        "$ref": "#/$defs/manifestRef"
+      }
+    }
+  },
+  "$defs": {
+    "compiledFoundationEntry": {
+      "type": "object",
+      "required": ["id", "object", "description", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier."
+        },
+        "object": {
+          "type": "string",
+          "pattern": "^objects/[0-9a-f]{16}\\.md$",
+          "description": "Content-addressed object path (e.g., 'objects/a1b2c3d4e5f67890.md')."
+        },
+        "description": {
+          "type": "string",
+          "description": "One-line purpose statement."
+        },
+        "load": {
+          "type": "string",
+          "enum": ["always", "documentation"],
+          "description": "When to load into AI context."
+        },
+        "source": {
+          "type": "string",
+          "description": "Provenance label ('local' or 'name@author')."
+        },
+        "depends_on": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "IDs of entries this depends on."
+        },
+        "required_by": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "IDs of entries that depend on this."
+        }
+      }
+    },
+    "compiledTopicEntry": {
+      "type": "object",
+      "required": ["id", "object", "description", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier."
+        },
+        "object": {
+          "type": "string",
+          "pattern": "^objects/[0-9a-f]{16}\\.md$",
+          "description": "Content-addressed object path."
+        },
+        "description": {
+          "type": "string",
+          "description": "One-line purpose statement."
+        },
+        "spec": {
+          "type": "string",
+          "pattern": "^objects/[0-9a-f]{16}\\.md$",
+          "description": "Content-addressed object path for the topic spec."
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^objects/[0-9a-f]{16}\\.md$"
+          },
+          "description": "Content-addressed object paths for sub-files."
+        },
+        "source": {
+          "type": "string",
+          "description": "Provenance label."
+        },
+        "depends_on": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "IDs of entries this depends on."
+        },
+        "required_by": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "IDs of entries that depend on this."
+        }
+      }
+    },
+    "compiledPromptEntry": {
+      "type": "object",
+      "required": ["id", "object", "description", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier."
+        },
+        "object": {
+          "type": "string",
+          "pattern": "^objects/[0-9a-f]{16}\\.md$",
+          "description": "Content-addressed object path."
+        },
+        "description": {
+          "type": "string",
+          "description": "One-line purpose statement."
+        },
+        "source": {
+          "type": "string",
+          "description": "Provenance label."
+        },
+        "depends_on": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "IDs of entries this depends on."
+        },
+        "required_by": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "IDs of entries that depend on this."
+        }
+      }
+    },
+    "compiledPlanEntry": {
+      "type": "object",
+      "required": ["id", "object", "description", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier."
+        },
+        "object": {
+          "type": "string",
+          "pattern": "^objects/[0-9a-f]{16}\\.md$",
+          "description": "Content-addressed object path."
+        },
+        "description": {
+          "type": "string",
+          "description": "One-line purpose statement."
+        },
+        "state": {
+          "type": "string",
+          "pattern": "^state/.+\\.yml$",
+          "description": "Path to mutable state file (e.g., 'state/migrate.yml')."
+        },
+        "source": {
+          "type": "string",
+          "description": "Provenance label."
+        },
+        "depends_on": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "IDs of entries this depends on."
+        },
+        "required_by": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "IDs of entries that depend on this."
+        }
+      }
+    },
+    "manifestRef": {
+      "type": "object",
+      "required": ["section", "path", "entries", "estimated_tokens", "description"],
+      "additionalProperties": false,
+      "properties": {
+        "section": {
+          "type": "string",
+          "enum": ["foundation", "topics", "prompts", "plans"],
+          "description": "Which section this sub-manifest covers."
+        },
+        "path": {
+          "type": "string",
+          "description": "Relative path to the sub-manifest file."
+        },
+        "entries": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of entries in this sub-manifest."
+        },
+        "estimated_tokens": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Estimated token count for all entries in this sub-manifest."
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable section description."
+        },
+        "source": {
+          "type": "string",
+          "description": "Source package label for level-2 decomposition."
+        }
+      }
+    }
+  }
+}

@@ -31,16 +31,3 @@ changelog:
       - "^test:"
       - "^chore:"
 
-brews:
-  - repository:
-      owner: securacore
-      name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    directory: Formula
-    homepage: "https://github.com/securacore/codectx"
-    description: "AI Code Documentation Package Manager"
-    license: "MIT"
-    install: |
-      bin.install "codectx"
-    test: |
-      system "#{bin}/codectx", "version"

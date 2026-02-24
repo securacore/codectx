@@ -18,12 +18,6 @@
 curl -fsSL https://raw.githubusercontent.com/securacore/codectx/main/bin/install | sh
 ```
 
-**Homebrew:**
-
-```bash
-brew install securacore/tap/codectx
-```
-
 **Go:**
 
 ```bash
@@ -157,14 +151,12 @@ confirms the version bump, then pushes the tag to trigger the pipeline.
 3. GoReleaser builds `linux/amd64`, `linux/arm64`, `darwin/amd64`,
    `darwin/arm64` binaries with version injected via ldflags
 4. GitHub Release is created with tarballs and SHA256 checksums
-5. Homebrew formula is automatically updated in `securacore/homebrew-tap`
 
 ### Secrets required
 
 | Secret | Purpose |
 |---|---|
 | `GITHUB_TOKEN` | Automatic, used by GoReleaser to create releases |
-| `HOMEBREW_TAP_TOKEN` | PAT with repo scope, pushes formula to `securacore/homebrew-tap` |
 
 ## Update Notifications
 

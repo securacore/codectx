@@ -1,6 +1,7 @@
 package compile
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -62,14 +63,26 @@ func TestCompile_emptyProject(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, filepath.Join(dir, ".codectx"), result.OutputDir)
-	assert.Equal(t, 0, result.FilesCopied)
+	assert.Equal(t, 0, result.ObjectsStored)
 	assert.Equal(t, 0, result.Packages)
 
-	// Verify outputs exist.
-	_, err = os.Stat(filepath.Join(result.OutputDir, "package.yml"))
+	// Verify compiled manifest exists.
+	_, err = os.Stat(filepath.Join(result.OutputDir, "manifest.yml"))
 	assert.NoError(t, err)
 	_, err = os.Stat(filepath.Join(result.OutputDir, "README.md"))
 	assert.NoError(t, err)
+
+	// Verify compiled manifest is loadable.
+	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
+	require.NoError(t, err)
+	assert.Equal(t, "test-project", cm.Name)
+
+	// Verify heuristics.yml was generated.
+	h, err := LoadHeuristics(filepath.Join(result.OutputDir, "heuristics.yml"))
+	require.NoError(t, err)
+	assert.Equal(t, 0, h.Totals.Entries)
+	assert.Equal(t, 0, h.Totals.Objects)
+	assert.NotEmpty(t, h.CompiledAt)
 }
 
 func TestCompile_withLocalFiles(t *testing.T) {
@@ -94,13 +107,34 @@ func TestCompile_withLocalFiles(t *testing.T) {
 	result, err := Compile(cfg)
 	require.NoError(t, err)
 
-	assert.Equal(t, 1, result.FilesCopied)
+	assert.Equal(t, 1, result.ObjectsStored)
 
-	// Verify the file was copied.
-	copiedPath := filepath.Join(result.OutputDir, "foundation", "philosophy.md")
-	data, err := os.ReadFile(copiedPath)
+	// Verify the file was stored as a content-addressed object.
+	hash := ContentHash([]byte("# Philosophy\n"))
+	objectPath := filepath.Join(result.OutputDir, "objects", hash+".md")
+	data, err := os.ReadFile(objectPath)
 	require.NoError(t, err)
 	assert.Equal(t, "# Philosophy\n", string(data))
+
+	// Verify the compiled manifest references the object.
+	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
+	require.NoError(t, err)
+	require.Len(t, cm.Foundation, 1)
+	assert.Equal(t, ObjectPath(hash), cm.Foundation[0].Object)
+	assert.Equal(t, "local", cm.Foundation[0].Source)
+	assert.Equal(t, "always", cm.Foundation[0].Load)
+
+	// Verify heuristics.yml has correct stats.
+	h, err := LoadHeuristics(filepath.Join(result.OutputDir, "heuristics.yml"))
+	require.NoError(t, err)
+	assert.Equal(t, 1, h.Totals.Entries)
+	assert.Equal(t, 1, h.Totals.AlwaysLoad)
+	assert.Greater(t, h.Totals.SizeBytes, 0)
+	assert.Greater(t, h.Totals.EstimatedTokens, 0)
+	require.NotNil(t, h.Sections.Foundation)
+	assert.Equal(t, 1, h.Sections.Foundation.Entries)
+	require.Len(t, h.Packages, 1)
+	assert.Equal(t, "local", h.Packages[0].Name)
 }
 
 func TestCompile_readmeContent(t *testing.T) {
@@ -151,6 +185,24 @@ func TestCompile_cleansOutputDirectory(t *testing.T) {
 	// Stale file should be gone.
 	_, err = os.Stat(stalePath)
 	assert.True(t, os.IsNotExist(err))
+}
+
+func TestCompile_preservesPreferencesYML(t *testing.T) {
+	_, cfg := setupTestProject(t)
+	outputDir := cfg.OutputDir()
+
+	// Create preferences.yml in the output directory.
+	require.NoError(t, os.MkdirAll(outputDir, 0o755))
+	prefsPath := filepath.Join(outputDir, "preferences.yml")
+	require.NoError(t, os.WriteFile(prefsPath, []byte("auto_compile: true\n"), 0o644))
+
+	_, err := Compile(cfg)
+	require.NoError(t, err)
+
+	// preferences.yml should survive the compile.
+	data, err := os.ReadFile(prefsPath)
+	require.NoError(t, err)
+	assert.Equal(t, "auto_compile: true\n", string(data))
 }
 
 func TestCompile_writesLockFile(t *testing.T) {
@@ -350,18 +402,19 @@ func TestCompile_multiplePackages(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 2, result.Packages)
-	// Local has 0 files, pkgA has 1 (topic), pkgB has 1 (foundation).
-	assert.Equal(t, 2, result.FilesCopied)
+	// 2 objects: pkgA topic + pkgB foundation.
+	assert.Equal(t, 2, result.ObjectsStored)
 
-	// Verify the unified manifest contains entries from both packages.
-	unifiedPath := filepath.Join(result.OutputDir, "package.yml")
-	unified, err := manifest.Load(unifiedPath)
+	// Verify the compiled manifest contains entries from both packages.
+	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
 	require.NoError(t, err)
 
-	assert.Len(t, unified.Topics, 1)
-	assert.Equal(t, "react", unified.Topics[0].ID)
-	assert.Len(t, unified.Foundation, 1)
-	assert.Equal(t, "conventions", unified.Foundation[0].ID)
+	assert.Len(t, cm.Topics, 1)
+	assert.Equal(t, "react", cm.Topics[0].ID)
+	assert.Equal(t, "pkgA@org", cm.Topics[0].Source)
+	assert.Len(t, cm.Foundation, 1)
+	assert.Equal(t, "conventions", cm.Foundation[0].ID)
+	assert.Equal(t, "pkgB@org", cm.Foundation[0].Source)
 }
 
 func TestCompile_lockFileContent(t *testing.T) {
@@ -487,19 +540,378 @@ func TestCompile_granularActivation(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, result.Packages)
-	// 2 files: foundation/philosophy.md + topics/react/README.md (go excluded).
-	assert.Equal(t, 2, result.FilesCopied)
+	// 2 objects: foundation/philosophy.md + topics/react/README.md (go excluded).
+	assert.Equal(t, 2, result.ObjectsStored)
 
-	// Verify the unified manifest only has the activated entries.
-	unified, err := manifest.Load(filepath.Join(result.OutputDir, "package.yml"))
+	// Verify the compiled manifest only has the activated entries.
+	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
 	require.NoError(t, err)
 
-	require.Len(t, unified.Foundation, 1)
-	assert.Equal(t, "philosophy", unified.Foundation[0].ID)
-	require.Len(t, unified.Topics, 1)
-	assert.Equal(t, "react", unified.Topics[0].ID)
+	require.Len(t, cm.Foundation, 1)
+	assert.Equal(t, "philosophy", cm.Foundation[0].ID)
+	require.Len(t, cm.Topics, 1)
+	assert.Equal(t, "react", cm.Topics[0].ID)
 
-	// Verify the excluded topic file was not copied.
-	_, err = os.Stat(filepath.Join(result.OutputDir, "topics", "go", "README.md"))
+	// Verify the excluded topic was not stored as an object.
+	goHash := ContentHash([]byte("# Go\n"))
+	_, err = os.Stat(filepath.Join(result.OutputDir, "objects", goHash+".md"))
+	assert.True(t, os.IsNotExist(err))
+}
+
+func TestCompile_recompileReplacesOldObjects(t *testing.T) {
+	_, cfg := setupTestProject(t)
+	docsDir := cfg.DocsDir()
+
+	// First compile with a foundation entry.
+	require.NoError(t, os.WriteFile(
+		filepath.Join(docsDir, "foundation", "original.md"),
+		[]byte("# Original\n"), 0o644))
+
+	m := &manifest.Manifest{
+		Name:    "test-project",
+		Version: "1.0.0",
+		Foundation: []manifest.FoundationEntry{
+			{ID: "original", Path: "foundation/original.md", Description: "Original"},
+		},
+	}
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), m))
+
+	result1, err := Compile(cfg)
+	require.NoError(t, err)
+	assert.Equal(t, 1, result1.ObjectsStored)
+
+	originalHash := ContentHash([]byte("# Original\n"))
+	replacementHash := ContentHash([]byte("# Replacement\n"))
+
+	// Verify original object exists.
+	_, err = os.Stat(filepath.Join(result1.OutputDir, "objects", originalHash+".md"))
+	require.NoError(t, err)
+
+	// Second compile: remove the entry, add a different one.
+	require.NoError(t, os.WriteFile(
+		filepath.Join(docsDir, "foundation", "replacement.md"),
+		[]byte("# Replacement\n"), 0o644))
+
+	m2 := &manifest.Manifest{
+		Name:    "test-project",
+		Version: "1.0.0",
+		Foundation: []manifest.FoundationEntry{
+			{ID: "replacement", Path: "foundation/replacement.md", Description: "Replacement"},
+		},
+	}
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), m2))
+
+	result2, err := Compile(cfg)
+	require.NoError(t, err)
+	assert.Equal(t, 1, result2.ObjectsStored)
+
+	// Original object should be gone (cleaned by selective wipe).
+	_, err = os.Stat(filepath.Join(result2.OutputDir, "objects", originalHash+".md"))
+	assert.True(t, os.IsNotExist(err))
+
+	// Replacement object should exist.
+	_, err = os.Stat(filepath.Join(result2.OutputDir, "objects", replacementHash+".md"))
+	assert.NoError(t, err)
+}
+
+func TestCompile_contentAddressedDedup(t *testing.T) {
+	_, cfg := setupTestProject(t)
+	docsDir := cfg.DocsDir()
+
+	// Two entries referencing files with identical content.
+	content := []byte("# Shared Content\n")
+	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "foundation", "a.md"), content, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "foundation", "b.md"), content, 0o644))
+
+	m := &manifest.Manifest{
+		Name:    "test-project",
+		Version: "1.0.0",
+		Foundation: []manifest.FoundationEntry{
+			{ID: "a", Path: "foundation/a.md", Description: "A"},
+			{ID: "b", Path: "foundation/b.md", Description: "B"},
+		},
+	}
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), m))
+
+	result, err := Compile(cfg)
+	require.NoError(t, err)
+
+	// Two entries stored, but ObjectStore deduplicates at the file level.
+	assert.Equal(t, 2, result.ObjectsStored)
+
+	// Both entries in the compiled manifest reference the same object.
+	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
+	require.NoError(t, err)
+	require.Len(t, cm.Foundation, 2)
+	assert.Equal(t, cm.Foundation[0].Object, cm.Foundation[1].Object)
+
+	// Only one physical object file exists.
+	entries, err := os.ReadDir(filepath.Join(result.OutputDir, "objects"))
+	require.NoError(t, err)
+	assert.Len(t, entries, 1)
+}
+
+func TestCompile_topicWithSpecAndFiles(t *testing.T) {
+	_, cfg := setupTestProject(t)
+	docsDir := cfg.DocsDir()
+
+	// Create a topic with spec and extra files.
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "topics", "go", "spec"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(docsDir, "topics", "go", "README.md"),
+		[]byte("# Go Conventions\n"), 0o644))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(docsDir, "topics", "go", "spec", "README.md"),
+		[]byte("# Go Spec\n"), 0o644))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(docsDir, "topics", "go", "extra.md"),
+		[]byte("# Extra Go Notes\n"), 0o644))
+
+	m := &manifest.Manifest{
+		Name:    "test-project",
+		Version: "1.0.0",
+		Topics: []manifest.TopicEntry{
+			{
+				ID:          "go",
+				Path:        "topics/go/README.md",
+				Description: "Go conventions",
+				Spec:        "topics/go/spec/README.md",
+				Files:       []string{"topics/go/extra.md"},
+			},
+		},
+	}
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), m))
+
+	result, err := Compile(cfg)
+	require.NoError(t, err)
+
+	// 3 objects: README.md, spec/README.md, extra.md.
+	assert.Equal(t, 3, result.ObjectsStored)
+
+	// Verify compiled manifest has spec and files references.
+	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
+	require.NoError(t, err)
+	require.Len(t, cm.Topics, 1)
+	assert.Equal(t, "go", cm.Topics[0].ID)
+	assert.NotEmpty(t, cm.Topics[0].Object)
+	assert.NotEmpty(t, cm.Topics[0].Spec)
+	assert.Contains(t, cm.Topics[0].Spec, "objects/")
+	require.Len(t, cm.Topics[0].Files, 1)
+	assert.Contains(t, cm.Topics[0].Files[0], "objects/")
+
+	// Verify all three objects exist on disk.
+	objectEntries, err := os.ReadDir(filepath.Join(result.OutputDir, "objects"))
+	require.NoError(t, err)
+	assert.Len(t, objectEntries, 3)
+
+	// Verify heuristics counts spec and files sizes.
+	h, err := LoadHeuristics(filepath.Join(result.OutputDir, "heuristics.yml"))
+	require.NoError(t, err)
+	require.NotNil(t, h.Sections.Topics)
+	assert.Equal(t, 1, h.Sections.Topics.Entries)
+	// Size should include main path + spec + extra file.
+	mainSize := len("# Go Conventions\n")
+	specSize := len("# Go Spec\n")
+	extraSize := len("# Extra Go Notes\n")
+	assert.Equal(t, mainSize+specSize+extraSize, h.Sections.Topics.SizeBytes)
+}
+
+func TestCompile_planWithStateFile(t *testing.T) {
+	_, cfg := setupTestProject(t)
+	docsDir := cfg.DocsDir()
+
+	// Create a plan entry with a state file.
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "plans", "migrate"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(docsDir, "plans", "migrate", "README.md"),
+		[]byte("# Migration Plan\n"), 0o644))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(docsDir, "plans", "migrate", "state.yml"),
+		[]byte("phase: planning\ntasks:\n  - name: setup\n    done: false\n"), 0o644))
+
+	m := &manifest.Manifest{
+		Name:    "test-project",
+		Version: "1.0.0",
+		Plans: []manifest.PlanEntry{
+			{
+				ID:          "migrate",
+				Path:        "plans/migrate/README.md",
+				State:       "plans/migrate/state.yml",
+				Description: "Database migration plan",
+			},
+		},
+	}
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), m))
+
+	result, err := Compile(cfg)
+	require.NoError(t, err)
+
+	// Only the plan README should be stored as an object (state is mutable).
+	assert.Equal(t, 1, result.ObjectsStored)
+
+	// Verify the state file was copied to state/migrate.yml.
+	stateDir := filepath.Join(result.OutputDir, "state")
+	statePath := filepath.Join(stateDir, "migrate.yml")
+	data, err := os.ReadFile(statePath)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "phase: planning")
+
+	// Verify compiled manifest references state path.
+	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
+	require.NoError(t, err)
+	require.Len(t, cm.Plans, 1)
+	assert.Equal(t, "state/migrate.yml", cm.Plans[0].State)
+	assert.Equal(t, "local", cm.Plans[0].Source)
+}
+
+func TestCompile_fingerprintSkipWithPackages(t *testing.T) {
+	_, cfg := setupTestProject(t)
+	docsDir := cfg.DocsDir()
+
+	// Create an installed package with a foundation entry.
+	pkgDir := filepath.Join(docsDir, "packages", "react@org")
+	require.NoError(t, os.MkdirAll(filepath.Join(pkgDir, "foundation"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(pkgDir, "foundation", "guide.md"),
+		[]byte("# React Guide\n"), 0o644))
+
+	pkgManifest := &manifest.Manifest{
+		Name:    "react",
+		Author:  "org",
+		Version: "1.0.0",
+		Foundation: []manifest.FoundationEntry{
+			{ID: "guide", Path: "foundation/guide.md", Description: "React guide"},
+		},
+	}
+	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "package.yml"), pkgManifest))
+
+	cfg.Packages = []config.PackageDep{
+		{Name: "react", Author: "org", Version: "^1.0.0", Active: config.Activation{Mode: "all"}},
+	}
+
+	// Write codectx.yml so fingerprint can read it.
+	require.NoError(t, config.Write("codectx.yml", cfg))
+
+	// First compile.
+	result1, err := Compile(cfg)
+	require.NoError(t, err)
+	assert.False(t, result1.UpToDate)
+	assert.Equal(t, 1, result1.Packages)
+
+	// Second compile without changes should be up-to-date.
+	result2, err := Compile(cfg)
+	require.NoError(t, err)
+	assert.True(t, result2.UpToDate)
+
+	// Modify a package file and recompile — should not be up-to-date.
+	require.NoError(t, os.WriteFile(
+		filepath.Join(pkgDir, "foundation", "guide.md"),
+		[]byte("# React Guide (updated)\n"), 0o644))
+
+	result3, err := Compile(cfg)
+	require.NoError(t, err)
+	assert.False(t, result3.UpToDate)
+	assert.Equal(t, 1, result3.Packages)
+}
+
+func TestCompile_decompositionTriggered(t *testing.T) {
+	_, cfg := setupTestProject(t)
+	docsDir := cfg.DocsDir()
+
+	// Generate enough content to exceed the 50KB byte threshold.
+	// Each entry: ~1KB content. Need >50 entries to exceed 50KB.
+	var foundationEntries []manifest.FoundationEntry
+	for i := range 60 {
+		id := fmt.Sprintf("doc-%03d", i)
+		path := fmt.Sprintf("foundation/%s.md", id)
+		// Write ~1KB file.
+		content := fmt.Sprintf("# Document %03d\n%s\n", i, string(make([]byte, 900)))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(docsDir, path), []byte(content), 0o644))
+		foundationEntries = append(foundationEntries, manifest.FoundationEntry{
+			ID:          id,
+			Path:        path,
+			Description: fmt.Sprintf("Document %d", i),
+		})
+	}
+
+	// Mark first entry as always-load.
+	foundationEntries[0].Load = "always"
+
+	m := &manifest.Manifest{
+		Name:       "test-project",
+		Version:    "1.0.0",
+		Foundation: foundationEntries,
+	}
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), m))
+
+	result, err := Compile(cfg)
+	require.NoError(t, err)
+	assert.Equal(t, 60, result.ObjectsStored)
+
+	// Verify decomposition happened: manifests/ directory should exist.
+	manifestsDir := filepath.Join(result.OutputDir, "manifests")
+	_, err = os.Stat(manifestsDir)
+	require.NoError(t, err)
+
+	// Load root manifest: should have always-load entry inlined
+	// and a manifests reference for foundation.
+	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
+	require.NoError(t, err)
+
+	// Only the always-load entry should be inlined in root.
+	require.Len(t, cm.Foundation, 1)
+	assert.Equal(t, "doc-000", cm.Foundation[0].ID)
+	assert.Equal(t, "always", cm.Foundation[0].Load)
+
+	// Should have a manifests reference for foundation.
+	require.NotEmpty(t, cm.Manifests)
+	foundRef := false
+	for _, ref := range cm.Manifests {
+		if ref.Section == "foundation" {
+			foundRef = true
+			assert.Equal(t, "manifests/foundation.yml", ref.Path)
+			assert.Equal(t, 59, ref.Entries) // 60 - 1 always-load = 59
+		}
+	}
+	assert.True(t, foundRef, "should have foundation manifest reference")
+
+	// Verify the sub-manifest file exists and is loadable.
+	subCm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifests", "foundation.yml"))
+	require.NoError(t, err)
+	assert.Len(t, subCm.Foundation, 59)
+}
+
+func TestCompile_planStateMissing(t *testing.T) {
+	_, cfg := setupTestProject(t)
+	docsDir := cfg.DocsDir()
+
+	// Create a plan entry where state is declared but the file is missing.
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "plans", "future"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(docsDir, "plans", "future", "README.md"),
+		[]byte("# Future Plan\n"), 0o644))
+
+	m := &manifest.Manifest{
+		Name:    "test-project",
+		Version: "1.0.0",
+		Plans: []manifest.PlanEntry{
+			{
+				ID:          "future",
+				Path:        "plans/future/README.md",
+				State:       "plans/future/state.yml", // does not exist on disk
+				Description: "A future plan",
+			},
+		},
+	}
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), m))
+
+	// Should succeed: missing state files are silently skipped.
+	result, err := Compile(cfg)
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.ObjectsStored)
+
+	// State directory should not exist (no state files copied).
+	_, err = os.Stat(filepath.Join(result.OutputDir, "state"))
 	assert.True(t, os.IsNotExist(err))
 }

@@ -6,21 +6,22 @@ For the reasoning behind the architecture, see [spec/README.md](spec/README.md).
 
 ## Data Map Concept
 
-Every layer of the system has a `package.yml` file that serves as a data map. This file is the navigation index for AI: it lists every documentation entry, its dependencies, its loading rules, and its file path. AI reads the data map first and loads documentation on demand.
+Every layer of the system has a data map file that serves as a navigation index for AI. Source packages use `package.yml`; the compiled output uses `manifest.yml`. The data map lists every documentation entry, its dependencies, its loading rules, and its file path. AI reads the data map first and loads documentation on demand.
 
 The loading flow for any AI session:
 
-1. AI opens the entry point file (e.g., `CLAUDE.md`). It contains a single line pointing to the compiled data map.
-2. AI loads the compiled `package.yml`. This is a small YAML file that indexes all available documentation.
-3. AI loads foundation documents marked `load: always`. This is the minimal initialization context.
-4. As the task progresses, AI consults the data map to locate and load relevant topics, prompts, or plans.
-5. For plans, AI reads `state.yml` first to assess status without loading the full plan.
+1. AI opens the entry point file (e.g., `CLAUDE.md`). It contains a single line pointing to `.codectx/README.md`.
+2. AI loads `README.md`, which describes the loading protocol and links to `manifest.yml`.
+3. AI loads `manifest.yml`. This is the compiled data map indexing all available documentation.
+4. AI loads foundation documents marked `load: always`. This is the minimal initialization context.
+5. As the task progresses, AI consults the data map to locate and load relevant topics, prompts, or plans.
+6. For plans, AI reads `state.yml` first to assess status without loading the full plan.
 
 This approach ensures AI never loads documentation blindly. The data map is the navigation layer that makes documentation consumption token-efficient.
 
 ## Package Format
 
-Every documentation package follows the same structure, whether it is the project's local documentation, an installed dependency, or the compiled output.
+Every source documentation package follows the same structure, whether it is the project's local documentation or an installed dependency. The compiled output uses a distinct format (see [Compiled Output Format](#compiled-output-format)).
 
 <rules>
 
@@ -74,12 +75,20 @@ project-root/
   CLAUDE.md                         # single-line entry point (created by codectx link)
   AGENTS.md                         # single-line entry point (created by codectx link)
 
-  .codectx/                         # compiled documentation set (checked into git)
-    package.yml                     # unified data map
-    foundation/
-    topics/
-    prompts/
-    plans/
+  .codectx/                         # compiled documentation set (gitignored)
+    manifest.yml                    # compiled data map (AI consumes this)
+    README.md                       # generated loading protocol
+    heuristics.yml                  # sidecar: size/token stats (not loaded by AI)
+    preferences.yml                 # user preferences (preserved across compiles)
+    objects/                        # content-addressed file store
+      {16-char-sha256}.md
+    state/                          # mutable plan state files
+      {plan-id}.yml
+    manifests/                      # sub-manifests (only when decomposed)
+      foundation.yml
+      topics.yml
+      prompts.yml
+      plans.yml
 
   docs/                             # documentation source
     package.yml                     # local package data map
@@ -101,7 +110,7 @@ project-root/
 <rules>
 
 - `docs/` is the source. It contains the local package (the project's own documentation) and installed packages in `docs/packages/`.
-- `.codectx/` is the compiled output. It is a self-contained documentation set that follows the package format. It is checked into git.
+- `.codectx/` is the compiled output. It uses a distinct compiled format with content-addressed objects and provenance tracking. It is gitignored.
 - `codectx.lock` pins the exact resolved state (versions, checksums, activation) so the compiled output can be reproduced with `codectx add --lockfile`.
 - `docs/packages/` contains installed packages, namespaced as `[name]@[author]/`. Each installed package has its own `package.yml`.
 - Whether `docs/packages/` is checked into git is the user's choice. The lock file ensures reproducibility regardless.
@@ -126,29 +135,75 @@ Packages are identified by name and author. Versions use semver.
 
 ## Compile Process
 
-The `codectx compile` command builds the compiled documentation set from all active documentation. The process has two phases.
+The `codectx compile` command builds the compiled documentation set from all active documentation. The process has six stages.
 
 ### 1. Combination
 
-Merge documentation from all active sources into the output directory. Active sources include:
+Merge documentation from all active sources. Active sources include:
 
 - The local package (project's own documentation in `docs/`)
 - Activated entries from installed packages in `docs/packages/`
 
-Only entries that are activated in `codectx.yml` are included. Inactive entries are excluded from the output.
+Only entries that are activated in `codectx.yml` are included. Entries with duplicate IDs are resolved by precedence (local wins, then config order) and content hash (identical content = silent dedup; different content = warning, precedence wins).
 
-### 2. Alignment
+### 2. Content-Addressed Storage
 
-Reconcile the data maps from all sources into a single unified `package.yml` in the output directory. The alignment step:
+Each documentation file is stored in the `objects/` directory using a 16-character SHA256 prefix as the filename (e.g., `objects/a1b2c3d4e5f67890.md`). Identical content across packages produces the same hash, giving natural deduplication. Plan state files are stored separately in `state/` because they are mutable.
 
-- Merges foundation, topics, prompts, and plans entries from all active sources.
-- Adjusts file paths to be relative to the compiled output root.
-- Preserves `depends_on`/`required_by` symmetry across the merged data map.
-- Records the source package for each entry so provenance is traceable.
+### 3. Manifest Generation
 
-The compiled output in `.codectx/` is a complete, self-describing documentation set. Its `package.yml` is the master data map that AI tools consume.
+Build a compiled `manifest.yml` from the unified entries. Each entry references its content-addressed object path (e.g., `objects/a1b2c3.md`) instead of a relative file path, and includes a `source` field for provenance tracking (`"local"` or `"name@author"`).
 
-`codectx.lock` is generated as a byproduct of compilation. It contains the resolved versions, checksums, and full activation state so the exact compiled output can be reproduced.
+### 4. Heuristics
+
+Generate `heuristics.yml`, a sidecar metadata file containing size estimates, token counts, and per-package statistics. The heuristics file is not part of the AI loading protocol; it is used by tooling and by the generated README for richer context. See [Heuristics](#heuristics).
+
+### 5. Decomposition
+
+If the documentation set exceeds decomposition thresholds (entries > 500, bytes > 50 KB, or tokens > 100k), the manifest is split into per-section sub-manifests stored in `manifests/`. The root `manifest.yml` retains only always-load foundation entries and `ManifestRef` pointers to the sub-manifests. AI loads the root manifest first, then loads sub-manifests on demand. See [Manifest Decomposition](#manifest-decomposition).
+
+### 6. README and Lock
+
+Generate `README.md` from the unified manifest and heuristics (includes token estimates, section summaries, and loading protocol). Generate `codectx.lock` with resolved versions, checksums, and full activation state.
+
+## Compiled Output Format
+
+The compiled output in `.codectx/` uses a distinct format from source packages. It is validated by [compiled.schema.json](../schemas/compiled.schema.json).
+
+<rules>
+
+- `manifest.yml` is the compiled data map. Each entry has an `object` field (content-addressed path), a `source` field (provenance), and standard `depends_on`/`required_by` edges.
+- `objects/` is a flat directory of content-addressed files. Filenames are 16-character SHA256 prefixes with `.md` extension. This provides 64 bits of collision resistance.
+- `state/` contains mutable plan state files (`{plan-id}.yml`). These are not content-addressed because they change between compiles.
+- `heuristics.yml` is a sidecar metadata file. It is not loaded by AI agents. Validated by [heuristics.schema.json](../schemas/heuristics.schema.json).
+- `README.md` is dynamically generated with the loading protocol, section summaries, and token estimates.
+- `preferences.yml` stores user-specific settings (e.g., auto-compile). It is preserved across recompiles.
+- When decomposed, `manifests/` contains per-section sub-manifests. The root `manifest.yml` holds always-load entries and `ManifestRef` pointers.
+
+</rules>
+
+## Heuristics
+
+The `heuristics.yml` sidecar provides aggregate metadata about the compiled documentation set. It is generated during compilation and is not part of the AI loading protocol.
+
+Contents:
+- **Totals**: Entry count, unique object count, total bytes, estimated tokens, always-load count.
+- **Sections**: Per-section stats (entries, bytes, tokens, always-load count for foundation).
+- **Packages**: Per-package stats (entries, bytes, tokens) with local package listed first.
+
+Token estimates use ~4 characters per token as a rough conversion factor.
+
+## Manifest Decomposition
+
+When the documentation set exceeds any of the following thresholds, the compiled manifest is decomposed into sub-manifests:
+
+- Entries > 500
+- Total bytes > 50 KB
+- Estimated tokens > 100,000
+
+Decomposition splits at the section level (level 1). Each non-empty section gets its own sub-manifest file in `manifests/` (e.g., `manifests/topics.yml`). Foundation entries with `load: always` remain inlined in the root `manifest.yml` so AI can load them without additional file reads. The root manifest contains `ManifestRef` entries that describe each sub-manifest (section, path, entry count, estimated tokens).
+
+Sub-manifests use the same `manifest.yml` schema, enabling recursive decomposition at deeper levels (e.g., by source package within a section) if needed in the future.
 
 ## Activation and Conflict Handling
 
@@ -196,9 +251,9 @@ AI tools (Claude Code, Cursor, GitHub Copilot, OpenCode) each have their own ent
 <rules>
 
 - `codectx link` creates entry point files (e.g., `CLAUDE.md`, `AGENTS.md`) at the repository root.
-- Each entry point file contains a single line that references the compiled data map in `.codectx/package.yml`.
+- Each entry point file contains a single line referencing `.codectx/README.md`. The README then directs AI to `manifest.yml` and the loading protocol.
 - Before creating a new entry point file, `codectx link` renames any existing file to `[file].[timestamp].bak` to preserve the original.
-- The entry point file is the only thing the AI tool needs to find the documentation. From the data map, the AI navigates the full documentation set.
+- The entry point file is the only thing the AI tool needs to find the documentation. From the README and data map, the AI navigates the full documentation set.
 - `codectx link` is a separate command from `codectx compile`. It is run once after initial setup or when the output directory changes.
 
 </rules>

@@ -452,3 +452,133 @@ func TestKeyID_emptyString(t *testing.T) {
 func TestKeyID_colonAtStart(t *testing.T) {
 	assert.Equal(t, "foo", keyID(":foo"))
 }
+
+func TestMergeManifestDedup_promptConflict(t *testing.T) {
+	pkgA, pkgB := setupDedupDirs(t)
+
+	require.NoError(t, os.MkdirAll(filepath.Join(pkgA, "prompts"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(pkgB, "prompts"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(pkgA, "prompts/lint.md"), []byte("v1"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(pkgB, "prompts/lint.md"), []byte("v2"), 0o644))
+
+	dst := &manifest.Manifest{
+		Prompts: []manifest.PromptEntry{
+			{ID: "lint", Path: "prompts/lint.md", Description: "Lint prompt A"},
+		},
+	}
+	src := &manifest.Manifest{
+		Prompts: []manifest.PromptEntry{
+			{ID: "lint", Path: "prompts/lint.md", Description: "Lint prompt B"},
+		},
+	}
+	seen := map[string]seenEntry{
+		"prompts:lint": {pkg: "local", hash: fileHash(filepath.Join(pkgA, "prompts/lint.md"))},
+	}
+
+	events := mergeManifestDedup(dst, src, pkgA, pkgB, "pkgB@org", seen)
+	require.Len(t, events, 1)
+	assert.Equal(t, "conflict", events[0].Reason)
+	assert.Equal(t, "prompts", events[0].Section)
+	assert.Equal(t, "lint", events[0].ID)
+
+	// dst should not have the conflicting entry appended.
+	require.Len(t, dst.Prompts, 1)
+	assert.Equal(t, "Lint prompt A", dst.Prompts[0].Description)
+}
+
+func TestMergeManifestDedup_planConflict(t *testing.T) {
+	pkgA, pkgB := setupDedupDirs(t)
+
+	require.NoError(t, os.MkdirAll(filepath.Join(pkgA, "plans"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(pkgB, "plans"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(pkgA, "plans/migrate.md"), []byte("plan A"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(pkgB, "plans/migrate.md"), []byte("plan B"), 0o644))
+
+	dst := &manifest.Manifest{
+		Plans: []manifest.PlanEntry{
+			{ID: "migrate", Path: "plans/migrate.md", Description: "Migration A"},
+		},
+	}
+	src := &manifest.Manifest{
+		Plans: []manifest.PlanEntry{
+			{ID: "migrate", Path: "plans/migrate.md", Description: "Migration B"},
+		},
+	}
+	seen := map[string]seenEntry{
+		"plans:migrate": {pkg: "local", hash: fileHash(filepath.Join(pkgA, "plans/migrate.md"))},
+	}
+
+	events := mergeManifestDedup(dst, src, pkgA, pkgB, "pkgB@org", seen)
+	require.Len(t, events, 1)
+	assert.Equal(t, "conflict", events[0].Reason)
+	assert.Equal(t, "plans", events[0].Section)
+	assert.Equal(t, "migrate", events[0].ID)
+
+	// dst should not have the conflicting entry appended.
+	require.Len(t, dst.Plans, 1)
+	assert.Equal(t, "Migration A", dst.Plans[0].Description)
+}
+
+func TestMergeManifestDedup_promptDedup(t *testing.T) {
+	pkgA, pkgB := setupDedupDirs(t)
+
+	sameContent := []byte("shared prompt")
+	require.NoError(t, os.MkdirAll(filepath.Join(pkgA, "prompts"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(pkgB, "prompts"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(pkgA, "prompts/lint.md"), sameContent, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(pkgB, "prompts/lint.md"), sameContent, 0o644))
+
+	dst := &manifest.Manifest{
+		Prompts: []manifest.PromptEntry{
+			{ID: "lint", Path: "prompts/lint.md"},
+		},
+	}
+	src := &manifest.Manifest{
+		Prompts: []manifest.PromptEntry{
+			{ID: "lint", Path: "prompts/lint.md"},
+		},
+	}
+	seen := map[string]seenEntry{
+		"prompts:lint": {pkg: "local", hash: fileHash(filepath.Join(pkgA, "prompts/lint.md"))},
+	}
+
+	events := mergeManifestDedup(dst, src, pkgA, pkgB, "pkgB@org", seen)
+	require.Len(t, events, 1)
+	assert.Equal(t, "duplicate", events[0].Reason)
+	assert.Equal(t, "prompts", events[0].Section)
+
+	// dst should not have the duplicate appended.
+	require.Len(t, dst.Prompts, 1)
+}
+
+func TestMergeManifestDedup_planDedup(t *testing.T) {
+	pkgA, pkgB := setupDedupDirs(t)
+
+	sameContent := []byte("shared plan")
+	require.NoError(t, os.MkdirAll(filepath.Join(pkgA, "plans"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(pkgB, "plans"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(pkgA, "plans/migrate.md"), sameContent, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(pkgB, "plans/migrate.md"), sameContent, 0o644))
+
+	dst := &manifest.Manifest{
+		Plans: []manifest.PlanEntry{
+			{ID: "migrate", Path: "plans/migrate.md"},
+		},
+	}
+	src := &manifest.Manifest{
+		Plans: []manifest.PlanEntry{
+			{ID: "migrate", Path: "plans/migrate.md"},
+		},
+	}
+	seen := map[string]seenEntry{
+		"plans:migrate": {pkg: "local", hash: fileHash(filepath.Join(pkgA, "plans/migrate.md"))},
+	}
+
+	events := mergeManifestDedup(dst, src, pkgA, pkgB, "pkgB@org", seen)
+	require.Len(t, events, 1)
+	assert.Equal(t, "duplicate", events[0].Reason)
+	assert.Equal(t, "plans", events[0].Section)
+
+	// dst should not have the duplicate appended.
+	require.Len(t, dst.Plans, 1)
+}

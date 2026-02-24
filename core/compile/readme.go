@@ -8,17 +8,19 @@ import (
 )
 
 // generateReadme builds the compiled README.md content dynamically
-// from the unified manifest. Only sections with entries are included.
-func generateReadme(m *manifest.Manifest) string {
+// from the unified manifest and heuristics data. Only sections with
+// entries are included. When heuristics are available, token estimates
+// and size information are included.
+func generateReadme(m *manifest.Manifest, h *Heuristics) string {
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "# %s\n\n", m.Name)
 	b.WriteString("> Documentation managed by codectx.\n\n")
-	b.WriteString("Load [package.yml](package.yml) and all foundation documents marked `load: always` at the start of every session.\n\n")
+	b.WriteString("Load [manifest.yml](manifest.yml) and all foundation documents marked `load: always` at the start of every session.\n\n")
 
 	b.WriteString("## Loading Protocol\n\n")
 	b.WriteString("1. Load this file (done).\n")
-	b.WriteString("2. Load [package.yml](package.yml). This is the data map indexing all documentation.\n")
+	b.WriteString("2. Load [manifest.yml](manifest.yml). This is the data map indexing all documentation.\n")
 	b.WriteString("3. Load all foundation entries with `load: always`. These are required context.\n")
 	b.WriteString("4. As the task progresses, consult the data map to load relevant topics, prompts, or plans.\n")
 
@@ -28,27 +30,72 @@ func generateReadme(m *manifest.Manifest) string {
 		b.WriteString("\n## Sections\n\n")
 
 		if len(m.Foundation) > 0 {
-			fmt.Fprintf(&b, "- **Foundation**: %d %s. Core operational context.\n",
+			line := fmt.Sprintf("- **Foundation**: %d %s.",
 				len(m.Foundation), pluralize(len(m.Foundation), "document", "documents"))
+			if h != nil && h.Sections.Foundation != nil {
+				line += fmt.Sprintf(" ~%s.", formatTokens(h.Sections.Foundation.EstimatedTokens))
+			}
+			line += " Core operational context."
+			if h != nil && h.Totals.AlwaysLoad > 0 {
+				line += fmt.Sprintf(" %d %s auto-loaded.",
+					h.Totals.AlwaysLoad, pluralize(h.Totals.AlwaysLoad, "is", "are"))
+			}
+			b.WriteString(line + "\n")
 		}
 
 		if len(m.Topics) > 0 {
-			fmt.Fprintf(&b, "- **Topics**: %d %s. Technology and domain conventions.\n",
+			line := fmt.Sprintf("- **Topics**: %d %s.",
 				len(m.Topics), pluralize(len(m.Topics), "entry", "entries"))
+			if h != nil && h.Sections.Topics != nil {
+				line += fmt.Sprintf(" ~%s.", formatTokens(h.Sections.Topics.EstimatedTokens))
+			}
+			line += " Technology and domain conventions."
+			b.WriteString(line + "\n")
 		}
 
 		if len(m.Prompts) > 0 {
-			fmt.Fprintf(&b, "- **Prompts**: %d %s. Automated task definitions.\n",
+			line := fmt.Sprintf("- **Prompts**: %d %s.",
 				len(m.Prompts), pluralize(len(m.Prompts), "entry", "entries"))
+			if h != nil && h.Sections.Prompts != nil {
+				line += fmt.Sprintf(" ~%s.", formatTokens(h.Sections.Prompts.EstimatedTokens))
+			}
+			line += " Automated task definitions."
+			b.WriteString(line + "\n")
 		}
 
 		if len(m.Plans) > 0 {
-			fmt.Fprintf(&b, "- **Plans**: %d %s. Implementation plans with state tracking. Read `state.yml` before loading full plans.\n",
+			line := fmt.Sprintf("- **Plans**: %d %s.",
 				len(m.Plans), pluralize(len(m.Plans), "entry", "entries"))
+			if h != nil && h.Sections.Plans != nil {
+				line += fmt.Sprintf(" ~%s.", formatTokens(h.Sections.Plans.EstimatedTokens))
+			}
+			line += " Implementation plans with state tracking."
+			b.WriteString(line + "\n")
 		}
 	}
 
+	// Total documentation size.
+	if h != nil && h.Totals.EstimatedTokens > 0 {
+		fmt.Fprintf(&b, "\nTotal documentation: ~%s across %d %s.\n",
+			formatTokens(h.Totals.EstimatedTokens),
+			h.Totals.Objects,
+			pluralize(h.Totals.Objects, "object", "objects"))
+	}
+
 	return b.String()
+}
+
+// formatTokens formats a token count as a human-readable string.
+// e.g., 1500 -> "1.5k tokens", 250 -> "250 tokens".
+func formatTokens(tokens int) string {
+	if tokens >= 1000 {
+		k := float64(tokens) / 1000
+		if k == float64(int(k)) {
+			return fmt.Sprintf("%dk tokens", int(k))
+		}
+		return fmt.Sprintf("%.1fk tokens", k)
+	}
+	return fmt.Sprintf("%d tokens", tokens)
 }
 
 func pluralize(n int, singular, plural string) string {

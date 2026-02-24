@@ -226,3 +226,28 @@ func TestCopyManifestFiles_allSections(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 7, copied)
 }
+
+func TestCopyManifestFiles_errorDuringCopy(t *testing.T) {
+	srcRoot := t.TempDir()
+	dstRoot := t.TempDir()
+
+	// Create a source file.
+	require.NoError(t, os.MkdirAll(filepath.Join(srcRoot, "foundation"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(srcRoot, "foundation", "a.md"), []byte("content"), 0o644))
+
+	// Place a regular file at dstRoot/foundation so MkdirAll fails
+	// when copyFile tries to create the parent directory.
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dstRoot, "foundation"), []byte("blocker"), 0o644))
+
+	m := &manifest.Manifest{
+		Foundation: []manifest.FoundationEntry{
+			{ID: "a", Path: "foundation/a.md"},
+		},
+	}
+
+	_, err := copyManifestFiles(m, srcRoot, dstRoot)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "copy")
+}

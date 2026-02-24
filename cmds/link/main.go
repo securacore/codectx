@@ -34,8 +34,8 @@ func run() error {
 
 	// Guard: compiled output must exist.
 	outputDir := cfg.OutputDir()
-	packageYML := filepath.Join(outputDir, "package.yml")
-	if _, err := os.Stat(packageYML); os.IsNotExist(err) {
+	manifestYML := filepath.Join(outputDir, "manifest.yml")
+	if _, err := os.Stat(manifestYML); os.IsNotExist(err) {
 		return fmt.Errorf("compiled output not found at %s: run 'codectx compile' first", outputDir)
 	}
 

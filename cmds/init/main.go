@@ -9,6 +9,7 @@ import (
 
 	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/manifest"
+	"github.com/securacore/codectx/core/preferences"
 	"github.com/securacore/codectx/core/schema"
 	"github.com/securacore/codectx/ui"
 
@@ -25,11 +26,11 @@ var Command = &cli.Command{
 	Usage:     "Initialize a new codectx project",
 	ArgsUsage: "[name]",
 	Action: func(ctx context.Context, c *cli.Command) error {
-		return run(c.Args().First())
+		return run(c.Args().First(), nil)
 	},
 }
 
-func run(name string) error {
+func run(name string, autoCompile *bool) error {
 	// If a name is provided as argument, create the directory and work inside it.
 	if name != "" {
 		if err := os.MkdirAll(name, 0o755); err != nil {
@@ -129,12 +130,48 @@ func run(name string) error {
 		return fmt.Errorf("write package manifest: %w", err)
 	}
 
+	// Create .codectx/ directory and write default preferences.
+	outputDir := cfg.OutputDir()
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+		return fmt.Errorf("create output directory %s: %w", outputDir, err)
+	}
+
+	// Prompt for auto-compile preference (skip if value provided).
+	if autoCompile == nil {
+		var confirmStr string
+		form := huh.NewForm(
+			huh.NewGroup(
+				huh.NewSelect[string]().
+					Title("Auto-compile after adding packages?").
+					Description("Automatically recompile documentation when packages are added or changed").
+					Options(
+						huh.NewOption("Yes", "yes"),
+						huh.NewOption("No", "no"),
+					).
+					Value(&confirmStr),
+			),
+		).WithTheme(ui.Theme())
+
+		if err := form.Run(); err != nil {
+			return fmt.Errorf("prompt: %w", err)
+		}
+		autoCompile = preferences.BoolPtr(confirmStr == "yes")
+	}
+
+	prefs := &preferences.Preferences{
+		AutoCompile: autoCompile,
+	}
+	if err := preferences.Write(outputDir, prefs); err != nil {
+		return fmt.Errorf("write preferences: %w", err)
+	}
+
 	ui.Done(fmt.Sprintf("Initialized codectx project: %s", name))
 	ui.Blank()
 	ui.Header("Created:")
 	ui.Item(configFile)
 	ui.Item(packagePath)
 	ui.Item(".gitignore")
+	ui.Item(outputDir + "/preferences.yml")
 	for _, dir := range dirs {
 		ui.Item(dir + "/")
 	}

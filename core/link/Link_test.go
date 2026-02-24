@@ -204,6 +204,30 @@ func TestTools_count(t *testing.T) {
 	assert.True(t, names["GitHub Copilot"], "should contain GitHub Copilot")
 }
 
+func TestLink_failsWriteFile(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("cannot test permission denial as root")
+	}
+	dir := t.TempDir()
+	outputDir := filepath.Join(dir, ".codectx")
+	require.NoError(t, os.MkdirAll(outputDir, 0o755))
+
+	// Create a directory that cannot be written to.
+	readOnlyDir := filepath.Join(dir, "readonly")
+	require.NoError(t, os.MkdirAll(readOnlyDir, 0o755))
+	require.NoError(t, os.Chmod(readOnlyDir, 0o555))
+	t.Cleanup(func() { _ = os.Chmod(readOnlyDir, 0o755) })
+
+	filePath := filepath.Join(readOnlyDir, "TEST.md")
+	tools := []Tool{
+		{Name: "Test", File: filePath},
+	}
+
+	_, err := Link(tools, outputDir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "write")
+}
+
 func TestTools_entries(t *testing.T) {
 	expected := []struct {
 		Name   string

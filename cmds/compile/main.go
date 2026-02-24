@@ -37,9 +37,17 @@ func run() error {
 		return fmt.Errorf("compile: %w", err)
 	}
 
+	if result.UpToDate {
+		ui.Done("Already up to date")
+		return nil
+	}
+
 	ui.Done(fmt.Sprintf("Compiled to %s", result.OutputDir))
 	ui.Blank()
-	ui.KV("Files copied", result.FilesCopied, 16)
+	ui.KV("Objects stored", result.ObjectsStored, 16)
+	if result.ObjectsPruned > 0 {
+		ui.KV("Objects pruned", result.ObjectsPruned, 16)
+	}
 	ui.KV("Packages", result.Packages, 16)
 
 	if result.Dedup.Total() > 0 {
