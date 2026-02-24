@@ -93,6 +93,12 @@ case "$CONFIRM" in
     ;;
 esac
 
+# Update version in package manifest.
+sed -i "s/^version: .*/version: ${MAJOR}.${MINOR}.${PATCH}/" docs/package.yml
+git add docs/package.yml
+git commit -m "release: ${NEW_VERSION}"
+git push origin main
+
 # Create annotated tag and push.
 git tag -a "$NEW_VERSION" -m "$NEW_VERSION"
 git push origin "$NEW_VERSION"
