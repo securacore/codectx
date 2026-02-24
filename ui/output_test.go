@@ -169,3 +169,51 @@ func TestBlank(t *testing.T) {
 	out := captureStdout(t, func() { Blank() })
 	assert.Equal(t, "\n", out)
 }
+
+// --- KV edge cases ---
+
+func TestKV_stringValue(t *testing.T) {
+	out := captureStdout(t, func() { KV("key", "string-value", 10) })
+	assert.Contains(t, out, "key")
+	assert.Contains(t, out, "string-value")
+}
+
+func TestKV_zeroWidth(t *testing.T) {
+	out := captureStdout(t, func() { KV("key", "val", 0) })
+	assert.Contains(t, out, "key")
+	assert.Contains(t, out, "val")
+}
+
+// --- Table edge cases ---
+
+func TestTable_nilRows(t *testing.T) {
+	out := captureStdout(t, func() { Table([]string{"NAME"}, nil, 2) })
+	assert.Contains(t, out, "NAME")
+}
+
+func TestTable_singleRow(t *testing.T) {
+	headers := []string{"PACKAGE", "VERSION"}
+	rows := [][]string{{"react@org", "1.0.0"}}
+
+	out := captureStdout(t, func() { Table(headers, rows, 2) })
+	assert.Contains(t, out, "PACKAGE")
+	assert.Contains(t, out, "react@org")
+	assert.Contains(t, out, "1.0.0")
+}
+
+// --- Done/Warn/Fail with empty messages ---
+
+func TestDone_emptyMessage(t *testing.T) {
+	out := captureStdout(t, func() { Done("") })
+	assert.Contains(t, out, SymbolDone)
+}
+
+func TestWarn_emptyMessage(t *testing.T) {
+	out := captureStdout(t, func() { Warn("") })
+	assert.Contains(t, out, SymbolWarn)
+}
+
+func TestFail_emptyMessage(t *testing.T) {
+	out := captureStdout(t, func() { Fail("") })
+	assert.Contains(t, out, SymbolFail)
+}

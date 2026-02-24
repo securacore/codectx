@@ -6,9 +6,11 @@ import (
 	"os"
 	"time"
 
+	"github.com/securacore/codectx/cmds/activate"
 	"github.com/securacore/codectx/cmds/add"
 	"github.com/securacore/codectx/cmds/compile"
 	initialize "github.com/securacore/codectx/cmds/init"
+	"github.com/securacore/codectx/cmds/install"
 	"github.com/securacore/codectx/cmds/link"
 	"github.com/securacore/codectx/cmds/search"
 	"github.com/securacore/codectx/cmds/self"
@@ -25,9 +27,11 @@ func main() {
 		Name:  "codectx",
 		Usage: "AI Code Documentation Package Manager",
 		Commands: []*cli.Command{
+			activate.Command,
 			add.Command,
 			compile.Command,
 			initialize.Command,
+			install.Command,
 			link.Command,
 			search.Command,
 			self.Command,

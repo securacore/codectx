@@ -18,7 +18,7 @@ func Spin(msg string, fn func()) {
 	_ = spinner.New().
 		Title(msg).
 		TitleStyle(lipgloss.NewStyle()).
-		Style(dimStyle).
+		Style(DimStyle).
 		Type(spinner.MiniDot).
 		Action(fn).
 		Run()

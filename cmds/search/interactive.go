@@ -2,16 +2,17 @@ package search
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
+	"github.com/securacore/codectx/cmds/add"
 	"github.com/securacore/codectx/core/resolve"
 	"github.com/securacore/codectx/ui"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // searchState represents the current state of the interactive search.
@@ -45,14 +46,13 @@ type searchModel struct {
 	quitting bool
 }
 
-// Styles for the interactive view — built from the shared ui palette.
+// Styles for the interactive view — aliases to the shared ui palette.
 var (
-	titleStyle    = lipgloss.NewStyle().Bold(true)
-	hintStyle     = lipgloss.NewStyle().Foreground(ui.Dim)
-	errorStyle    = lipgloss.NewStyle().Foreground(ui.Red)
-	selectorStyle = lipgloss.NewStyle().Foreground(ui.Accent)
-	selectedStyle = lipgloss.NewStyle().Foreground(ui.Accent)
-	headerStyle   = lipgloss.NewStyle().Foreground(ui.Dim)
+	titleStyle  = ui.BoldStyle
+	hintStyle   = ui.DimStyle
+	errorStyle  = ui.RedStyle
+	accentStyle = ui.AccentStyle
+	headerStyle = ui.DimStyle
 )
 
 func newSearchModel(author string) searchModel {
@@ -61,12 +61,12 @@ func newSearchModel(author string) searchModel {
 	ti.Focus()
 	ti.CharLimit = 100
 	ti.Width = 40
-	ti.PromptStyle = lipgloss.NewStyle().Foreground(ui.Accent)
-	ti.Cursor.Style = lipgloss.NewStyle().Foreground(ui.Accent)
+	ti.PromptStyle = ui.AccentStyle
+	ti.Cursor.Style = ui.AccentStyle
 
 	sp := spinner.New()
 	sp.Spinner = spinner.MiniDot
-	sp.Style = lipgloss.NewStyle().Foreground(ui.Dim)
+	sp.Style = ui.DimStyle
 
 	return searchModel{
 		input:   ti,
@@ -235,7 +235,7 @@ func (m searchModel) helpText() string {
 		return "esc cancel"
 	case stateResults:
 		if len(m.results) > 0 {
-			return "\u2191/\u2193 navigate  enter select  / new search  esc quit"
+			return "\u2191/\u2193 navigate  enter add  / new search  esc quit"
 		}
 		return "/ new search  esc quit"
 	}
@@ -313,7 +313,7 @@ func (m searchModel) renderTableLines() []string {
 		)
 
 		if i == m.cursor {
-			lines = append(lines, selectorStyle.Render("\u25b8 ")+selectedStyle.Render(row))
+			lines = append(lines, accentStyle.Render("\u25b8 ")+accentStyle.Render(row))
 		} else {
 			lines = append(lines, "  "+row)
 		}
@@ -355,16 +355,24 @@ func runInteractive(author string) error {
 	}
 
 	final := result.(searchModel)
-	if final.selected != nil {
-		ui.Blank()
-		ui.Done(fmt.Sprintf("%s@%s", final.selected.Name, final.selected.Author))
-		if final.selected.Description != "" {
-			ui.KV("Description", final.selected.Description, 14)
-		}
-		ui.KV("Stars", final.selected.Stars, 14)
-		ui.Blank()
-		fmt.Printf("  Run: codectx add %s@%s\n\n", final.selected.Name, final.selected.Author)
+	if final.selected == nil {
+		return nil
 	}
 
-	return nil
+	pkg := fmt.Sprintf("%s@%s", final.selected.Name, final.selected.Author)
+
+	ui.Blank()
+	ui.Done(fmt.Sprintf("Selected %s", pkg))
+	if final.selected.Description != "" {
+		ui.KV("Description", final.selected.Description, 14)
+	}
+	ui.Blank()
+
+	// Check that a codectx.yml exists before attempting the add flow.
+	if _, err := os.Stat("codectx.yml"); os.IsNotExist(err) {
+		ui.Fail("No codectx.yml found. Run `codectx init` first, then add packages.")
+		return nil
+	}
+
+	return add.Run([]string{pkg}, "", "")
 }

@@ -202,7 +202,7 @@ func TestSearchModel_viewResults(t *testing.T) {
 	assert.Contains(t, view, "42")
 	assert.Contains(t, view, "1 package(s) found")
 	assert.Contains(t, view, "navigate")
-	assert.Contains(t, view, "select")
+	assert.Contains(t, view, "add")
 }
 
 func TestSearchModel_viewSearching(t *testing.T) {
@@ -250,7 +250,7 @@ func TestSearchModel_helpTextResults(t *testing.T) {
 	m.results = []resolve.SearchResult{{Name: "a", Author: "x"}}
 	help := m.helpText()
 	assert.Contains(t, help, "navigate")
-	assert.Contains(t, help, "select")
+	assert.Contains(t, help, "add")
 	assert.Contains(t, help, "new search")
 }
 
@@ -436,4 +436,143 @@ func TestSearchModel_renderTableTruncatesDescription(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "expected truncated description with '...'")
+}
+
+// --- Window size input width floor ---
+
+func TestSearchModel_windowSizeUpdatesInputWidth(t *testing.T) {
+	m := newSearchModel("")
+
+	// Narrow terminal: max(15-10, 20) = 20 (floor).
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 15, Height: 20})
+	result := updated.(searchModel)
+	assert.Equal(t, 20, result.input.Width)
+
+	// Wide terminal: max(120-10, 20) = 110.
+	updated, _ = result.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	result = updated.(searchModel)
+	assert.Equal(t, 110, result.input.Width)
+}
+
+// --- Search done resets cursor ---
+
+func TestSearchModel_searchDoneMsgResetsCursor(t *testing.T) {
+	m := newSearchModel("")
+	m.state = stateSearching
+	m.cursor = 5 // from a previous search
+
+	results := []resolve.SearchResult{{Name: "a", Author: "x"}}
+	updated, _ := m.Update(searchDoneMsg{results: results})
+	result := updated.(searchModel)
+	assert.Equal(t, 0, result.cursor)
+}
+
+// --- Enter with whitespace-only input ---
+
+func TestSearchModel_enterWithWhitespaceOnlyInput(t *testing.T) {
+	m := newSearchModel("")
+	m.input.SetValue("   ")
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	result := updated.(searchModel)
+	// Should not start a search — stays in input state.
+	assert.Equal(t, stateInput, result.state)
+}
+
+// --- Input delegation ---
+
+func TestSearchModel_inputDelegation(t *testing.T) {
+	m := newSearchModel("")
+	m.state = stateInput
+
+	// Type a character — should be delegated to textinput.
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	result := updated.(searchModel)
+	assert.Contains(t, result.input.Value(), "r")
+}
+
+// --- renderTableLines: empty results ---
+
+func TestSearchModel_renderTableLines_emptyResults(t *testing.T) {
+	m := newSearchModel("")
+	m.state = stateResults
+	m.results = nil
+	lines := m.renderTableLines()
+	assert.Nil(t, lines)
+}
+
+// --- Help text: default unknown state ---
+
+func TestSearchModel_helpText_unknownState(t *testing.T) {
+	m := newSearchModel("")
+	m.state = searchState(99) // not a valid state
+	assert.Empty(t, m.helpText())
+}
+
+// --- Select middle result ---
+
+func TestSearchModel_selectMiddleResult(t *testing.T) {
+	m := newSearchModel("")
+	m.state = stateResults
+	m.results = []resolve.SearchResult{
+		{Name: "a", Author: "x"},
+		{Name: "b", Author: "y"},
+		{Name: "c", Author: "z"},
+	}
+	m.cursor = 1
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	result := updated.(searchModel)
+	require.NotNil(t, result.selected)
+	assert.Equal(t, "b", result.selected.Name)
+	assert.Equal(t, "y", result.selected.Author)
+}
+
+// --- Quit during various states ---
+
+func TestSearchModel_ctrlCDuringResults(t *testing.T) {
+	m := newSearchModel("")
+	m.state = stateResults
+	m.results = []resolve.SearchResult{{Name: "a", Author: "x"}}
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	result := updated.(searchModel)
+	assert.True(t, result.quitting)
+	assert.Nil(t, result.selected)
+	assert.NotNil(t, cmd)
+}
+
+func TestSearchModel_escDuringSearching(t *testing.T) {
+	m := newSearchModel("")
+	m.state = stateSearching
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	result := updated.(searchModel)
+	assert.True(t, result.quitting)
+	assert.NotNil(t, cmd)
+}
+
+// --- View with results but no results (stateResults + empty) ---
+
+func TestSearchModel_viewResultsEmpty(t *testing.T) {
+	m := newSearchModel("")
+	m.state = stateResults
+	m.results = nil
+	m.searched = true
+	m.width = 80
+	m.height = 24
+
+	view := m.View()
+	assert.Contains(t, view, "0 package(s) found")
+}
+
+// --- Help text for results: verify "add" wording ---
+
+func TestSearchModel_helpTextResults_containsAdd(t *testing.T) {
+	m := newSearchModel("")
+	m.state = stateResults
+	m.results = []resolve.SearchResult{{Name: "a", Author: "x"}}
+	help := m.helpText()
+	assert.Contains(t, help, "enter add")
+	assert.NotContains(t, help, "enter select")
 }

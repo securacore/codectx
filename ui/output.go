@@ -9,49 +9,49 @@ import (
 //
 //	✓ Compiled to .codectx
 func Done(msg string) {
-	fmt.Printf("  %s %s\n", greenStyle.Render(SymbolDone), msg)
+	fmt.Printf("  %s %s\n", GreenStyle.Render(SymbolDone), msg)
 }
 
 // Warn prints a warning message with a yellow indicator.
 //
 //	! 2 conflict(s) detected
 func Warn(msg string) {
-	fmt.Printf("  %s %s\n", yellowStyle.Render(SymbolWarn), msg)
+	fmt.Printf("  %s %s\n", YellowStyle.Render(SymbolWarn), msg)
 }
 
 // Fail prints an error message with a red indicator.
 //
 //	✗ resolve failed
 func Fail(msg string) {
-	fmt.Printf("  %s %s\n", redStyle.Render(SymbolFail), msg)
+	fmt.Printf("  %s %s\n", RedStyle.Render(SymbolFail), msg)
 }
 
 // Step prints a dim in-progress message (non-TTY fallback for spinner).
 //
 //	○ Resolving react@org...
 func Step(msg string) {
-	fmt.Printf("  %s %s\n", dimStyle.Render(SymbolSpinner), dimStyle.Render(msg))
+	fmt.Printf("  %s %s\n", DimStyle.Render(SymbolSpinner), DimStyle.Render(msg))
 }
 
 // Header prints a bold section label.
 //
 //	Created:
 func Header(msg string) {
-	fmt.Printf("  %s\n", boldStyle.Render(msg))
+	fmt.Printf("  %s\n", BoldStyle.Render(msg))
 }
 
 // Item prints an indented list item with a dim bullet.
 //
 //   - codectx.yml
 func Item(msg string) {
-	fmt.Printf("  %s %s\n", dimStyle.Render(SymbolBullet), msg)
+	fmt.Printf("  %s %s\n", DimStyle.Render(SymbolBullet), msg)
 }
 
 // ItemDetail prints a list item with a dim parenthetical detail.
 //
 //   - .windsurfrules (backed up)
 func ItemDetail(msg, detail string) {
-	fmt.Printf("  %s %s %s\n", dimStyle.Render(SymbolBullet), msg, dimStyle.Render("("+detail+")"))
+	fmt.Printf("  %s %s %s\n", DimStyle.Render(SymbolBullet), msg, DimStyle.Render("("+detail+")"))
 }
 
 // KV prints a key-value pair with the key dimmed and right-padded.
@@ -60,12 +60,12 @@ func ItemDetail(msg, detail string) {
 //	Files copied   42
 func KV(key string, value any, width int) {
 	format := fmt.Sprintf("  %%-%ds %%v\n", width)
-	fmt.Printf(format, dimStyle.Render(key), value)
+	fmt.Printf(format, DimStyle.Render(key), value)
 }
 
 // Canceled prints a cancellation message.
 func Canceled() {
-	fmt.Printf("  %s\n", dimStyle.Render("Canceled."))
+	fmt.Printf("  %s\n", DimStyle.Render("Canceled."))
 }
 
 // Table prints a column-aligned table with dim headers.
@@ -103,10 +103,10 @@ func Table(headers []string, rows [][]string, gap int) {
 	headerArgs := make([]any, len(headers))
 	for i, h := range headers {
 		if i == len(headers)-1 {
-			headerArgs[i] = dimStyle.Render(h)
+			headerArgs[i] = DimStyle.Render(h)
 		} else {
 			padded := fmt.Sprintf(fmt.Sprintf("%%-%ds", widths[i]+gap), h)
-			headerArgs[i] = dimStyle.Render(padded)
+			headerArgs[i] = DimStyle.Render(padded)
 		}
 	}
 	fmt.Printf("  %s\n", strings.TrimRight(fmt.Sprintf(strings.Repeat("%s", len(headers)), headerArgs...), " "))

@@ -99,42 +99,6 @@ just          # List all available commands
 just docker   # List Docker-specific commands
 ```
 
-### Project Structure
-
-```
-codectx
-├── cmds/                  # CLI subcommands (one package per command)
-│   ├── add/               # codectx add
-│   ├── compile/           # codectx compile
-│   ├── init/              # codectx init
-│   ├── link/              # codectx link
-│   ├── search/            # codectx search (includes interactive TUI)
-│   ├── version/           # codectx version
-│   └── watch/             # codectx watch
-├── core/                  # Domain logic (no CLI dependencies)
-│   ├── compile/           # Compilation engine, content-addressed objects
-│   ├── config/            # codectx.yml config loading/writing
-│   ├── errs/              # Typed error handling
-│   ├── exec/              # Shell command execution
-│   ├── link/              # Symlink management for tool integration
-│   ├── lock/              # Lock file generation
-│   ├── manifest/          # package.yml manifest parsing
-│   ├── resolve/           # Package resolution, fetching, search
-│   ├── schema/            # JSON schema validation and embedding
-│   ├── update/            # Background version update checker
-│   └── watch/             # Filesystem watching for live recompilation
-├── ui/                    # Shared TUI components, styles, output helpers
-├── bin/
-│   ├── install            # Curl-able installer script
-│   ├── release            # Semver tagging and release trigger
-│   └── just/              # Modular just recipes
-├── .github/workflows/     # CI/CD (release pipeline)
-├── .goreleaser.yml        # Cross-platform build configuration
-├── lefthook.yml           # Git hook definitions (pre-commit, pre-push)
-├── .golangci.yml          # Linter configuration
-└── main.go                # CLI entrypoint
-```
-
 ## Releasing
 
 Releases are created by pushing a semver tag, which triggers a GitHub

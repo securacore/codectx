@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/compile"
 	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/manifest"
-	"github.com/securacore/codectx/core/preferences"
 	"github.com/securacore/codectx/core/resolve"
 	"github.com/securacore/codectx/ui"
 
@@ -21,12 +21,12 @@ const configFile = "codectx.yml"
 
 var Command = &cli.Command{
 	Name:      "add",
-	Usage:     "Add a documentation package",
-	ArgsUsage: "<package>",
+	Usage:     "Add one or more documentation packages",
+	ArgsUsage: "<package> [package...]",
 	Flags: []cli.Flag{
 		&cli.StringFlag{
 			Name:  "source",
-			Usage: "Explicit Git repository URL (overrides inference)",
+			Usage: "Explicit Git repository URL (overrides inference, single package only)",
 		},
 		&cli.StringFlag{
 			Name:  "activate",
@@ -37,79 +37,53 @@ var Command = &cli.Command{
 		if c.NArg() < 1 {
 			return fmt.Errorf("package argument required (e.g., name@author, name@author:version)")
 		}
-		return run(c.Args().First(), c.String("source"), c.String("activate"))
+		inputs := c.Args().Slice()
+		sourceFlag := c.String("source")
+		if sourceFlag != "" && len(inputs) > 1 {
+			return fmt.Errorf("--source can only be used with a single package")
+		}
+		return Run(inputs, sourceFlag, c.String("activate"))
 	},
 }
 
-func run(input, sourceFlag, activateFlag string) error {
+// addTarget holds the parsed and resolved data for one package being added.
+type addTarget struct {
+	input    string
+	ref      *resolve.PackageRef
+	source   string
+	resolved *resolve.ResolvedPackage
+	pkgDir   string
+	manifest *manifest.Manifest
+}
+
+// Run adds one or more packages to the project. It resolves, fetches, prompts
+// for activation, writes config, and optionally auto-compiles.
+// Exported so other commands (e.g., search) can trigger the add flow.
+func Run(inputs []string, sourceFlag, activateFlag string) error {
 	// Load config.
 	cfg, err := config.Load(configFile)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	// Parse package identifier (URL or shorthand).
-	var ref *resolve.PackageRef
-	var source string
-
-	if resolve.IsURL(input) {
-		// Input is a GitHub URL: extract name, author, and source.
-		var urlSource string
-		ref, urlSource, err = resolve.ParseURL(input)
-		if err != nil {
-			return fmt.Errorf("parse URL: %w", err)
-		}
-		source = urlSource
-	} else {
-		// Input is shorthand (name@author[:version]).
-		ref, err = resolve.Parse(input)
-		if err != nil {
-			return fmt.Errorf("parse package: %w", err)
-		}
-
-		// Guard: author required for source inference.
-		if ref.Author == "" && sourceFlag == "" {
-			return fmt.Errorf("author required: use name@author format or provide --source")
-		}
-
-		source = sourceFlag
-		if source == "" {
-			source = resolve.InferSource(ref.Name, ref.Author)
-		}
-	}
-
-	// Guard: check if package already exists.
-	for _, pkg := range cfg.Packages {
-		if pkg.Name == ref.Name && pkg.Author == ref.Author {
-			return fmt.Errorf("package %s@%s already exists in config", ref.Name, ref.Author)
-		}
-	}
-
-	// Resolve version from Git tags.
-	var resolved *resolve.ResolvedPackage
-	ui.Spin(fmt.Sprintf("Resolving %s...", input), func() {
-		resolved, err = resolve.Resolve(ref, source)
-	})
-	if err != nil {
-		return fmt.Errorf("resolve: %w", err)
-	}
-
-	// Fetch (clone) into docs/packages/name@author/.
 	docsDir := cfg.DocsDir()
-	pkgDir := filepath.Join(docsDir, "packages", fmt.Sprintf("%s@%s", resolved.Name, resolved.Author))
+	var targets []*addTarget
+	var failures []string
 
-	err = ui.SpinErr(fmt.Sprintf("Fetching %s@%s v%s...", resolved.Name, resolved.Author, resolved.Version), func() error {
-		return resolve.Fetch(resolved, pkgDir)
-	})
-	if err != nil {
-		return fmt.Errorf("fetch: %w", err)
+	for _, input := range inputs {
+		t, err := parseAndResolve(input, sourceFlag, cfg, docsDir)
+		if err != nil {
+			failures = append(failures, fmt.Sprintf("%s: %s", input, err))
+			continue
+		}
+		targets = append(targets, t)
 	}
 
-	// Load the fetched package's manifest.
-	pkgManifestPath := filepath.Join(pkgDir, "package.yml")
-	pkgManifest, err := manifest.Load(pkgManifestPath)
-	if err != nil {
-		return fmt.Errorf("load package manifest: %w", err)
+	if len(targets) == 0 {
+		for _, f := range failures {
+			ui.Fail(f)
+		}
+		return fmt.Errorf("no packages were added")
 	}
 
 	// Determine activation.
@@ -120,7 +94,7 @@ func run(input, sourceFlag, activateFlag string) error {
 			return fmt.Errorf("parse --activate: %w", err)
 		}
 	} else {
-		activation, err = promptActivation(pkgManifest)
+		activation, err = promptCombinedActivation(targets)
 		if err != nil {
 			return fmt.Errorf("activation prompt: %w", err)
 		}
@@ -128,129 +102,233 @@ func run(input, sourceFlag, activateFlag string) error {
 
 	// Check for entry collisions against currently active entries.
 	if !activation.IsNone() {
-		collisions := detectCollisions(cfg, pkgManifest, activation)
-		if len(collisions) > 0 {
-			ui.Blank()
-			ui.Warn(fmt.Sprintf("%d entry collision(s) detected:", len(collisions)))
-			for _, c := range collisions {
-				ui.Item(fmt.Sprintf("[%s] %s already active from %s", c.section, c.id, c.pkg))
-			}
-
-			if activateFlag == "" {
-				// Interactive mode: ask for confirmation.
-				var confirm bool
-				confirmForm := huh.NewForm(
-					huh.NewGroup(
-						huh.NewConfirm().
-							Title("Continue with these collisions?").
-							Description("Colliding entries will be deduplicated at compile time.").
-							Affirmative("Yes, continue").
-							Negative("Cancel").
-							Value(&confirm),
-					),
-				).WithTheme(ui.Theme())
-				if err := confirmForm.Run(); err != nil {
-					return fmt.Errorf("confirmation prompt: %w", err)
+		for _, t := range targets {
+			collisions := detectCollisions(cfg, t.manifest, activation)
+			if len(collisions) > 0 {
+				ui.Blank()
+				ui.Warn(fmt.Sprintf("%d collision(s) for %s@%s:", len(collisions), t.ref.Name, t.ref.Author))
+				for _, c := range collisions {
+					ui.Item(fmt.Sprintf("[%s] %s already active from %s", c.section, c.id, c.pkg))
 				}
-				if !confirm {
-					ui.Canceled()
-					return nil
+
+				if activateFlag == "" {
+					var confirm bool
+					confirmForm := huh.NewForm(
+						huh.NewGroup(
+							huh.NewConfirm().
+								Title("Continue with these collisions?").
+								Description("Colliding entries will be deduplicated at compile time.").
+								Affirmative("Yes, continue").
+								Negative("Cancel").
+								Value(&confirm),
+						),
+					).WithTheme(ui.Theme())
+					if err := confirmForm.Run(); err != nil {
+						return fmt.Errorf("confirmation prompt: %w", err)
+					}
+					if !confirm {
+						ui.Canceled()
+						return nil
+					}
 				}
 			}
 		}
 	}
 
-	// Append to config and write.
-	dep := config.PackageDep{
-		Name:    resolved.Name,
-		Author:  resolved.Author,
-		Version: ref.Version,
-		Source:  sourceFlag, // only record explicit source
-		Active:  activation,
+	// Append all successful targets to config and write once.
+	for _, t := range targets {
+		dep := config.PackageDep{
+			Name:    t.resolved.Name,
+			Author:  t.resolved.Author,
+			Version: t.ref.Version,
+			Source:  sourceFlag,
+			Active:  activation,
+		}
+
+		if dep.Version == "" {
+			dep.Version = fmt.Sprintf("^%s", t.resolved.Version)
+		}
+
+		cfg.Packages = append(cfg.Packages, dep)
 	}
 
-	// Use the constraint from input, or pin to caret range of resolved version.
-	if dep.Version == "" {
-		dep.Version = fmt.Sprintf("^%s", resolved.Version)
-	}
-
-	cfg.Packages = append(cfg.Packages, dep)
 	if err := config.Write(configFile, cfg); err != nil {
 		return fmt.Errorf("write config: %w", err)
 	}
 
+	// Print results.
 	ui.Blank()
-	ui.Done(fmt.Sprintf("Added %s@%s v%s", resolved.Name, resolved.Author, resolved.Version))
+	for _, t := range targets {
+		ui.Done(fmt.Sprintf("Added %s@%s v%s", t.resolved.Name, t.resolved.Author, t.resolved.Version))
+	}
+	if len(failures) > 0 {
+		ui.Blank()
+		for _, f := range failures {
+			ui.Fail(f)
+		}
+	}
 	printActivation(activation)
 
 	// Auto-compile if preferences say so, or prompt if unset.
-	if err := maybeAutoCompile(cfg); err != nil {
+	if err := shared.MaybeAutoCompile(cfg); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-// maybeAutoCompile loads preferences and runs compile if auto-compile is
-// enabled. If the preference is unset (nil), it prompts the user once
-// and saves the answer.
-func maybeAutoCompile(cfg *config.Config) error {
-	outputDir := cfg.OutputDir()
-	prefs, err := preferences.Load(outputDir)
-	if err != nil {
-		return fmt.Errorf("load preferences: %w", err)
-	}
+// parseAndResolve handles parsing, duplicate checking, resolving, and fetching
+// for a single package input string. Returns an addTarget on success.
+func parseAndResolve(input, sourceFlag string, cfg *config.Config, docsDir string) (*addTarget, error) {
+	var ref *resolve.PackageRef
+	var source string
+	var err error
 
-	if prefs.AutoCompile == nil {
-		// Preference unset: prompt once and save.
-		var confirmStr string
-		form := huh.NewForm(
-			huh.NewGroup(
-				huh.NewSelect[string]().
-					Title("Auto-compile after adding packages?").
-					Description("Automatically recompile documentation when packages are added or changed").
-					Options(
-						huh.NewOption("Yes", "yes"),
-						huh.NewOption("No", "no"),
-					).
-					Value(&confirmStr),
-			),
-		).WithTheme(ui.Theme())
-
-		if err := form.Run(); err != nil {
-			return fmt.Errorf("prompt: %w", err)
+	if resolve.IsURL(input) {
+		var urlSource string
+		ref, urlSource, err = resolve.ParseURL(input)
+		if err != nil {
+			return nil, fmt.Errorf("parse URL: %w", err)
 		}
-
-		val := confirmStr == "yes"
-		prefs.AutoCompile = &val
-		if err := preferences.Write(outputDir, prefs); err != nil {
-			return fmt.Errorf("write preferences: %w", err)
+		source = urlSource
+	} else {
+		ref, err = resolve.Parse(input)
+		if err != nil {
+			return nil, fmt.Errorf("parse package: %w", err)
+		}
+		if ref.Author == "" && sourceFlag == "" {
+			return nil, fmt.Errorf("author required: use name@author format or provide --source")
+		}
+		source = sourceFlag
+		if source == "" {
+			source = resolve.InferSource(ref.Name, ref.Author)
 		}
 	}
 
-	if !*prefs.AutoCompile {
-		return nil
+	// Guard: check if package already exists.
+	for _, pkg := range cfg.Packages {
+		if pkg.Name == ref.Name && pkg.Author == ref.Author {
+			return nil, fmt.Errorf("package %s@%s already exists in config", ref.Name, ref.Author)
+		}
 	}
 
-	ui.Blank()
-	var result *compile.Result
-	err = ui.SpinErr("Compiling...", func() error {
-		var compileErr error
-		result, compileErr = compile.Compile(cfg)
-		return compileErr
+	// Resolve version.
+	var resolved *resolve.ResolvedPackage
+	ui.Spin(fmt.Sprintf("Resolving %s...", input), func() {
+		resolved, err = resolve.Resolve(ref, source)
 	})
 	if err != nil {
-		return fmt.Errorf("compile: %w", err)
+		return nil, fmt.Errorf("resolve: %w", err)
 	}
 
-	ui.Done(fmt.Sprintf("Compiled to %s", result.OutputDir))
-	ui.KV("Objects stored", result.ObjectsStored, 16)
-	if result.ObjectsPruned > 0 {
-		ui.KV("Objects pruned", result.ObjectsPruned, 16)
-	}
-	ui.KV("Packages", result.Packages, 16)
+	// Fetch into docs/packages/name@author/.
+	pkgDir := filepath.Join(docsDir, "packages", fmt.Sprintf("%s@%s", resolved.Name, resolved.Author))
 
-	return nil
+	err = ui.SpinErr(fmt.Sprintf("Fetching %s@%s v%s...", resolved.Name, resolved.Author, resolved.Version), func() error {
+		return resolve.Fetch(resolved, pkgDir)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("fetch: %w", err)
+	}
+
+	// Load the fetched package's manifest.
+	pkgManifestPath := filepath.Join(pkgDir, "package.yml")
+	pkgManifest, err := manifest.Load(pkgManifestPath)
+	if err != nil {
+		return nil, fmt.Errorf("load package manifest: %w", err)
+	}
+
+	return &addTarget{
+		input:    input,
+		ref:      ref,
+		source:   source,
+		resolved: resolved,
+		pkgDir:   pkgDir,
+		manifest: pkgManifest,
+	}, nil
+}
+
+// promptCombinedActivation shows a single multi-select with entries from all
+// packages grouped by package label. Each entry is prefixed with the package
+// it belongs to.
+func promptCombinedActivation(targets []*addTarget) (config.Activation, error) {
+	type entry struct {
+		section string
+		id      string
+		label   string
+	}
+
+	var entries []entry
+	for _, t := range targets {
+		pkgLabel := fmt.Sprintf("%s@%s", t.resolved.Name, t.resolved.Author)
+		for _, e := range t.manifest.Foundation {
+			entries = append(entries, entry{"foundation", e.ID, fmt.Sprintf("[%s / foundation] %s - %s", pkgLabel, e.ID, e.Description)})
+		}
+		for _, e := range t.manifest.Topics {
+			entries = append(entries, entry{"topics", e.ID, fmt.Sprintf("[%s / topics] %s - %s", pkgLabel, e.ID, e.Description)})
+		}
+		for _, e := range t.manifest.Prompts {
+			entries = append(entries, entry{"prompts", e.ID, fmt.Sprintf("[%s / prompts] %s - %s", pkgLabel, e.ID, e.Description)})
+		}
+		for _, e := range t.manifest.Plans {
+			entries = append(entries, entry{"plans", e.ID, fmt.Sprintf("[%s / plans] %s - %s", pkgLabel, e.ID, e.Description)})
+		}
+	}
+
+	if len(entries) == 0 {
+		ui.Done("Packages have no entries to activate.")
+		return config.Activation{Mode: "none"}, nil
+	}
+
+	// Build huh options (all selected by default).
+	options := make([]huh.Option[int], len(entries))
+	for i, e := range entries {
+		options[i] = huh.NewOption(e.label, i).Selected(true)
+	}
+
+	var selected []int
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewMultiSelect[int]().
+				Title("Select entries to activate").
+				Description("Entries from all packages are shown below").
+				Options(options...).
+				Height(min(len(entries)+4, 20)).
+				Value(&selected),
+		),
+	).WithTheme(ui.Theme())
+
+	if err := form.Run(); err != nil {
+		return config.Activation{}, err
+	}
+
+	// If all selected, use "all" mode.
+	if len(selected) == len(entries) {
+		return config.Activation{Mode: "all"}, nil
+	}
+
+	// If none selected, use "none" mode.
+	if len(selected) == 0 {
+		return config.Activation{Mode: "none"}, nil
+	}
+
+	// Build granular activation map.
+	am := &config.ActivationMap{}
+	for _, idx := range selected {
+		e := entries[idx]
+		switch e.section {
+		case "foundation":
+			am.Foundation = append(am.Foundation, e.id)
+		case "topics":
+			am.Topics = append(am.Topics, e.id)
+		case "prompts":
+			am.Prompts = append(am.Prompts, e.id)
+		case "plans":
+			am.Plans = append(am.Plans, e.id)
+		}
+	}
+
+	return config.Activation{Map: am}, nil
 }
 
 // parseActivateFlag parses the --activate flag value into an Activation.
@@ -289,85 +367,6 @@ func parseActivateFlag(value string) (config.Activation, error) {
 			am.Plans = append(am.Plans, id)
 		default:
 			return config.Activation{}, fmt.Errorf("unknown section %q in %q", section, part)
-		}
-	}
-
-	return config.Activation{Map: am}, nil
-}
-
-// promptActivation uses huh to interactively select which entries to activate.
-func promptActivation(m *manifest.Manifest) (config.Activation, error) {
-	// Collect all entry IDs with descriptive labels.
-	type entry struct {
-		section string
-		id      string
-		label   string
-	}
-
-	var entries []entry
-	for _, e := range m.Foundation {
-		entries = append(entries, entry{"foundation", e.ID, fmt.Sprintf("[foundation] %s - %s", e.ID, e.Description)})
-	}
-	for _, e := range m.Topics {
-		entries = append(entries, entry{"topics", e.ID, fmt.Sprintf("[topics] %s - %s", e.ID, e.Description)})
-	}
-	for _, e := range m.Prompts {
-		entries = append(entries, entry{"prompts", e.ID, fmt.Sprintf("[prompts] %s - %s", e.ID, e.Description)})
-	}
-	for _, e := range m.Plans {
-		entries = append(entries, entry{"plans", e.ID, fmt.Sprintf("[plans] %s - %s", e.ID, e.Description)})
-	}
-
-	if len(entries) == 0 {
-		ui.Done("Package has no entries to activate.")
-		return config.Activation{Mode: "none"}, nil
-	}
-
-	// Build huh options (all selected by default).
-	options := make([]huh.Option[int], len(entries))
-	for i, e := range entries {
-		options[i] = huh.NewOption(e.label, i).Selected(true)
-	}
-
-	var selected []int
-	form := huh.NewForm(
-		huh.NewGroup(
-			huh.NewMultiSelect[int]().
-				Title("Select entries to activate").
-				Description(fmt.Sprintf("Package: %s@%s v%s", m.Name, m.Author, m.Version)).
-				Options(options...).
-				Height(min(len(entries)+4, 20)).
-				Value(&selected),
-		),
-	).WithTheme(ui.Theme())
-
-	if err := form.Run(); err != nil {
-		return config.Activation{}, err
-	}
-
-	// If all selected, use "all" mode.
-	if len(selected) == len(entries) {
-		return config.Activation{Mode: "all"}, nil
-	}
-
-	// If none selected, use "none" mode.
-	if len(selected) == 0 {
-		return config.Activation{Mode: "none"}, nil
-	}
-
-	// Build granular activation map.
-	am := &config.ActivationMap{}
-	for _, idx := range selected {
-		e := entries[idx]
-		switch e.section {
-		case "foundation":
-			am.Foundation = append(am.Foundation, e.id)
-		case "topics":
-			am.Topics = append(am.Topics, e.id)
-		case "prompts":
-			am.Prompts = append(am.Prompts, e.id)
-		case "plans":
-			am.Plans = append(am.Plans, e.id)
 		}
 	}
 
