@@ -15,6 +15,7 @@ import (
 )
 
 const defaultDebounce = 300 * time.Millisecond
+const defaultPollInterval = 30 * time.Second
 
 // Result reports what happened after a watch-triggered compile.
 type Result struct {
@@ -34,20 +35,33 @@ func WithDebounce(d time.Duration) Option {
 	}
 }
 
+// WithPollInterval sets the polling heartbeat interval. The watcher
+// periodically runs a compile as a safety net for missed filesystem
+// events. The fingerprint mechanism makes this cheap: if nothing
+// changed, Compile returns UpToDate immediately. Set to 0 to disable.
+// The default is 30s.
+func WithPollInterval(d time.Duration) Option {
+	return func(w *Watcher) {
+		w.pollInterval = d
+	}
+}
+
 // Watcher monitors filesystem changes and triggers recompilation.
 type Watcher struct {
-	configFile string
-	debounce   time.Duration
-	results    chan Result
+	configFile   string
+	debounce     time.Duration
+	pollInterval time.Duration
+	results      chan Result
 }
 
 // New creates a Watcher that monitors the filesystem for changes and
 // triggers compilation. The configFile is the path to codectx.yml.
 func New(configFile string, opts ...Option) *Watcher {
 	w := &Watcher{
-		configFile: configFile,
-		debounce:   defaultDebounce,
-		results:    make(chan Result, 8),
+		configFile:   configFile,
+		debounce:     defaultDebounce,
+		pollInterval: defaultPollInterval,
+		results:      make(chan Result, 8),
 	}
 	for _, opt := range opts {
 		opt(w)
@@ -99,6 +113,16 @@ func (w *Watcher) Run(ctx context.Context) error {
 	trigger := make(chan struct{}, 1)
 	var timer *time.Timer
 
+	// Polling heartbeat as a safety net for missed filesystem events.
+	// The fingerprint mechanism makes this cheap: Compile returns
+	// UpToDate immediately if nothing changed.
+	var pollCh <-chan time.Time
+	if w.pollInterval > 0 {
+		ticker := time.NewTicker(w.pollInterval)
+		defer ticker.Stop()
+		pollCh = ticker.C
+	}
+
 	for {
 		select {
 		case event, ok := <-fsw.Events:
@@ -141,6 +165,9 @@ func (w *Watcher) Run(ctx context.Context) error {
 				absOutputDir, _ = filepath.Abs(outputDir)
 				_ = addDirRecursive(fsw, docsDir, absOutputDir)
 			}
+
+		case <-pollCh:
+			w.compileAndSend()
 
 		case err, ok := <-fsw.Errors:
 			if !ok {

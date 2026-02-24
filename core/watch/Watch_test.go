@@ -50,12 +50,23 @@ func TestNew_defaults(t *testing.T) {
 	w := New("codectx.yml")
 	assert.Equal(t, "codectx.yml", w.configFile)
 	assert.Equal(t, defaultDebounce, w.debounce)
+	assert.Equal(t, defaultPollInterval, w.pollInterval)
 	assert.NotNil(t, w.results)
 }
 
 func TestNew_withDebounce(t *testing.T) {
 	w := New("codectx.yml", WithDebounce(500*time.Millisecond))
 	assert.Equal(t, 500*time.Millisecond, w.debounce)
+}
+
+func TestNew_withPollInterval(t *testing.T) {
+	w := New("codectx.yml", WithPollInterval(60*time.Second))
+	assert.Equal(t, 60*time.Second, w.pollInterval)
+}
+
+func TestNew_withPollIntervalDisabled(t *testing.T) {
+	w := New("codectx.yml", WithPollInterval(0))
+	assert.Equal(t, time.Duration(0), w.pollInterval)
 }
 
 func TestRun_initialCompile(t *testing.T) {
@@ -345,4 +356,75 @@ func TestResults_channel(t *testing.T) {
 	w := New("codectx.yml")
 	ch := w.Results()
 	assert.NotNil(t, ch)
+}
+
+func TestRun_pollHeartbeat(t *testing.T) {
+	setupWatchProject(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Use a short poll interval and disable debounce-triggered events
+	// by using a very long debounce so only the heartbeat fires.
+	w := New("codectx.yml",
+		WithDebounce(50*time.Millisecond),
+		WithPollInterval(200*time.Millisecond),
+	)
+
+	go func() {
+		_ = w.Run(ctx)
+	}()
+
+	// Consume initial compile.
+	select {
+	case result := <-w.Results():
+		assert.NoError(t, result.Error)
+		assert.NotNil(t, result.Compiled)
+		assert.False(t, result.Compiled.UpToDate)
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for initial compile")
+	}
+
+	// Without any filesystem changes, the poll heartbeat should fire
+	// and produce an UpToDate result.
+	select {
+	case result := <-w.Results():
+		assert.NoError(t, result.Error)
+		assert.NotNil(t, result.Compiled)
+		assert.True(t, result.Compiled.UpToDate)
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for poll heartbeat result")
+	}
+}
+
+func TestRun_pollDisabled(t *testing.T) {
+	setupWatchProject(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	w := New("codectx.yml",
+		WithDebounce(50*time.Millisecond),
+		WithPollInterval(0),
+	)
+
+	go func() {
+		_ = w.Run(ctx)
+	}()
+
+	// Consume initial compile.
+	select {
+	case <-w.Results():
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for initial compile")
+	}
+
+	// With polling disabled and no filesystem changes, no result
+	// should arrive within a reasonable window.
+	select {
+	case <-w.Results():
+		t.Fatal("received unexpected result with polling disabled")
+	case <-time.After(500 * time.Millisecond):
+		// Good: no heartbeat fired.
+	}
 }
