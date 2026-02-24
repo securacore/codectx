@@ -1,5 +1,5 @@
 <p align="center">
-  <img src=".assets/logo.svg" alt="codectx" width="120" />
+  <img src=".assets/logo.svg" alt="codectx" width="180" />
 </p>
 
 <h1 align="center">codectx</h1>
@@ -7,6 +7,8 @@
 <p align="center">
   A package manager for AI code documentation. Compile, share, and install structured context packages that give AI assistants deep understanding of your codebase conventions, architecture, and workflows.
 </p>
+
+<br />
 
 ## Prerequisites
 
