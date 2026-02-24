@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"securacore/codectx/core/config"
-	corelink "securacore/codectx/core/link"
-	"securacore/codectx/ui"
+	"github.com/securacore/codectx/core/config"
+	corelink "github.com/securacore/codectx/core/link"
+	"github.com/securacore/codectx/ui"
 
 	"github.com/charmbracelet/huh"
 	"github.com/urfave/cli/v3"
@@ -102,7 +102,7 @@ func run() error {
 		}
 
 		if !confirm {
-			ui.Cancelled()
+			ui.Canceled()
 			return nil
 		}
 	}

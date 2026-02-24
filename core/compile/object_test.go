@@ -277,7 +277,7 @@ func TestPrune_failsRemove(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, os.Chmod(objDir, 0o555))
-	t.Cleanup(func() { os.Chmod(objDir, 0o755) })
+	t.Cleanup(func() { _ = os.Chmod(objDir, 0o755) })
 
 	_, err = store.Prune(map[string]bool{})
 	require.Error(t, err)

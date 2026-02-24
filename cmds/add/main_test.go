@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"securacore/codectx/core/config"
-	"securacore/codectx/core/manifest"
+	"github.com/securacore/codectx/core/config"
+	"github.com/securacore/codectx/core/manifest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -494,7 +494,7 @@ func captureStdout(t *testing.T, fn func()) string {
 
 	fn()
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 
 	var buf bytes.Buffer

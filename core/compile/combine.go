@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"securacore/codectx/core/manifest"
+	"github.com/securacore/codectx/core/manifest"
 )
 
 // copyFile copies a single file from src to dst, creating parent directories.

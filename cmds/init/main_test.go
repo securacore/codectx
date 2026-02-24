@@ -15,7 +15,7 @@ func TestRun_withName_createsDirectoryAndProject(t *testing.T) {
 
 	origDir, err := os.Getwd()
 	require.NoError(t, err)
-	defer os.Chdir(origDir)
+	defer func() { _ = os.Chdir(origDir) }()
 	require.NoError(t, os.Chdir(dir))
 
 	err = run("test-project")
@@ -78,7 +78,7 @@ func TestRun_failsIfAlreadyInitialized(t *testing.T) {
 
 	origDir, err := os.Getwd()
 	require.NoError(t, err)
-	defer os.Chdir(origDir)
+	defer func() { _ = os.Chdir(origDir) }()
 	require.NoError(t, os.Chdir(dir))
 
 	// First init succeeds.
@@ -99,7 +99,7 @@ func TestEnsureGitignore_createsNewFile(t *testing.T) {
 
 	origDir, err := os.Getwd()
 	require.NoError(t, err)
-	defer os.Chdir(origDir)
+	defer func() { _ = os.Chdir(origDir) }()
 	require.NoError(t, os.Chdir(dir))
 
 	err = ensureGitignore()
@@ -115,7 +115,7 @@ func TestEnsureGitignore_appendsToExisting(t *testing.T) {
 
 	origDir, err := os.Getwd()
 	require.NoError(t, err)
-	defer os.Chdir(origDir)
+	defer func() { _ = os.Chdir(origDir) }()
 	require.NoError(t, os.Chdir(dir))
 
 	// Create existing .gitignore without .codectx/.
@@ -136,7 +136,7 @@ func TestEnsureGitignore_skipsIfAlreadyPresent(t *testing.T) {
 
 	origDir, err := os.Getwd()
 	require.NoError(t, err)
-	defer os.Chdir(origDir)
+	defer func() { _ = os.Chdir(origDir) }()
 	require.NoError(t, os.Chdir(dir))
 
 	// Create existing .gitignore that already has .codectx/.
@@ -177,7 +177,7 @@ func TestEnsureGit_initializesRepo(t *testing.T) {
 
 	origDir, err := os.Getwd()
 	require.NoError(t, err)
-	defer os.Chdir(origDir)
+	defer func() { _ = os.Chdir(origDir) }()
 	require.NoError(t, os.Chdir(dir))
 
 	err = ensureGit()
@@ -197,7 +197,7 @@ func TestEnsureGit_skipsIfGitExists(t *testing.T) {
 
 	origDir, err := os.Getwd()
 	require.NoError(t, err)
-	defer os.Chdir(origDir)
+	defer func() { _ = os.Chdir(origDir) }()
 	require.NoError(t, os.Chdir(dir))
 
 	// Pre-create .git directory.
@@ -217,7 +217,7 @@ func TestEnsureGitignore_noTrailingNewline(t *testing.T) {
 
 	origDir, err := os.Getwd()
 	require.NoError(t, err)
-	defer os.Chdir(origDir)
+	defer func() { _ = os.Chdir(origDir) }()
 	require.NoError(t, os.Chdir(dir))
 
 	// Write .gitignore without trailing newline.
@@ -238,7 +238,7 @@ func TestEnsureGitignore_substringNoFalsePositive(t *testing.T) {
 
 	origDir, err := os.Getwd()
 	require.NoError(t, err)
-	defer os.Chdir(origDir)
+	defer func() { _ = os.Chdir(origDir) }()
 	require.NoError(t, os.Chdir(dir))
 
 	// Write .gitignore with a substring that contains ".codectx/" but isn't an exact line match.
@@ -276,7 +276,7 @@ func TestRun_withName_configContent(t *testing.T) {
 
 	origDir, err := os.Getwd()
 	require.NoError(t, err)
-	defer os.Chdir(origDir)
+	defer func() { _ = os.Chdir(origDir) }()
 	require.NoError(t, os.Chdir(dir))
 
 	err = run("my-project")

@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"securacore/codectx/core/config"
-	"securacore/codectx/core/lock"
-	"securacore/codectx/core/manifest"
+	"github.com/securacore/codectx/core/config"
+	"github.com/securacore/codectx/core/lock"
+	"github.com/securacore/codectx/core/manifest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,7 +23,7 @@ func setupTestProject(t *testing.T) (string, *config.Config) {
 	// Compile writes codectx.lock to cwd; chdir to temp dir.
 	origDir, err := os.Getwd()
 	require.NoError(t, err)
-	t.Cleanup(func() { os.Chdir(origDir) })
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
 	require.NoError(t, os.Chdir(dir))
 
 	docsDir := filepath.Join(dir, "docs")

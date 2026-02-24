@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"securacore/codectx/core/manifest"
+	"github.com/securacore/codectx/core/manifest"
 )
 
 // generateReadme builds the compiled README.md content dynamically
@@ -12,7 +12,7 @@ import (
 func generateReadme(m *manifest.Manifest) string {
 	var b strings.Builder
 
-	b.WriteString(fmt.Sprintf("# %s\n\n", m.Name))
+	fmt.Fprintf(&b, "# %s\n\n", m.Name)
 	b.WriteString("> Documentation managed by codectx.\n\n")
 	b.WriteString("Load [package.yml](package.yml) and all foundation documents marked `load: always` at the start of every session.\n\n")
 
@@ -28,23 +28,23 @@ func generateReadme(m *manifest.Manifest) string {
 		b.WriteString("\n## Sections\n\n")
 
 		if len(m.Foundation) > 0 {
-			b.WriteString(fmt.Sprintf("- **Foundation**: %d %s. Core operational context.\n",
-				len(m.Foundation), pluralize(len(m.Foundation), "document", "documents")))
+			fmt.Fprintf(&b, "- **Foundation**: %d %s. Core operational context.\n",
+				len(m.Foundation), pluralize(len(m.Foundation), "document", "documents"))
 		}
 
 		if len(m.Topics) > 0 {
-			b.WriteString(fmt.Sprintf("- **Topics**: %d %s. Technology and domain conventions.\n",
-				len(m.Topics), pluralize(len(m.Topics), "entry", "entries")))
+			fmt.Fprintf(&b, "- **Topics**: %d %s. Technology and domain conventions.\n",
+				len(m.Topics), pluralize(len(m.Topics), "entry", "entries"))
 		}
 
 		if len(m.Prompts) > 0 {
-			b.WriteString(fmt.Sprintf("- **Prompts**: %d %s. Automated task definitions.\n",
-				len(m.Prompts), pluralize(len(m.Prompts), "entry", "entries")))
+			fmt.Fprintf(&b, "- **Prompts**: %d %s. Automated task definitions.\n",
+				len(m.Prompts), pluralize(len(m.Prompts), "entry", "entries"))
 		}
 
 		if len(m.Plans) > 0 {
-			b.WriteString(fmt.Sprintf("- **Plans**: %d %s. Implementation plans with state tracking. Read `state.yml` before loading full plans.\n",
-				len(m.Plans), pluralize(len(m.Plans), "entry", "entries")))
+			fmt.Fprintf(&b, "- **Plans**: %d %s. Implementation plans with state tracking. Read `state.yml` before loading full plans.\n",
+				len(m.Plans), pluralize(len(m.Plans), "entry", "entries"))
 		}
 	}
 

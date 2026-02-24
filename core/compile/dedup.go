@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"securacore/codectx/core/manifest"
+	"github.com/securacore/codectx/core/manifest"
 )
 
 // ConflictEntry records a single deduplication or conflict event.

@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"securacore/codectx/core/compile"
-	"securacore/codectx/core/config"
-	"securacore/codectx/ui"
+	"github.com/securacore/codectx/core/compile"
+	"github.com/securacore/codectx/core/config"
+	"github.com/securacore/codectx/ui"
 
 	"github.com/urfave/cli/v3"
 )

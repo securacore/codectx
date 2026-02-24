@@ -22,7 +22,7 @@ func captureStdout(t *testing.T, fn func()) string {
 
 	fn()
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 
 	var buf bytes.Buffer
@@ -94,11 +94,11 @@ func TestKV(t *testing.T) {
 	assert.Contains(t, out, "42")
 }
 
-// --- Cancelled ---
+// --- Canceled ---
 
-func TestCancelled(t *testing.T) {
-	out := captureStdout(t, func() { Cancelled() })
-	assert.Contains(t, out, "Cancelled.")
+func TestCanceled(t *testing.T) {
+	out := captureStdout(t, func() { Canceled() })
+	assert.Contains(t, out, "Canceled.")
 }
 
 // --- Table ---

@@ -1,4 +1,4 @@
-module securacore/codectx
+module github.com/securacore/codectx
 
 go 1.25.0
 

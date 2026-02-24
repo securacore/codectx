@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"securacore/codectx/core/resolve"
-	"securacore/codectx/ui"
+	"github.com/securacore/codectx/core/resolve"
+	"github.com/securacore/codectx/ui"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"

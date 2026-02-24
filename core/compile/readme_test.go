@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"securacore/codectx/core/manifest"
+	"github.com/securacore/codectx/core/manifest"
 
 	"github.com/stretchr/testify/assert"
 )

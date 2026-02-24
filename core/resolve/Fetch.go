@@ -27,13 +27,13 @@ func Fetch(resolved *ResolvedPackage, destDir string) error {
 	})
 	if err != nil {
 		// Clean up on failure.
-		os.RemoveAll(destDir)
+		_ = os.RemoveAll(destDir)
 		return fmt.Errorf("clone %s at tag %s: %w", resolved.Source, resolved.Tag, err)
 	}
 
 	// Verify package.yml exists in the cloned repo.
 	if _, err := os.Stat(fmt.Sprintf("%s/package.yml", destDir)); os.IsNotExist(err) {
-		os.RemoveAll(destDir)
+		_ = os.RemoveAll(destDir)
 		return fmt.Errorf("cloned package has no package.yml at root")
 	}
 

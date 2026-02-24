@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"securacore/codectx/core/config"
-	"securacore/codectx/core/lock"
-	"securacore/codectx/core/manifest"
+	"github.com/securacore/codectx/core/config"
+	"github.com/securacore/codectx/core/lock"
+	"github.com/securacore/codectx/core/manifest"
 )
 
 const lockFile = "codectx.lock"

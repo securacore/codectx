@@ -6,11 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"securacore/codectx/core/compile"
-	"securacore/codectx/core/config"
-	"securacore/codectx/core/manifest"
-	"securacore/codectx/core/resolve"
-	"securacore/codectx/ui"
+	"github.com/securacore/codectx/core/compile"
+	"github.com/securacore/codectx/core/config"
+	"github.com/securacore/codectx/core/manifest"
+	"github.com/securacore/codectx/core/resolve"
+	"github.com/securacore/codectx/ui"
 
 	"github.com/charmbracelet/huh"
 	"github.com/urfave/cli/v3"
@@ -152,7 +152,7 @@ func run(input, sourceFlag, activateFlag string) error {
 					return fmt.Errorf("confirmation prompt: %w", err)
 				}
 				if !confirm {
-					ui.Cancelled()
+					ui.Canceled()
 					return nil
 				}
 			}

@@ -178,7 +178,7 @@ func TestLink_failsBackupRename(t *testing.T) {
 
 	// Make the parent directory read-only so Rename (backup) fails.
 	require.NoError(t, os.Chmod(dir, 0o555))
-	t.Cleanup(func() { os.Chmod(dir, 0o755) })
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
 
 	tools := []Tool{
 		{Name: "Test", File: existingPath},

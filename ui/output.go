@@ -63,9 +63,9 @@ func KV(key string, value any, width int) {
 	fmt.Printf(format, dimStyle.Render(key), value)
 }
 
-// Cancelled prints a cancellation message.
-func Cancelled() {
-	fmt.Printf("  %s\n", dimStyle.Render("Cancelled."))
+// Canceled prints a cancellation message.
+func Canceled() {
+	fmt.Printf("  %s\n", dimStyle.Render("Canceled."))
 }
 
 // Table prints a column-aligned table with dim headers.

@@ -3,7 +3,7 @@ package search
 import (
 	"testing"
 
-	"securacore/codectx/core/resolve"
+	"github.com/securacore/codectx/core/resolve"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"

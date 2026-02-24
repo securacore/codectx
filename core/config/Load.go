@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"securacore/codectx/core/schema"
+	"github.com/securacore/codectx/core/schema"
 
 	"gopkg.in/yaml.v3"
 )

@@ -1,8 +1,8 @@
 package compile
 
 import (
-	"securacore/codectx/core/config"
-	"securacore/codectx/core/manifest"
+	"github.com/securacore/codectx/core/config"
+	"github.com/securacore/codectx/core/manifest"
 )
 
 // filterManifest returns a new manifest containing only the entries

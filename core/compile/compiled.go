@@ -1,7 +1,7 @@
 package compile
 
 import (
-	"securacore/codectx/core/manifest"
+	"github.com/securacore/codectx/core/manifest"
 )
 
 // CompiledManifest is the consumption-format manifest written to .codectx/manifest.yml.

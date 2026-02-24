@@ -7,10 +7,10 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"securacore/codectx/core/config"
-	"securacore/codectx/core/manifest"
-	"securacore/codectx/core/schema"
-	"securacore/codectx/ui"
+	"github.com/securacore/codectx/core/config"
+	"github.com/securacore/codectx/core/manifest"
+	"github.com/securacore/codectx/core/schema"
+	"github.com/securacore/codectx/ui"
 
 	"github.com/charmbracelet/huh"
 	"github.com/urfave/cli/v3"
@@ -178,11 +178,15 @@ func ensureGitignore() error {
 		if err != nil {
 			return fmt.Errorf("open .gitignore: %w", err)
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		if len(data) > 0 && data[len(data)-1] != '\n' {
-			f.WriteString("\n")
+			if _, err := f.WriteString("\n"); err != nil {
+				return fmt.Errorf("write newline to .gitignore: %w", err)
+			}
 		}
-		f.WriteString(entry + "\n")
+		if _, err := f.WriteString(entry + "\n"); err != nil {
+			return fmt.Errorf("append to .gitignore: %w", err)
+		}
 		return nil
 	}
 

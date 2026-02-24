@@ -1,6 +1,6 @@
 package lock
 
-import "securacore/codectx/core/config"
+import "github.com/securacore/codectx/core/config"
 
 // Lock represents the codectx.lock file.
 // It records the exact resolved state from a compile so the output

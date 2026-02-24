@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"securacore/codectx/core/config"
+	"github.com/securacore/codectx/core/config"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

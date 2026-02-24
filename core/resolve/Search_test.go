@@ -132,7 +132,7 @@ func TestParseSearchResponse_verifyURLField(t *testing.T) {
 func TestDoSearch_nonOKStatus(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
-		w.Write([]byte("rate limited"))
+		_, _ = w.Write([]byte("rate limited"))
 	}))
 	defer ts.Close()
 
@@ -145,7 +145,7 @@ func TestDoSearch_success(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "application/vnd.github.v3+json", r.Header.Get("Accept"))
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{
+		_, _ = w.Write([]byte(`{
 			"total_count": 1,
 			"items": [{
 				"full_name": "org/codectx-react",
@@ -168,7 +168,7 @@ func TestDoSearch_success(t *testing.T) {
 func TestDoSearch_invalidJSONOn200(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`not json at all`))
+		_, _ = w.Write([]byte(`not json at all`))
 	}))
 	defer ts.Close()
 
@@ -183,7 +183,7 @@ func TestSearch_URLConstruction(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedQuery = r.URL.RawQuery
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"total_count":0,"items":[]}`))
+		_, _ = w.Write([]byte(`{"total_count":0,"items":[]}`))
 	}))
 	defer ts.Close()
 
@@ -205,7 +205,7 @@ func TestSearch_URLConstructionWithAuthor(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedQuery = r.URL.RawQuery
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"total_count":0,"items":[]}`))
+		_, _ = w.Write([]byte(`{"total_count":0,"items":[]}`))
 	}))
 	defer ts.Close()
 
