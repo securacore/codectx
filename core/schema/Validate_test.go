@@ -353,3 +353,20 @@ func TestValidate_heuristics_emptySections(t *testing.T) {
 	err := Validate(HeuristicsSchemaFile, v)
 	assert.NoError(t, err)
 }
+
+func TestEmbeddedSchemas_readable(t *testing.T) {
+	schemaConstants := []string{
+		CodectxSchemaFile,
+		PackageSchemaFile,
+		StateSchemaFile,
+		CompiledSchemaFile,
+		HeuristicsSchemaFile,
+	}
+	for _, name := range schemaConstants {
+		t.Run(name, func(t *testing.T) {
+			data, err := schemas.ReadFile(name)
+			require.NoError(t, err, "embedded schema %s should be readable", name)
+			assert.True(t, len(data) > 0, "embedded schema %s should not be empty", name)
+		})
+	}
+}

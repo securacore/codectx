@@ -428,3 +428,82 @@ func TestRun_pollDisabled(t *testing.T) {
 		// Good: no heartbeat fired.
 	}
 }
+
+func TestRun_docsDirChange(t *testing.T) {
+	dir := setupWatchProject(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	w := New("codectx.yml",
+		WithDebounce(100*time.Millisecond),
+		WithPollInterval(0), // disable polling to avoid spurious compiles
+	)
+
+	go func() {
+		_ = w.Run(ctx)
+	}()
+
+	// Consume initial compile.
+	select {
+	case <-w.Results():
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for initial compile")
+	}
+
+	// Brief pause to ensure watcher is fully set up.
+	time.Sleep(100 * time.Millisecond)
+
+	// Create the alternative docs directory with its own package.yml.
+	newDocsDir := filepath.Join(dir, "documentation")
+	for _, sub := range []string{"foundation", "topics", "prompts", "plans"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(newDocsDir, sub), 0o755))
+	}
+	m := &manifest.Manifest{
+		Name:    "watch-test",
+		Version: "1.0.0",
+	}
+	require.NoError(t, manifest.Write(filepath.Join(newDocsDir, "package.yml"), m))
+
+	// Modify codectx.yml to point docs_dir to "documentation".
+	cfg := &config.Config{
+		Name:     "watch-test",
+		Packages: []config.PackageDep{},
+		Config:   &config.BuildConfig{DocsDir: "documentation"},
+	}
+	require.NoError(t, config.Write(filepath.Join(dir, "codectx.yml"), cfg))
+
+	// Wait for the config-change compile (triggered by writing codectx.yml).
+	select {
+	case result := <-w.Results():
+		assert.NoError(t, result.Error)
+		assert.NotNil(t, result.Compiled)
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for config-change compile")
+	}
+
+	// Brief pause to let the watcher rewire to the new docs dir.
+	time.Sleep(200 * time.Millisecond)
+
+	// Modify a file in the NEW documentation/ directory.
+	m2 := &manifest.Manifest{
+		Name:        "watch-test",
+		Version:     "2.0.0",
+		Description: "Updated in new docs dir",
+	}
+	require.NoError(t, manifest.Write(filepath.Join(newDocsDir, "package.yml"), m2))
+
+	// Verify a compile is triggered from the new docs directory.
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case result := <-w.Results():
+			if result.Error == nil && result.Compiled != nil && !result.Compiled.UpToDate {
+				return // success: got a real compile from the new docs dir
+			}
+			// May get UpToDate results; keep waiting.
+		case <-deadline:
+			t.Fatal("timed out waiting for compile from new docs directory")
+		}
+	}
+}

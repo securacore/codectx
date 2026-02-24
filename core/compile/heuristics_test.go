@@ -281,3 +281,20 @@ func TestGenerateHeuristics_topicWithFiles(t *testing.T) {
 	assert.Equal(t, "react@fb", h.Packages[0].Name)
 	assert.Equal(t, h.Sections.Topics.SizeBytes, h.Packages[0].SizeBytes)
 }
+
+func TestWriteHeuristics_invalidPath(t *testing.T) {
+	h := &Heuristics{}
+	err := WriteHeuristics("/nonexistent/dir/heuristics.yml", h)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "write heuristics")
+}
+
+func TestLoadHeuristics_invalidYAML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "heuristics.yml")
+	require.NoError(t, os.WriteFile(path, []byte("{{invalid"), 0o644))
+
+	_, err := LoadHeuristics(path)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "parse heuristics")
+}

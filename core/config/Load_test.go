@@ -160,3 +160,22 @@ func TestWriteAndLoad_roundTrip(t *testing.T) {
 	assert.Equal(t, "react", loaded.Packages[0].Name)
 	assert.True(t, loaded.Packages[0].Active.IsAll())
 }
+
+func TestLoad_withPackageSource(t *testing.T) {
+	dir := t.TempDir()
+	yaml := `name: test-project
+packages:
+  - name: custom
+    author: org
+    version: "^1.0.0"
+    source: https://github.com/custom-org/codectx-custom.git
+    active: all
+`
+	path := filepath.Join(dir, "codectx.yml")
+	require.NoError(t, os.WriteFile(path, []byte(yaml), 0o644))
+
+	cfg, err := Load(path)
+	require.NoError(t, err)
+	require.Len(t, cfg.Packages, 1)
+	assert.Equal(t, "https://github.com/custom-org/codectx-custom.git", cfg.Packages[0].Source)
+}

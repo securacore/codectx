@@ -248,3 +248,26 @@ func TestTools_entries(t *testing.T) {
 		assert.Equal(t, exp.SubDir, Tools[i].SubDir, "tool %d SubDir", i)
 	}
 }
+
+func TestLink_partialResultsOnFailure(t *testing.T) {
+	dir := t.TempDir()
+	outputDir := filepath.Join(dir, ".codectx")
+	require.NoError(t, os.MkdirAll(outputDir, 0o755))
+
+	// Place a regular file where the second tool's SubDir needs
+	// to be created. MkdirAll fails when a path component is a
+	// regular file, regardless of user permissions.
+	blocker := filepath.Join(dir, "blocker")
+	require.NoError(t, os.WriteFile(blocker, []byte("x"), 0o644))
+
+	tools := []Tool{
+		{Name: "GoodTool", File: filepath.Join(dir, "GOOD.md")},
+		{Name: "BadTool", File: "BAD.md", SubDir: filepath.Join(blocker, "sub")},
+	}
+
+	results, err := Link(tools, outputDir)
+	assert.Error(t, err)
+	// First tool should have succeeded and be in results.
+	require.Len(t, results, 1)
+	assert.Equal(t, "GoodTool", results[0].Tool.Name)
+}

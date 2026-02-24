@@ -381,3 +381,74 @@ func TestWriteAndLoad_roundTrip(t *testing.T) {
 	require.Len(t, loaded.Topics, 1)
 	assert.Equal(t, "topic", loaded.Topics[0].ID)
 }
+
+func TestLoad_topicDependsOnRequiredBy(t *testing.T) {
+	// Write YAML with topic that has depends_on and required_by
+	dir := t.TempDir()
+	yaml := `name: test
+author: tester
+version: "1.0.0"
+description: Test package
+topics:
+  - id: conventions
+    path: topics/conventions.md
+    description: Coding conventions
+    depends_on: [core-principles]
+    required_by: [react-patterns]
+`
+	path := filepath.Join(dir, "package.yml")
+	require.NoError(t, os.WriteFile(path, []byte(yaml), 0o644))
+
+	m, err := Load(path)
+	require.NoError(t, err)
+	require.Len(t, m.Topics, 1)
+	assert.Equal(t, []string{"core-principles"}, m.Topics[0].DependsOn)
+	assert.Equal(t, []string{"react-patterns"}, m.Topics[0].RequiredBy)
+}
+
+func TestLoad_promptDependsOnRequiredBy(t *testing.T) {
+	dir := t.TempDir()
+	yaml := `name: test
+author: tester
+version: "1.0.0"
+description: Test package
+prompts:
+  - id: commit
+    path: prompts/commit.md
+    description: Commit prompt
+    depends_on: [conventions]
+    required_by: [review]
+`
+	path := filepath.Join(dir, "package.yml")
+	require.NoError(t, os.WriteFile(path, []byte(yaml), 0o644))
+
+	m, err := Load(path)
+	require.NoError(t, err)
+	require.Len(t, m.Prompts, 1)
+	assert.Equal(t, []string{"conventions"}, m.Prompts[0].DependsOn)
+	assert.Equal(t, []string{"review"}, m.Prompts[0].RequiredBy)
+}
+
+func TestLoad_planDependsOnRequiredBy(t *testing.T) {
+	dir := t.TempDir()
+	yaml := `name: test
+author: tester
+version: "1.0.0"
+description: Test package
+plans:
+  - id: migration
+    path: plans/migration/README.md
+    state: plans/migration/state.yml
+    description: Database migration plan
+    depends_on: [schema-design]
+    required_by: [deployment]
+`
+	path := filepath.Join(dir, "package.yml")
+	require.NoError(t, os.WriteFile(path, []byte(yaml), 0o644))
+
+	m, err := Load(path)
+	require.NoError(t, err)
+	require.Len(t, m.Plans, 1)
+	assert.Equal(t, []string{"schema-design"}, m.Plans[0].DependsOn)
+	assert.Equal(t, []string{"deployment"}, m.Plans[0].RequiredBy)
+}

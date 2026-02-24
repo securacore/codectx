@@ -1,6 +1,8 @@
 package compile
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -210,4 +212,93 @@ func TestCompile_fingerprintPreservedDuringClean(t *testing.T) {
 	// The fingerprint should match (so second compile is up-to-date).
 	fp := loadFingerprint(cfg.OutputDir())
 	assert.NotEmpty(t, fp)
+}
+
+func TestHashFile_includesPathInHash(t *testing.T) {
+	dir := t.TempDir()
+	content := []byte("same content")
+	pathA := filepath.Join(dir, "a.md")
+	pathB := filepath.Join(dir, "b.md")
+	require.NoError(t, os.WriteFile(pathA, content, 0o644))
+	require.NoError(t, os.WriteFile(pathB, content, 0o644))
+
+	h1 := sha256.New()
+	require.NoError(t, hashFile(h1, pathA))
+	h2 := sha256.New()
+	require.NoError(t, hashFile(h2, pathB))
+
+	assert.NotEqual(t, fmt.Sprintf("%x", h1.Sum(nil)), fmt.Sprintf("%x", h2.Sum(nil)),
+		"same content at different paths should produce different hashes")
+}
+
+func TestHashFile_missingFile(t *testing.T) {
+	h := sha256.New()
+	err := hashFile(h, "/nonexistent/file.md")
+	assert.Error(t, err)
+}
+
+func TestHashManifestFiles_sortedDeterminism(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "b.md"), []byte("bravo"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.md"), []byte("alpha"), 0o644))
+
+	m1 := &manifest.Manifest{
+		Foundation: []manifest.FoundationEntry{
+			{ID: "f1", Path: "a.md"},
+			{ID: "f2", Path: "b.md"},
+		},
+	}
+	m2 := &manifest.Manifest{
+		Foundation: []manifest.FoundationEntry{
+			{ID: "f2", Path: "b.md"},
+			{ID: "f1", Path: "a.md"},
+		},
+	}
+
+	h1 := sha256.New()
+	require.NoError(t, hashManifestFiles(h1, m1, dir))
+	h2 := sha256.New()
+	require.NoError(t, hashManifestFiles(h2, m2, dir))
+
+	assert.Equal(t, fmt.Sprintf("%x", h1.Sum(nil)), fmt.Sprintf("%x", h2.Sum(nil)),
+		"different entry order should produce same hash due to sorting")
+}
+
+func TestHashManifestFiles_skipsMissingFiles(t *testing.T) {
+	dir := t.TempDir()
+	m := &manifest.Manifest{
+		Foundation: []manifest.FoundationEntry{
+			{ID: "f1", Path: "missing.md"},
+		},
+	}
+
+	h := sha256.New()
+	err := hashManifestFiles(h, m, dir)
+	assert.NoError(t, err, "missing files should be silently skipped")
+}
+
+func TestHashManifestFiles_includesSpecAndFiles(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "topic.md"), []byte("topic"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "spec.md"), []byte("spec"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "extra.md"), []byte("extra"), 0o644))
+
+	withSpec := &manifest.Manifest{
+		Topics: []manifest.TopicEntry{
+			{ID: "t1", Path: "topic.md", Spec: "spec.md", Files: []string{"extra.md"}},
+		},
+	}
+	withoutSpec := &manifest.Manifest{
+		Topics: []manifest.TopicEntry{
+			{ID: "t1", Path: "topic.md"},
+		},
+	}
+
+	h1 := sha256.New()
+	require.NoError(t, hashManifestFiles(h1, withSpec, dir))
+	h2 := sha256.New()
+	require.NoError(t, hashManifestFiles(h2, withoutSpec, dir))
+
+	assert.NotEqual(t, fmt.Sprintf("%x", h1.Sum(nil)), fmt.Sprintf("%x", h2.Sum(nil)),
+		"spec and files should contribute to the hash")
 }

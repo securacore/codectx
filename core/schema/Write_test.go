@@ -100,3 +100,26 @@ func TestWriteAll_idempotent(t *testing.T) {
 		assert.Equal(t, embedded, data, "schema file %s should match embedded after second write", name)
 	}
 }
+
+func TestSchemaFiles_expectedSubset(t *testing.T) {
+	expected := []string{
+		CodectxSchemaFile,
+		PackageSchemaFile,
+		StateSchemaFile,
+	}
+	assert.Equal(t, expected, schemaFiles)
+	assert.Len(t, schemaFiles, 3)
+}
+
+func TestWriteAll_writeFileError(t *testing.T) {
+	dir := t.TempDir()
+	// Create the schemas directory.
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	// Create a subdirectory where the first schema file should be,
+	// causing WriteFile to fail.
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, schemaFiles[0]), 0o755))
+
+	err := WriteAll(dir)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "write schema")
+}

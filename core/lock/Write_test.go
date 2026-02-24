@@ -157,3 +157,63 @@ func TestWrite_invalidPath(t *testing.T) {
 	err := Write("/nonexistent/path/codectx.lock", lck)
 	assert.Error(t, err)
 }
+
+func TestWrite_overwriteExisting(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "codectx.lock")
+
+	first := &Lock{
+		CompiledAt: "2025-01-01T00:00:00Z",
+		Packages: []LockedPackage{
+			{Name: "old", Author: "org", Version: "1.0.0"},
+		},
+	}
+	require.NoError(t, Write(path, first))
+
+	second := &Lock{
+		CompiledAt: "2025-06-01T00:00:00Z",
+		Packages: []LockedPackage{
+			{Name: "new", Author: "org", Version: "2.0.0"},
+		},
+	}
+	require.NoError(t, Write(path, second))
+
+	// Read back and verify second write replaced first.
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	var loaded Lock
+	require.NoError(t, yaml.Unmarshal(data, &loaded))
+	require.Len(t, loaded.Packages, 1)
+	assert.Equal(t, "new", loaded.Packages[0].Name)
+	assert.Equal(t, "2.0.0", loaded.Packages[0].Version)
+}
+
+func TestWrite_nilLock(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "codectx.lock")
+
+	err := Write(path, nil)
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.NotEmpty(t, data)
+}
+
+func TestWrite_sourceOmitempty(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "codectx.lock")
+
+	l := &Lock{
+		CompiledAt: "2025-01-01T00:00:00Z",
+		Packages: []LockedPackage{
+			{Name: "nosource", Author: "org", Version: "1.0.0"},
+		},
+	}
+	require.NoError(t, Write(path, l))
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.NotContains(t, string(data), "source:")
+}

@@ -122,3 +122,24 @@ func TestCmd_customOption(t *testing.T) {
 	require.NotNil(t, cmd)
 	assert.Equal(t, &buf, cmd.Stdout)
 }
+
+func TestCmd_emptyStringPanics(t *testing.T) {
+	assert.Panics(t, func() {
+		Cmd("")
+	})
+}
+
+func TestCmd_whitespaceOnlyPanics(t *testing.T) {
+	assert.Panics(t, func() {
+		Cmd("   ")
+	})
+}
+
+func TestCmd_multipleOptions(t *testing.T) {
+	var buf bytes.Buffer
+	cmd := Cmd("echo hello", Dir("/tmp"), Stdout, func(c *osexec.Cmd) {
+		c.Stdout = &buf
+	})
+	assert.Equal(t, "/tmp", cmd.Dir)
+	assert.Equal(t, &buf, cmd.Stdout)
+}

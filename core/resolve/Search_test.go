@@ -224,3 +224,20 @@ func TestDoSearch_networkError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "search request")
 }
+
+func TestSearch_emptyQuery(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify the query string contains the expected format.
+		q := r.URL.Query().Get("q")
+		assert.Contains(t, q, "codectx-")
+		assert.Contains(t, q, "in:name")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"total_count": 0, "items": []}`))
+	}))
+	defer ts.Close()
+
+	// Use doSearch directly with the test server URL.
+	results, err := doSearch(ts.URL + "?q=codectx-+in%3Aname&sort=stars&order=desc&per_page=25")
+	require.NoError(t, err)
+	assert.Empty(t, results)
+}
