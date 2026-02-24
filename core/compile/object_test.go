@@ -1,0 +1,232 @@
+package compile
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// --- ContentHash ---
+
+func TestContentHash_deterministic(t *testing.T) {
+	data := []byte("hello world")
+	h1 := ContentHash(data)
+	h2 := ContentHash(data)
+	assert.Equal(t, h1, h2)
+}
+
+func TestContentHash_length(t *testing.T) {
+	h := ContentHash([]byte("test content"))
+	assert.Len(t, h, 16)
+}
+
+func TestContentHash_differentContent(t *testing.T) {
+	h1 := ContentHash([]byte("version A"))
+	h2 := ContentHash([]byte("version B"))
+	assert.NotEqual(t, h1, h2)
+}
+
+func TestContentHash_empty(t *testing.T) {
+	h := ContentHash([]byte{})
+	assert.Len(t, h, 16)
+	assert.NotEmpty(t, h)
+}
+
+// --- ObjectPath ---
+
+func TestObjectPath(t *testing.T) {
+	assert.Equal(t, "objects/a1b2c3d4e5f67890.md", ObjectPath("a1b2c3d4e5f67890"))
+}
+
+// --- ObjectStore.Store ---
+
+func TestStore_writesFile(t *testing.T) {
+	dir := t.TempDir()
+	store := NewObjectStore(filepath.Join(dir, "objects"))
+
+	content := []byte("# Philosophy\nCore philosophy document.\n")
+	hash, err := store.Store(content)
+	require.NoError(t, err)
+	assert.Len(t, hash, 16)
+
+	// Verify file exists at expected path.
+	path := filepath.Join(dir, "objects", hash+".md")
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, content, data)
+}
+
+func TestStore_idempotent(t *testing.T) {
+	dir := t.TempDir()
+	store := NewObjectStore(filepath.Join(dir, "objects"))
+
+	content := []byte("same content")
+	h1, err := store.Store(content)
+	require.NoError(t, err)
+
+	h2, err := store.Store(content)
+	require.NoError(t, err)
+
+	assert.Equal(t, h1, h2)
+
+	// Only one file should exist.
+	entries, err := os.ReadDir(filepath.Join(dir, "objects"))
+	require.NoError(t, err)
+	assert.Len(t, entries, 1)
+}
+
+func TestStore_differentContent(t *testing.T) {
+	dir := t.TempDir()
+	store := NewObjectStore(filepath.Join(dir, "objects"))
+
+	h1, err := store.Store([]byte("content A"))
+	require.NoError(t, err)
+	h2, err := store.Store([]byte("content B"))
+	require.NoError(t, err)
+
+	assert.NotEqual(t, h1, h2)
+
+	entries, err := os.ReadDir(filepath.Join(dir, "objects"))
+	require.NoError(t, err)
+	assert.Len(t, entries, 2)
+}
+
+func TestStore_createsDirectory(t *testing.T) {
+	dir := t.TempDir()
+	objDir := filepath.Join(dir, "nested", "objects")
+	store := NewObjectStore(objDir)
+
+	_, err := store.Store([]byte("content"))
+	require.NoError(t, err)
+
+	info, err := os.Stat(objDir)
+	require.NoError(t, err)
+	assert.True(t, info.IsDir())
+}
+
+// --- ObjectStore.Read ---
+
+func TestRead_existingObject(t *testing.T) {
+	dir := t.TempDir()
+	store := NewObjectStore(filepath.Join(dir, "objects"))
+
+	content := []byte("readable content")
+	hash, err := store.Store(content)
+	require.NoError(t, err)
+
+	data, err := store.Read(hash)
+	require.NoError(t, err)
+	assert.Equal(t, content, data)
+}
+
+func TestRead_missingObject(t *testing.T) {
+	dir := t.TempDir()
+	store := NewObjectStore(filepath.Join(dir, "objects"))
+
+	_, err := store.Read("nonexistent1234")
+	assert.Error(t, err)
+}
+
+// --- ObjectStore.List ---
+
+func TestList_empty(t *testing.T) {
+	dir := t.TempDir()
+	store := NewObjectStore(filepath.Join(dir, "objects"))
+
+	hashes, err := store.List()
+	require.NoError(t, err)
+	assert.Empty(t, hashes)
+}
+
+func TestList_nonexistentDir(t *testing.T) {
+	store := NewObjectStore("/nonexistent/objects")
+	hashes, err := store.List()
+	require.NoError(t, err)
+	assert.Empty(t, hashes)
+}
+
+func TestList_withObjects(t *testing.T) {
+	dir := t.TempDir()
+	store := NewObjectStore(filepath.Join(dir, "objects"))
+
+	h1, err := store.Store([]byte("A"))
+	require.NoError(t, err)
+	h2, err := store.Store([]byte("B"))
+	require.NoError(t, err)
+
+	hashes, err := store.List()
+	require.NoError(t, err)
+	assert.Len(t, hashes, 2)
+	assert.True(t, hashes[h1])
+	assert.True(t, hashes[h2])
+}
+
+// --- ObjectStore.Prune ---
+
+func TestPrune_removesOrphans(t *testing.T) {
+	dir := t.TempDir()
+	store := NewObjectStore(filepath.Join(dir, "objects"))
+
+	h1, err := store.Store([]byte("keep this"))
+	require.NoError(t, err)
+	_, err = store.Store([]byte("remove this"))
+	require.NoError(t, err)
+
+	active := map[string]bool{h1: true}
+	removed, err := store.Prune(active)
+	require.NoError(t, err)
+	assert.Equal(t, 1, removed)
+
+	// Verify only the active object remains.
+	hashes, err := store.List()
+	require.NoError(t, err)
+	assert.Len(t, hashes, 1)
+	assert.True(t, hashes[h1])
+}
+
+func TestPrune_emptyActive(t *testing.T) {
+	dir := t.TempDir()
+	store := NewObjectStore(filepath.Join(dir, "objects"))
+
+	_, err := store.Store([]byte("A"))
+	require.NoError(t, err)
+	_, err = store.Store([]byte("B"))
+	require.NoError(t, err)
+
+	removed, err := store.Prune(map[string]bool{})
+	require.NoError(t, err)
+	assert.Equal(t, 2, removed)
+
+	hashes, err := store.List()
+	require.NoError(t, err)
+	assert.Empty(t, hashes)
+}
+
+func TestPrune_nonexistentDir(t *testing.T) {
+	store := NewObjectStore("/nonexistent/objects")
+	removed, err := store.Prune(map[string]bool{})
+	require.NoError(t, err)
+	assert.Equal(t, 0, removed)
+}
+
+func TestPrune_allActive(t *testing.T) {
+	dir := t.TempDir()
+	store := NewObjectStore(filepath.Join(dir, "objects"))
+
+	h1, err := store.Store([]byte("A"))
+	require.NoError(t, err)
+	h2, err := store.Store([]byte("B"))
+	require.NoError(t, err)
+
+	active := map[string]bool{h1: true, h2: true}
+	removed, err := store.Prune(active)
+	require.NoError(t, err)
+	assert.Equal(t, 0, removed)
+
+	hashes, err := store.List()
+	require.NoError(t, err)
+	assert.Len(t, hashes, 2)
+}
