@@ -55,6 +55,20 @@ func TestWriteAll_createsDirectory(t *testing.T) {
 	assert.True(t, info.IsDir())
 }
 
+func TestWriteAll_failsOnReadOnlyDir(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("cannot test permission denial as root")
+	}
+	// Use a path nested under a regular file, which makes MkdirAll fail.
+	dir := t.TempDir()
+	blocker := filepath.Join(dir, "blocked")
+	require.NoError(t, os.WriteFile(blocker, []byte("not a dir"), 0o644))
+
+	err := WriteAll(filepath.Join(blocker, "schemas"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "create schema directory")
+}
+
 func TestWriteAll_idempotent(t *testing.T) {
 	dir := t.TempDir()
 	schemaDir := filepath.Join(dir, "schemas")

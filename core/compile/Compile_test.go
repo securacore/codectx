@@ -418,3 +418,88 @@ func TestCompile_lockFileContent(t *testing.T) {
 	assert.Equal(t, "https://example.com/mypkg", pkg.Source)
 	assert.True(t, pkg.Active.IsAll())
 }
+
+func TestCompile_failsWhenInstalledManifestInvalid(t *testing.T) {
+	_, cfg := setupTestProject(t)
+	docsDir := cfg.DocsDir()
+
+	// Create an installed package directory with a corrupt manifest.
+	pkgDir := filepath.Join(docsDir, "packages", "broken@org")
+	require.NoError(t, os.MkdirAll(pkgDir, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(pkgDir, "package.yml"),
+		[]byte("{{{{not valid yaml"),
+		0o644,
+	))
+
+	cfg.Packages = []config.PackageDep{
+		{Name: "broken", Author: "org", Version: "^1.0.0", Active: config.Activation{Mode: "all"}},
+	}
+
+	_, err := Compile(cfg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "broken@org")
+}
+
+func TestCompile_granularActivation(t *testing.T) {
+	_, cfg := setupTestProject(t)
+	docsDir := cfg.DocsDir()
+
+	// Create an installed package with multiple entries across sections.
+	pkgDir := filepath.Join(docsDir, "packages", "multi@org")
+	for _, sub := range []string{"foundation", "topics/react", "topics/go"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(pkgDir, sub), 0o755))
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(pkgDir, "foundation", "philosophy.md"), []byte("# Philosophy\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(pkgDir, "topics", "react", "README.md"), []byte("# React\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(pkgDir, "topics", "go", "README.md"), []byte("# Go\n"), 0o644))
+
+	pkgManifest := &manifest.Manifest{
+		Name:    "multi",
+		Author:  "org",
+		Version: "1.0.0",
+		Foundation: []manifest.FoundationEntry{
+			{ID: "philosophy", Path: "foundation/philosophy.md", Description: "Philosophy"},
+		},
+		Topics: []manifest.TopicEntry{
+			{ID: "react", Path: "topics/react/README.md", Description: "React"},
+			{ID: "go", Path: "topics/go/README.md", Description: "Go"},
+		},
+	}
+	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "package.yml"), pkgManifest))
+
+	// Only activate foundation:philosophy and topics:react (not topics:go).
+	cfg.Packages = []config.PackageDep{
+		{
+			Name:    "multi",
+			Author:  "org",
+			Version: "^1.0.0",
+			Active: config.Activation{
+				Map: &config.ActivationMap{
+					Foundation: []string{"philosophy"},
+					Topics:     []string{"react"},
+				},
+			},
+		},
+	}
+
+	result, err := Compile(cfg)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, result.Packages)
+	// 2 files: foundation/philosophy.md + topics/react/README.md (go excluded).
+	assert.Equal(t, 2, result.FilesCopied)
+
+	// Verify the unified manifest only has the activated entries.
+	unified, err := manifest.Load(filepath.Join(result.OutputDir, "package.yml"))
+	require.NoError(t, err)
+
+	require.Len(t, unified.Foundation, 1)
+	assert.Equal(t, "philosophy", unified.Foundation[0].ID)
+	require.Len(t, unified.Topics, 1)
+	assert.Equal(t, "react", unified.Topics[0].ID)
+
+	// Verify the excluded topic file was not copied.
+	_, err = os.Stat(filepath.Join(result.OutputDir, "topics", "go", "README.md"))
+	assert.True(t, os.IsNotExist(err))
+}

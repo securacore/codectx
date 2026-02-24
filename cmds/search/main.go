@@ -3,8 +3,10 @@ package search
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"securacore/codectx/core/resolve"
+	"securacore/codectx/ui"
 
 	"github.com/urfave/cli/v3"
 )
@@ -21,39 +23,44 @@ var Command = &cli.Command{
 	},
 	Action: func(ctx context.Context, c *cli.Command) error {
 		if c.NArg() < 1 {
-			return fmt.Errorf("query argument required (e.g., codectx search react)")
+			return runInteractive(c.String("author"))
 		}
 		return run(c.Args().First(), c.String("author"))
 	},
 }
 
 func run(query, author string) error {
-	fmt.Printf("Searching for codectx packages matching %q...\n\n", query)
-
-	results, err := resolve.Search(query, author)
+	var results []resolve.SearchResult
+	err := ui.SpinErr(fmt.Sprintf("Searching for packages matching %q...", query), func() error {
+		var searchErr error
+		results, searchErr = resolve.Search(query, author)
+		return searchErr
+	})
 	if err != nil {
 		return fmt.Errorf("search: %w", err)
 	}
 
 	if len(results) == 0 {
-		fmt.Println("No packages found.")
+		ui.Done("No packages found.")
 		return nil
 	}
 
-	// Print results as a formatted table.
-	fmt.Printf("%-30s %-6s %s\n", "PACKAGE", "STARS", "DESCRIPTION")
-	fmt.Printf("%-30s %-6s %s\n", "-------", "-----", "-----------")
-
-	for _, r := range results {
+	// Build table data.
+	headers := []string{"PACKAGE", "STARS", "DESCRIPTION"}
+	rows := make([][]string, len(results))
+	for i, r := range results {
 		pkg := fmt.Sprintf("%s@%s", r.Name, r.Author)
 		desc := r.Description
 		if len(desc) > 60 {
 			desc = desc[:57] + "..."
 		}
-		fmt.Printf("%-30s %-6d %s\n", pkg, r.Stars, desc)
+		rows[i] = []string{pkg, strconv.Itoa(r.Stars), desc}
 	}
 
-	fmt.Printf("\n%d package(s) found. Install with: codectx add <package>\n", len(results))
+	ui.Blank()
+	ui.Table(headers, rows, 2)
+	ui.Blank()
+	ui.Done(fmt.Sprintf("%d package(s) found. Install with: codectx add <package>", len(results)))
 
 	return nil
 }

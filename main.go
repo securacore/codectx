@@ -2,14 +2,15 @@ package main
 
 import (
 	"context"
-	"log"
 	"os"
+
 	"securacore/codectx/cmds/add"
 	"securacore/codectx/cmds/compile"
 	initialize "securacore/codectx/cmds/init"
 	"securacore/codectx/cmds/link"
 	"securacore/codectx/cmds/search"
 	"securacore/codectx/cmds/version"
+	"securacore/codectx/ui"
 
 	"github.com/urfave/cli/v3"
 )
@@ -29,6 +30,7 @@ func main() {
 	}
 
 	if err := app.Run(context.Background(), os.Args); err != nil {
-		log.Fatal(err)
+		ui.Fail(err.Error())
+		os.Exit(1)
 	}
 }

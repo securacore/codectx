@@ -6,6 +6,7 @@ import (
 
 	"securacore/codectx/core/compile"
 	"securacore/codectx/core/config"
+	"securacore/codectx/ui"
 
 	"github.com/urfave/cli/v3"
 )
@@ -26,24 +27,31 @@ func run() error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	result, err := compile.Compile(cfg)
+	var result *compile.Result
+	err = ui.SpinErr("Compiling...", func() error {
+		var compileErr error
+		result, compileErr = compile.Compile(cfg)
+		return compileErr
+	})
 	if err != nil {
 		return fmt.Errorf("compile: %w", err)
 	}
 
-	fmt.Printf("Compiled to %s\n", result.OutputDir)
-	fmt.Printf("  Files copied: %d\n", result.FilesCopied)
-	fmt.Printf("  Packages:     %d\n", result.Packages)
+	ui.Done(fmt.Sprintf("Compiled to %s", result.OutputDir))
+	ui.Blank()
+	ui.KV("Files copied", result.FilesCopied, 16)
+	ui.KV("Packages", result.Packages, 16)
 
 	if result.Dedup.Total() > 0 {
 		if len(result.Dedup.Duplicates) > 0 {
-			fmt.Printf("  Deduplicated: %d\n", len(result.Dedup.Duplicates))
+			ui.KV("Deduplicated", len(result.Dedup.Duplicates), 16)
 		}
 		if result.Dedup.HasConflicts() {
-			fmt.Printf("\nWarnings (%d conflict(s)):\n", len(result.Dedup.Conflicts))
+			ui.Blank()
+			ui.Warn(fmt.Sprintf("%d conflict(s):", len(result.Dedup.Conflicts)))
 			for _, c := range result.Dedup.Conflicts {
-				fmt.Printf("  [%s] %s: kept from %s, skipped from %s\n",
-					c.Section, c.ID, c.WinnerPkg, c.SkippedPkg)
+				ui.Item(fmt.Sprintf("[%s] %s: kept from %s, skipped from %s",
+					c.Section, c.ID, c.WinnerPkg, c.SkippedPkg))
 			}
 		}
 	}

@@ -10,6 +10,7 @@ import (
 	"securacore/codectx/core/config"
 	"securacore/codectx/core/manifest"
 	"securacore/codectx/core/schema"
+	"securacore/codectx/ui"
 
 	"github.com/charmbracelet/huh"
 	"github.com/urfave/cli/v3"
@@ -61,7 +62,7 @@ func run(name string) error {
 					Placeholder(defaultName).
 					Value(&prompted),
 			),
-		)
+		).WithTheme(ui.Theme())
 
 		if err := form.Run(); err != nil {
 			return fmt.Errorf("prompt: %w", err)
@@ -128,14 +129,14 @@ func run(name string) error {
 		return fmt.Errorf("write package manifest: %w", err)
 	}
 
-	fmt.Printf("Initialized codectx project: %s\n", name)
-	fmt.Println()
-	fmt.Println("Created:")
-	fmt.Printf("  %s\n", configFile)
-	fmt.Printf("  %s\n", packagePath)
-	fmt.Printf("  %s\n", ".gitignore")
+	ui.Done(fmt.Sprintf("Initialized codectx project: %s", name))
+	ui.Blank()
+	ui.Header("Created:")
+	ui.Item(configFile)
+	ui.Item(packagePath)
+	ui.Item(".gitignore")
 	for _, dir := range dirs {
-		fmt.Printf("  %s/\n", dir)
+		ui.Item(dir + "/")
 	}
 
 	return nil
@@ -150,8 +151,8 @@ func ensureGit() error {
 	}
 
 	cmd := exec.Command("git", "init")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = nil
+	cmd.Stderr = nil
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("git init: %w", err)
 	}

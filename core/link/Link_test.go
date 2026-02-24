@@ -147,6 +147,48 @@ func TestLink_contentFormat(t *testing.T) {
 	assert.Equal(t, expected, string(content))
 }
 
+func TestLink_failsSubDirCreation(t *testing.T) {
+	dir := t.TempDir()
+	outputDir := filepath.Join(dir, ".codectx")
+
+	// Place a regular file where MkdirAll needs to create a directory.
+	blocker := filepath.Join(dir, "blocked")
+	require.NoError(t, os.WriteFile(blocker, []byte("not a dir"), 0o644))
+
+	tools := []Tool{
+		{Name: "Test", File: "instructions.md", SubDir: filepath.Join(blocker, "subdir")},
+	}
+
+	_, err := Link(tools, outputDir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "create directory")
+}
+
+func TestLink_failsBackupRename(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("cannot test permission denial as root")
+	}
+	dir := t.TempDir()
+	outputDir := filepath.Join(dir, ".codectx")
+	require.NoError(t, os.MkdirAll(outputDir, 0o755))
+
+	// Create an existing file that should be backed up.
+	existingPath := filepath.Join(dir, "TEST.md")
+	require.NoError(t, os.WriteFile(existingPath, []byte("original"), 0o644))
+
+	// Make the parent directory read-only so Rename (backup) fails.
+	require.NoError(t, os.Chmod(dir, 0o555))
+	t.Cleanup(func() { os.Chmod(dir, 0o755) })
+
+	tools := []Tool{
+		{Name: "Test", File: existingPath},
+	}
+
+	_, err := Link(tools, outputDir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "backup")
+}
+
 func TestTools_count(t *testing.T) {
 	assert.Len(t, Tools, 5)
 

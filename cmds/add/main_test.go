@@ -507,6 +507,7 @@ func TestPrintActivation_all(t *testing.T) {
 	out := captureStdout(t, func() {
 		printActivation(config.Activation{Mode: "all"})
 	})
+	assert.Contains(t, out, "Activation")
 	assert.Contains(t, out, "all entries")
 }
 
@@ -514,6 +515,7 @@ func TestPrintActivation_none(t *testing.T) {
 	out := captureStdout(t, func() {
 		printActivation(config.Activation{Mode: "none"})
 	})
+	assert.Contains(t, out, "Activation")
 	assert.Contains(t, out, "none")
 	assert.Contains(t, out, "not active")
 }
@@ -529,10 +531,14 @@ func TestPrintActivation_granular(t *testing.T) {
 			},
 		})
 	})
-	assert.Contains(t, out, "foundation: philosophy")
-	assert.Contains(t, out, "topics:     react, go")
-	assert.Contains(t, out, "prompts:    review")
-	assert.Contains(t, out, "plans:      migration")
+	assert.Contains(t, out, "foundation")
+	assert.Contains(t, out, "philosophy")
+	assert.Contains(t, out, "topics")
+	assert.Contains(t, out, "react, go")
+	assert.Contains(t, out, "prompts")
+	assert.Contains(t, out, "review")
+	assert.Contains(t, out, "plans")
+	assert.Contains(t, out, "migration")
 }
 
 func TestPrintActivation_granularPartial(t *testing.T) {
@@ -543,8 +549,69 @@ func TestPrintActivation_granularPartial(t *testing.T) {
 			},
 		})
 	})
-	assert.Contains(t, out, "topics:     react")
+	assert.Contains(t, out, "topics")
+	assert.Contains(t, out, "react")
 	assert.NotContains(t, out, "foundation")
+	assert.NotContains(t, out, "prompts")
+	assert.NotContains(t, out, "plans")
+}
+
+// --- toSetLocal ---
+
+func TestDetectCollisions_corruptInstalledPackageManifest(t *testing.T) {
+	dir := t.TempDir()
+	docsDir := filepath.Join(dir, "docs")
+	require.NoError(t, os.MkdirAll(docsDir, 0o755))
+
+	// Create an installed package directory with a corrupt manifest.
+	pkgDir := filepath.Join(docsDir, "packages", "broken@org")
+	require.NoError(t, os.MkdirAll(pkgDir, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(pkgDir, "package.yml"),
+		[]byte("{{{{not valid yaml"),
+		0o644,
+	))
+
+	cfg := &config.Config{
+		Name: "test-project",
+		Config: &config.BuildConfig{
+			DocsDir: docsDir,
+		},
+		Packages: []config.PackageDep{
+			{
+				Name:   "broken",
+				Author: "org",
+				Active: config.Activation{Mode: "all"},
+			},
+		},
+	}
+
+	newManifest := &manifest.Manifest{
+		Topics: []manifest.TopicEntry{
+			{ID: "react", Path: "topics/react/README.md"},
+		},
+	}
+
+	// Corrupt installed manifest should be silently skipped (no collision, no error).
+	collisions := detectCollisions(cfg, newManifest, config.Activation{Mode: "all"})
+	assert.Empty(t, collisions)
+}
+
+func TestPrintActivation_granularEmpty(t *testing.T) {
+	out := captureStdout(t, func() {
+		printActivation(config.Activation{
+			Map: &config.ActivationMap{
+				Foundation: []string{},
+				Topics:     []string{},
+				Prompts:    []string{},
+				Plans:      []string{},
+			},
+		})
+	})
+	// With all empty slices, the header prints but no section KVs appear.
+	assert.Contains(t, out, "Activation")
+	assert.NotContains(t, out, "foundation")
+	assert.NotContains(t, out, "topics")
 	assert.NotContains(t, out, "prompts")
 	assert.NotContains(t, out, "plans")
 }

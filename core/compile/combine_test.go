@@ -110,6 +110,21 @@ func TestCopyFile_createsParentDirs(t *testing.T) {
 	assert.Equal(t, []byte("deep"), data)
 }
 
+func TestCopyFile_failsMkdirAll(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.md")
+	require.NoError(t, os.WriteFile(src, []byte("content"), 0o644))
+
+	// Place a regular file where MkdirAll needs to create a directory.
+	blocker := filepath.Join(dir, "out")
+	require.NoError(t, os.WriteFile(blocker, []byte("not a dir"), 0o644))
+
+	dst := filepath.Join(blocker, "sub", "dst.md")
+	err := copyFile(src, dst)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "create directory")
+}
+
 // --- copyManifestFiles ---
 
 func TestCopyManifestFiles_copiesAll(t *testing.T) {

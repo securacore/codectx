@@ -252,6 +252,39 @@ func TestPrune_skipsSubdirectories(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestStore_failsMkdirAll(t *testing.T) {
+	// Create a file where the objects directory needs to be — MkdirAll will fail.
+	dir := t.TempDir()
+	blocker := filepath.Join(dir, "objects")
+	require.NoError(t, os.WriteFile(blocker, []byte("not a dir"), 0o644))
+
+	store := NewObjectStore(blocker)
+	_, err := store.Store([]byte("should fail"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "create objects directory")
+}
+
+func TestPrune_failsRemove(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("cannot test permission denial as root")
+	}
+	dir := t.TempDir()
+	objDir := filepath.Join(dir, "objects")
+	store := NewObjectStore(objDir)
+
+	// Store an object, then make the directory read-only so Remove fails.
+	hash, err := store.Store([]byte("orphan"))
+	require.NoError(t, err)
+
+	require.NoError(t, os.Chmod(objDir, 0o555))
+	t.Cleanup(func() { os.Chmod(objDir, 0o755) })
+
+	_, err = store.Prune(map[string]bool{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "remove orphan")
+	_ = hash
+}
+
 func TestPrune_allActive(t *testing.T) {
 	dir := t.TempDir()
 	store := NewObjectStore(filepath.Join(dir, "objects"))

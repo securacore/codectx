@@ -3,6 +3,7 @@
 
 # App
 state.yml
+codectx
 .repocli/
 .repo-cli/
 .repo/

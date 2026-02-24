@@ -10,6 +10,7 @@ import (
 	"securacore/codectx/core/config"
 	"securacore/codectx/core/manifest"
 	"securacore/codectx/core/resolve"
+	"securacore/codectx/ui"
 
 	"github.com/charmbracelet/huh"
 	"github.com/urfave/cli/v3"
@@ -84,19 +85,22 @@ func run(input, sourceFlag, activateFlag string) error {
 	}
 
 	// Resolve version from Git tags.
-	fmt.Printf("Resolving %s from %s...\n", input, source)
-	resolved, err := resolve.Resolve(ref, source)
+	var resolved *resolve.ResolvedPackage
+	ui.Spin(fmt.Sprintf("Resolving %s...", input), func() {
+		resolved, err = resolve.Resolve(ref, source)
+	})
 	if err != nil {
 		return fmt.Errorf("resolve: %w", err)
 	}
-	fmt.Printf("Resolved version: %s (tag: %s)\n", resolved.Version, resolved.Tag)
 
 	// Fetch (clone) into docs/packages/name@author/.
 	docsDir := cfg.DocsDir()
 	pkgDir := filepath.Join(docsDir, "packages", fmt.Sprintf("%s@%s", resolved.Name, resolved.Author))
 
-	fmt.Printf("Fetching to %s...\n", pkgDir)
-	if err := resolve.Fetch(resolved, pkgDir); err != nil {
+	err = ui.SpinErr(fmt.Sprintf("Fetching %s@%s v%s...", resolved.Name, resolved.Author, resolved.Version), func() error {
+		return resolve.Fetch(resolved, pkgDir)
+	})
+	if err != nil {
 		return fmt.Errorf("fetch: %w", err)
 	}
 
@@ -125,11 +129,11 @@ func run(input, sourceFlag, activateFlag string) error {
 	if !activation.IsNone() {
 		collisions := detectCollisions(cfg, pkgManifest, activation)
 		if len(collisions) > 0 {
-			fmt.Printf("\nWarning: %d entry collision(s) detected:\n", len(collisions))
+			ui.Blank()
+			ui.Warn(fmt.Sprintf("%d entry collision(s) detected:", len(collisions)))
 			for _, c := range collisions {
-				fmt.Printf("  [%s] %s already active from %s\n", c.section, c.id, c.pkg)
+				ui.Item(fmt.Sprintf("[%s] %s already active from %s", c.section, c.id, c.pkg))
 			}
-			fmt.Println("\nDuring compilation, existing entries take precedence (deduplication).")
 
 			if activateFlag == "" {
 				// Interactive mode: ask for confirmation.
@@ -143,12 +147,12 @@ func run(input, sourceFlag, activateFlag string) error {
 							Negative("Cancel").
 							Value(&confirm),
 					),
-				)
+				).WithTheme(ui.Theme())
 				if err := confirmForm.Run(); err != nil {
 					return fmt.Errorf("confirmation prompt: %w", err)
 				}
 				if !confirm {
-					fmt.Println("Cancelled.")
+					ui.Cancelled()
 					return nil
 				}
 			}
@@ -174,7 +178,8 @@ func run(input, sourceFlag, activateFlag string) error {
 		return fmt.Errorf("write config: %w", err)
 	}
 
-	fmt.Printf("\nAdded %s@%s v%s\n", resolved.Name, resolved.Author, resolved.Version)
+	ui.Blank()
+	ui.Done(fmt.Sprintf("Added %s@%s v%s", resolved.Name, resolved.Author, resolved.Version))
 	printActivation(activation)
 
 	return nil
@@ -246,7 +251,7 @@ func promptActivation(m *manifest.Manifest) (config.Activation, error) {
 	}
 
 	if len(entries) == 0 {
-		fmt.Println("Package has no entries to activate.")
+		ui.Done("Package has no entries to activate.")
 		return config.Activation{Mode: "none"}, nil
 	}
 
@@ -266,7 +271,7 @@ func promptActivation(m *manifest.Manifest) (config.Activation, error) {
 				Height(min(len(entries)+4, 20)).
 				Value(&selected),
 		),
-	)
+	).WithTheme(ui.Theme())
 
 	if err := form.Run(); err != nil {
 		return config.Activation{}, err
@@ -426,24 +431,24 @@ func splitKey(key string) (string, string) {
 // printActivation prints a human-readable summary of the activation state.
 func printActivation(a config.Activation) {
 	if a.IsAll() {
-		fmt.Println("Activation: all entries")
+		ui.KV("Activation", "all entries", 14)
 		return
 	}
 	if a.IsNone() {
-		fmt.Println("Activation: none (installed but not active)")
+		ui.KV("Activation", "none (installed but not active)", 14)
 		return
 	}
-	fmt.Println("Activation:")
+	ui.Header("Activation:")
 	if len(a.Map.Foundation) > 0 {
-		fmt.Printf("  foundation: %s\n", strings.Join(a.Map.Foundation, ", "))
+		ui.KV("foundation", strings.Join(a.Map.Foundation, ", "), 14)
 	}
 	if len(a.Map.Topics) > 0 {
-		fmt.Printf("  topics:     %s\n", strings.Join(a.Map.Topics, ", "))
+		ui.KV("topics", strings.Join(a.Map.Topics, ", "), 14)
 	}
 	if len(a.Map.Prompts) > 0 {
-		fmt.Printf("  prompts:    %s\n", strings.Join(a.Map.Prompts, ", "))
+		ui.KV("prompts", strings.Join(a.Map.Prompts, ", "), 14)
 	}
 	if len(a.Map.Plans) > 0 {
-		fmt.Printf("  plans:      %s\n", strings.Join(a.Map.Plans, ", "))
+		ui.KV("plans", strings.Join(a.Map.Plans, ", "), 14)
 	}
 }

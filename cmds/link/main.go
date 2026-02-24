@@ -9,6 +9,7 @@ import (
 
 	"securacore/codectx/core/config"
 	corelink "securacore/codectx/core/link"
+	"securacore/codectx/ui"
 
 	"github.com/charmbracelet/huh"
 	"github.com/urfave/cli/v3"
@@ -54,14 +55,14 @@ func run() error {
 				Options(options...).
 				Value(&selectedIdxs),
 		),
-	)
+	).WithTheme(ui.Theme())
 
 	if err := form.Run(); err != nil {
 		return err
 	}
 
 	if len(selectedIdxs) == 0 {
-		fmt.Println("No tools selected.")
+		ui.Done("No tools selected.")
 		return nil
 	}
 
@@ -94,14 +95,14 @@ func run() error {
 					Negative("Cancel").
 					Value(&confirm),
 			),
-		)
+		).WithTheme(ui.Theme())
 
 		if err := confirmForm.Run(); err != nil {
 			return err
 		}
 
 		if !confirm {
-			fmt.Println("Cancelled.")
+			ui.Cancelled()
 			return nil
 		}
 	}
@@ -112,12 +113,12 @@ func run() error {
 		return fmt.Errorf("link: %w", err)
 	}
 
-	fmt.Println("\nLinked:")
+	ui.Done("Linked")
 	for _, r := range results {
 		if r.BackedUp != "" {
-			fmt.Printf("  %s (backed up to %s)\n", r.Path, r.BackedUp)
+			ui.ItemDetail(r.Path, "backed up to "+r.BackedUp)
 		} else {
-			fmt.Printf("  %s\n", r.Path)
+			ui.Item(r.Path)
 		}
 	}
 
