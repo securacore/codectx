@@ -12,6 +12,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+func TestCommand_metadata(t *testing.T) {
+	assert.Equal(t, "init", Command.Name)
+	assert.NotEmpty(t, Command.Usage)
+	assert.Equal(t, "[name]", Command.ArgsUsage)
+}
+
 func TestRun_withName_createsDirectoryAndProject(t *testing.T) {
 	dir := t.TempDir()
 

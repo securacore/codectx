@@ -14,6 +14,25 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// --- Command metadata ---
+
+func TestCommand_metadata(t *testing.T) {
+	assert.Equal(t, "add", Command.Name)
+	assert.NotEmpty(t, Command.Usage)
+	assert.Equal(t, "<package>", Command.ArgsUsage)
+}
+
+func TestCommand_flags(t *testing.T) {
+	require.Len(t, Command.Flags, 2)
+
+	flagNames := make(map[string]bool)
+	for _, f := range Command.Flags {
+		flagNames[f.Names()[0]] = true
+	}
+	assert.True(t, flagNames["source"])
+	assert.True(t, flagNames["activate"])
+}
+
 // --- parseActivateFlag ---
 
 func TestParseActivateFlag_all(t *testing.T) {
