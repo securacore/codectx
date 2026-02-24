@@ -6,8 +6,8 @@ A package manager for AI code documentation. Compile, share, and install structu
 
 Everything needed to work within this repo is handled by these dependencies.
 
-- [devbox]()
-- [just]()
+- [devbox](https://www.jetify.com/devbox)
+- [just](https://github.com/casey/just)
 
 ## Getting Started
 
@@ -25,7 +25,7 @@ just install
 
 > Run the CLI.
 
-> [!INFO]
+> [!NOTE]
 > All arguments passed to this are run within the context of the container.
 
 ```bash
