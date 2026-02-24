@@ -3,7 +3,7 @@
 > [!NOTE]
 > Documentation is written for AI agents first and engineers second. For the full explanation of audience and approach, see [documentation.md](foundation/documentation.md). Engineers: the topic directories (`docs/topics/`) contain the conventions for writing code in this project. The foundation documents govern documentation authoring and AI session management. Start with the topics relevant to your work.
 
-All project documentation lives here. This is a manually configured Next.js 16 application using React 19, Tailwind 4, Biome, and Bun. All repository operations run through Just; do not invoke package managers, build tools, or other CLI tools directly. Read the foundational documents before making any decisions. They define how this project operates.
+All project documentation lives here. codectx is a Go CLI application. All repository operations run through Just; do not invoke package managers, build tools, or other CLI tools directly. Read the foundational documents before making any decisions. They define how this project operates.
 
 At the start of every session, load [metadata.yml](metadata.yml) and all foundation documents marked `load: always` in the manifest. The metadata manifest maps all documentation entries, their relationships (`depends_on`/`required_by`), and file paths. It is the contextual map for navigating this documentation system. If the task involves writing, editing, reviewing, or restructuring any file under `docs/`, also load all foundation documents marked `load: documentation`. Before making any changes to `metadata.yml`, load [metadata.schema.json](metadata.schema.json) into context. Do not edit the manifest without the schema loaded.
 
@@ -21,9 +21,14 @@ At the start of every session, load [metadata.yml](metadata.yml) and all foundat
 
 ## Product
 
-| Document                                            | Purpose                           |
-| --------------------------------------------------- | --------------------------------- |
-| [architecture](product/README.md)                   | Product architecture and design   |
+| Document                                            | Purpose                                             |
+| --------------------------------------------------- | --------------------------------------------------- |
+| [Architecture](product/README.md)                   | System architecture overview and core concepts       |
+| [Package Format](product/packages.md)               | Package structure, manifest, naming, and resolution  |
+| [Compilation](product/compilation.md)               | Compile process, content addressing, decomposition   |
+| [Configuration](product/configuration.md)           | Settings, activation, conflicts, and directory layout|
+| [AI Integration](product/ai-integration.md)         | Entry point linking, loading protocol, watch mode    |
+| [Design Decisions](product/spec/README.md)          | Reasoning behind every architectural choice          |
 
 ## Schemas
 
