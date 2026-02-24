@@ -12,6 +12,7 @@ import (
 	"github.com/securacore/codectx/cmds/link"
 	"github.com/securacore/codectx/cmds/search"
 	"github.com/securacore/codectx/cmds/version"
+	"github.com/securacore/codectx/cmds/watch"
 	"github.com/securacore/codectx/core/update"
 	"github.com/securacore/codectx/ui"
 
@@ -29,6 +30,7 @@ func main() {
 			link.Command,
 			search.Command,
 			version.Command,
+			watch.Command,
 		},
 	}
 

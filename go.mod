@@ -9,6 +9,7 @@ require (
 	github.com/charmbracelet/huh v0.8.0
 	github.com/charmbracelet/huh/spinner v0.0.0-20260223110133-9dc45e34a40b
 	github.com/charmbracelet/lipgloss v1.1.0
+	github.com/fsnotify/fsnotify v1.9.0
 	github.com/go-git/go-git/v5 v5.16.5
 	github.com/mattn/go-isatty v0.0.20
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
