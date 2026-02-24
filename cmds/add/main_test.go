@@ -2,14 +2,18 @@ package add
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/manifest"
 
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -654,4 +658,205 @@ func TestToSetLocal_empty(t *testing.T) {
 func TestToSetLocal_nil(t *testing.T) {
 	s := toSetLocal(nil)
 	assert.Len(t, s, 0)
+}
+
+// --- run() integration tests ---
+
+// setupAddProject creates a minimal project structure and changes cwd.
+// Returns the project root path. Cleanup restores the original cwd.
+func setupAddProject(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+	require.NoError(t, os.Chdir(dir))
+
+	docsDir := filepath.Join(dir, "docs")
+	for _, sub := range []string{"foundation", "topics", "prompts", "plans", "packages"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(docsDir, sub), 0o755))
+	}
+
+	// Write codectx.yml.
+	cfg := &config.Config{
+		Name:     "test-project",
+		Packages: []config.PackageDep{},
+	}
+	require.NoError(t, config.Write(filepath.Join(dir, configFile), cfg))
+
+	// Write local package.yml.
+	m := &manifest.Manifest{
+		Name:        "test-project",
+		Author:      "tester",
+		Version:     "1.0.0",
+		Description: "Test project",
+	}
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), m))
+
+	// Set auto_compile=false to avoid interactive prompt.
+	outputDir := filepath.Join(dir, ".codectx")
+	require.NoError(t, os.MkdirAll(outputDir, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(outputDir, "preferences.yml"),
+		[]byte("auto_compile: false\n"),
+		0o644,
+	))
+
+	return dir
+}
+
+// setupBareRepo creates a bare git repo with a tag and package.yml.
+// Returns the path to the bare repo.
+func setupBareRepo(t *testing.T, name, author, ver string, tags []string) string {
+	t.Helper()
+	dir := t.TempDir()
+	workDir := filepath.Join(dir, "work")
+	bareDir := filepath.Join(dir, "bare.git")
+
+	repo, err := git.PlainInit(workDir, false)
+	require.NoError(t, err)
+
+	wt, err := repo.Worktree()
+	require.NoError(t, err)
+
+	// Create package.yml.
+	content := fmt.Sprintf(
+		"name: %s\nauthor: %s\nversion: %q\ndescription: Test package\n",
+		name, author, ver,
+	)
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "package.yml"), []byte(content), 0o644))
+	_, err = wt.Add("package.yml")
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "README.md"), []byte("# Test\n"), 0o644))
+	_, err = wt.Add("README.md")
+	require.NoError(t, err)
+
+	sig := &object.Signature{Name: "Test", Email: "test@test.com", When: time.Now()}
+	hash, err := wt.Commit("initial commit", &git.CommitOptions{Author: sig})
+	require.NoError(t, err)
+
+	for _, tag := range tags {
+		_, err = repo.CreateTag(tag, hash, nil)
+		require.NoError(t, err)
+	}
+
+	_, err = git.PlainClone(bareDir, true, &git.CloneOptions{URL: workDir, Tags: git.AllTags})
+	require.NoError(t, err)
+
+	return bareDir
+}
+
+func TestRun_addPackageSuccess(t *testing.T) {
+	setupAddProject(t)
+	bareDir := setupBareRepo(t, "test-pkg", "test-author", "1.0.0", []string{"v1.0.0"})
+
+	err := run("test-pkg@test-author", bareDir, "all")
+	require.NoError(t, err)
+
+	// Verify config was updated with the package.
+	cfg, err := config.Load(configFile)
+	require.NoError(t, err)
+	require.Len(t, cfg.Packages, 1)
+	assert.Equal(t, "test-pkg", cfg.Packages[0].Name)
+	assert.Equal(t, "test-author", cfg.Packages[0].Author)
+	assert.Equal(t, "^1.0.0", cfg.Packages[0].Version)
+	assert.Equal(t, bareDir, cfg.Packages[0].Source)
+
+	// Verify package was fetched to the expected directory.
+	_, err = os.Stat(filepath.Join("docs", "packages", "test-pkg@test-author", "package.yml"))
+	assert.NoError(t, err)
+}
+
+func TestRun_addPackageActivateNone(t *testing.T) {
+	setupAddProject(t)
+	bareDir := setupBareRepo(t, "test-pkg", "test-author", "1.0.0", []string{"v1.0.0"})
+
+	err := run("test-pkg@test-author", bareDir, "none")
+	require.NoError(t, err)
+
+	cfg, err := config.Load(configFile)
+	require.NoError(t, err)
+	require.Len(t, cfg.Packages, 1)
+	assert.True(t, cfg.Packages[0].Active.IsNone())
+}
+
+func TestRun_addPackageVersionPinning(t *testing.T) {
+	setupAddProject(t)
+	bareDir := setupBareRepo(t, "test-pkg", "test-author", "1.0.0", []string{"v1.0.0", "v1.1.0"})
+
+	// No explicit version in input — should resolve to latest and pin with caret.
+	err := run("test-pkg@test-author", bareDir, "all")
+	require.NoError(t, err)
+
+	cfg, err := config.Load(configFile)
+	require.NoError(t, err)
+	require.Len(t, cfg.Packages, 1)
+	assert.Equal(t, "^1.1.0", cfg.Packages[0].Version)
+}
+
+func TestRun_addPackageWithExplicitVersion(t *testing.T) {
+	setupAddProject(t)
+	bareDir := setupBareRepo(t, "test-pkg", "test-author", "1.0.0", []string{"v1.0.0", "v1.1.0"})
+
+	// Explicit version constraint should be preserved.
+	err := run("test-pkg@test-author:^1.0.0", bareDir, "all")
+	require.NoError(t, err)
+
+	cfg, err := config.Load(configFile)
+	require.NoError(t, err)
+	require.Len(t, cfg.Packages, 1)
+	assert.Equal(t, "^1.0.0", cfg.Packages[0].Version)
+}
+
+func TestRun_addPackageDuplicate(t *testing.T) {
+	setupAddProject(t)
+	bareDir := setupBareRepo(t, "test-pkg", "test-author", "1.0.0", []string{"v1.0.0"})
+
+	// First add succeeds.
+	err := run("test-pkg@test-author", bareDir, "all")
+	require.NoError(t, err)
+
+	// Second add of the same package fails.
+	err = run("test-pkg@test-author", bareDir, "all")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "already exists")
+}
+
+func TestRun_addPackageMissingAuthor(t *testing.T) {
+	setupAddProject(t)
+
+	err := run("test-pkg", "", "all")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "author required")
+}
+
+func TestRun_addPackageInvalidSource(t *testing.T) {
+	setupAddProject(t)
+
+	err := run("test-pkg@test-author", "/nonexistent/repo.git", "all")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "resolve")
+}
+
+func TestRun_addPackageInvalidActivateFlag(t *testing.T) {
+	setupAddProject(t)
+	bareDir := setupBareRepo(t, "test-pkg", "test-author", "1.0.0", []string{"v1.0.0"})
+
+	err := run("test-pkg@test-author", bareDir, "invalid:flag")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown section")
+}
+
+func TestRun_addPackageNoConfig(t *testing.T) {
+	dir := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+	require.NoError(t, os.Chdir(dir))
+
+	err = run("test-pkg@test-author", "/some/source", "all")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "load config")
 }

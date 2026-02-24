@@ -11,6 +11,7 @@ import (
 	initialize "github.com/securacore/codectx/cmds/init"
 	"github.com/securacore/codectx/cmds/link"
 	"github.com/securacore/codectx/cmds/search"
+	"github.com/securacore/codectx/cmds/self"
 	"github.com/securacore/codectx/cmds/version"
 	"github.com/securacore/codectx/cmds/watch"
 	"github.com/securacore/codectx/core/update"
@@ -29,6 +30,7 @@ func main() {
 			initialize.Command,
 			link.Command,
 			search.Command,
+			self.Command,
 			version.Command,
 			watch.Command,
 		},
@@ -55,7 +57,7 @@ func main() {
 					"A new version of codectx is available: v%s -> v%s",
 					result.Current, result.Latest,
 				))
-				ui.Item("Update: curl -fsSL https://raw.githubusercontent.com/securacore/codectx/main/bin/install | sh")
+				ui.Item("Run: codectx self upgrade")
 			}
 		case <-time.After(500 * time.Millisecond):
 			// Don't block.

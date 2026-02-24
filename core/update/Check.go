@@ -69,7 +69,7 @@ func Check(current string) *Result {
 	}
 
 	// Fetch latest release from GitHub.
-	latest, err := fetchLatest()
+	latest, err := FetchLatest()
 	if err != nil {
 		return nil
 	}
@@ -164,8 +164,8 @@ type releaseResponse struct {
 	TagName string `json:"tag_name"`
 }
 
-// fetchLatest queries the GitHub releases API for the latest tag.
-func fetchLatest() (string, error) {
+// FetchLatest queries the GitHub releases API for the latest release tag.
+func FetchLatest() (string, error) {
 	return fetchFromURL(releaseURL)
 }
 

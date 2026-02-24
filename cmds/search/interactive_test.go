@@ -1,10 +1,13 @@
 package search
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/securacore/codectx/core/resolve"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -249,4 +252,188 @@ func TestSearchModel_helpTextResults(t *testing.T) {
 	assert.Contains(t, help, "navigate")
 	assert.Contains(t, help, "select")
 	assert.Contains(t, help, "new search")
+}
+
+func TestSearchModel_helpTextResultsEmpty(t *testing.T) {
+	m := newSearchModel("")
+	m.state = stateResults
+	m.results = nil
+	help := m.helpText()
+	assert.Contains(t, help, "new search")
+	assert.Contains(t, help, "esc quit")
+	assert.NotContains(t, help, "navigate")
+}
+
+func TestSearchModel_helpTextSearching(t *testing.T) {
+	m := newSearchModel("")
+	m.state = stateSearching
+	assert.Equal(t, "esc cancel", m.helpText())
+}
+
+func TestSearchModel_navigateArrowKeys(t *testing.T) {
+	m := newSearchModel("")
+	m.state = stateResults
+	m.results = []resolve.SearchResult{
+		{Name: "a", Author: "x"},
+		{Name: "b", Author: "x"},
+		{Name: "c", Author: "x"},
+	}
+	m.cursor = 0
+
+	// Arrow down.
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	result := updated.(searchModel)
+	assert.Equal(t, 1, result.cursor)
+
+	// Arrow down again.
+	updated, _ = result.Update(tea.KeyMsg{Type: tea.KeyDown})
+	result = updated.(searchModel)
+	assert.Equal(t, 2, result.cursor)
+
+	// Arrow down at bottom, should stay.
+	updated, _ = result.Update(tea.KeyMsg{Type: tea.KeyDown})
+	result = updated.(searchModel)
+	assert.Equal(t, 2, result.cursor)
+
+	// Arrow up.
+	updated, _ = result.Update(tea.KeyMsg{Type: tea.KeyUp})
+	result = updated.(searchModel)
+	assert.Equal(t, 1, result.cursor)
+
+	// Arrow up again.
+	updated, _ = result.Update(tea.KeyMsg{Type: tea.KeyUp})
+	result = updated.(searchModel)
+	assert.Equal(t, 0, result.cursor)
+
+	// Arrow up at top, should stay.
+	updated, _ = result.Update(tea.KeyMsg{Type: tea.KeyUp})
+	result = updated.(searchModel)
+	assert.Equal(t, 0, result.cursor)
+}
+
+func TestSearchModel_spinnerTickIgnoredOutsideSearching(t *testing.T) {
+	m := newSearchModel("")
+	m.state = stateInput
+
+	// Spinner tick in stateInput should be a no-op.
+	updated, cmd := m.Update(spinner.TickMsg{})
+	result := updated.(searchModel)
+	assert.Equal(t, stateInput, result.state)
+	assert.Nil(t, cmd)
+}
+
+func TestSearchModel_spinnerTickInSearching(t *testing.T) {
+	m := newSearchModel("")
+	m.state = stateSearching
+
+	// Spinner tick in stateSearching should update the spinner.
+	updated, cmd := m.Update(spinner.TickMsg{})
+	result := updated.(searchModel)
+	assert.Equal(t, stateSearching, result.state)
+	// The spinner update should return a command for the next tick.
+	assert.NotNil(t, cmd)
+}
+
+func TestSearchModel_scrollIndicatorMoreBelow(t *testing.T) {
+	m := newSearchModel("")
+	m.state = stateResults
+	m.width = 100
+	m.height = 15 // small height forces scrolling with many results
+
+	// Create enough results to exceed visible window.
+	for i := 0; i < 20; i++ {
+		m.results = append(m.results, resolve.SearchResult{
+			Name:   fmt.Sprintf("pkg%d", i),
+			Author: "org",
+			Stars:  i,
+		})
+	}
+	m.cursor = 0
+
+	view := m.View()
+	assert.Contains(t, view, "more")
+}
+
+func TestSearchModel_scrollIndicatorMoreAbove(t *testing.T) {
+	m := newSearchModel("")
+	m.state = stateResults
+	m.width = 100
+	m.height = 15
+
+	// Create enough results to exceed visible window.
+	for i := 0; i < 20; i++ {
+		m.results = append(m.results, resolve.SearchResult{
+			Name:   fmt.Sprintf("pkg%d", i),
+			Author: "org",
+			Stars:  i,
+		})
+	}
+	// Set cursor near the bottom to trigger "more above" indicator.
+	m.cursor = 15
+
+	view := m.View()
+	assert.Contains(t, view, "above")
+}
+
+func TestSearchModel_selectEnterWithEmptyResults(t *testing.T) {
+	m := newSearchModel("")
+	m.state = stateResults
+	m.results = nil
+	m.cursor = 0
+
+	// Enter with no results should not select or quit.
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	result := updated.(searchModel)
+	assert.False(t, result.quitting)
+	assert.Nil(t, result.selected)
+	assert.Nil(t, cmd)
+}
+
+func TestSearchModel_viewNoResults(t *testing.T) {
+	m := newSearchModel("")
+	m.state = stateInput
+	m.searched = true
+	m.width = 80
+	m.height = 24
+
+	view := m.View()
+	assert.Contains(t, view, "No packages found")
+}
+
+func TestSearchModel_viewInputWithQuery(t *testing.T) {
+	m := newSearchModel("")
+	m.state = stateInput
+	m.width = 80
+	m.height = 24
+	m.input.SetValue("react")
+
+	view := m.View()
+	assert.Contains(t, view, "enter to search")
+}
+
+func TestSearchModel_renderTableTruncatesDescription(t *testing.T) {
+	m := newSearchModel("")
+	m.state = stateResults
+	m.width = 60 // narrow width to force truncation
+	m.height = 30
+	m.results = []resolve.SearchResult{
+		{
+			Name:        "pkg",
+			Author:      "org",
+			Stars:       1,
+			Description: "This is a very long description that should definitely get truncated because the terminal width is too small",
+		},
+	}
+
+	lines := m.renderTableLines()
+	require.NotEmpty(t, lines)
+	// At least one data line should contain the truncation ellipsis.
+	found := false
+	for _, line := range lines {
+		if strings.Contains(line, "...") {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "expected truncated description with '...'")
 }

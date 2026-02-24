@@ -171,6 +171,94 @@ func TestRun_writesLockFile(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestRun_withDedupAndConflict(t *testing.T) {
+	dir := setupProject(t)
+	docsDir := filepath.Join(dir, "docs")
+
+	// Write a local foundation entry.
+	require.NoError(t, os.WriteFile(
+		filepath.Join(docsDir, "foundation", "shared.md"),
+		[]byte("# Shared\nLocal version.\n"), 0o644))
+
+	// Update local manifest to include the foundation entry.
+	localManifest := &manifest.Manifest{
+		Name:    "test-project",
+		Author:  "tester",
+		Version: "1.0.0",
+		Foundation: []manifest.FoundationEntry{
+			{ID: "shared", Path: "foundation/shared.md", Description: "Shared doc"},
+		},
+	}
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), localManifest))
+
+	// Create an installed package with overlapping entries.
+	pkgDir := filepath.Join(docsDir, "packages", "testpkg@testorg")
+	require.NoError(t, os.MkdirAll(filepath.Join(pkgDir, "foundation"), 0o755))
+
+	// Same content as local (will be deduplicated).
+	require.NoError(t, os.WriteFile(
+		filepath.Join(pkgDir, "foundation", "shared.md"),
+		[]byte("# Shared\nLocal version.\n"), 0o644))
+
+	// Different content than local with a different ID that would collide
+	// if the package had the same ID — but let's make a true conflict:
+	// same ID, different content.
+	// We'll add a second foundation entry to the package with the same ID "shared".
+	// Actually, since mergeManifestDedup checks the "shared" key which local
+	// already occupies, the package entry with same content will be a duplicate.
+	// Let's add a second pair: same ID, different content = conflict.
+	require.NoError(t, os.WriteFile(
+		filepath.Join(pkgDir, "foundation", "conflicting.md"),
+		[]byte("# Conflicting\nPackage version with different content.\n"), 0o644))
+
+	// Write the package manifest with one duplicate (shared) and one conflict.
+	// For the conflict, we need the local to also have the same ID.
+	// Update: add "conflicting" to local first with different content.
+	require.NoError(t, os.WriteFile(
+		filepath.Join(docsDir, "foundation", "conflicting.md"),
+		[]byte("# Conflicting\nOriginal local content.\n"), 0o644))
+
+	localManifest.Foundation = append(localManifest.Foundation,
+		manifest.FoundationEntry{ID: "conflicting", Path: "foundation/conflicting.md", Description: "Conflicting doc"})
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), localManifest))
+
+	pkgManifest := &manifest.Manifest{
+		Name:    "testpkg",
+		Author:  "testorg",
+		Version: "1.0.0",
+		Foundation: []manifest.FoundationEntry{
+			{ID: "shared", Path: "foundation/shared.md", Description: "Shared doc"},
+			{ID: "conflicting", Path: "foundation/conflicting.md", Description: "Conflicting doc"},
+		},
+	}
+	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "package.yml"), pkgManifest))
+
+	// Update codectx.yml to reference the package with active: all.
+	cfg := &config.Config{
+		Name: "test-project",
+		Packages: []config.PackageDep{
+			{
+				Name:    "testpkg",
+				Author:  "testorg",
+				Version: "1.0.0",
+				Source:  "https://github.com/testorg/testpkg",
+				Active:  config.Activation{Mode: "all"},
+			},
+		},
+	}
+	require.NoError(t, config.Write(filepath.Join(dir, configFile), cfg))
+
+	// Run compile — exercises dedup + conflict branches in run().
+	err := run()
+	require.NoError(t, err)
+
+	// Verify compiled output exists (the function should not error even
+	// with duplicates and conflicts).
+	outputDir := filepath.Join(dir, ".codectx")
+	_, err = os.Stat(filepath.Join(outputDir, "manifest.yml"))
+	assert.NoError(t, err)
+}
+
 func TestRun_customOutputDir(t *testing.T) {
 	dir := t.TempDir()
 
