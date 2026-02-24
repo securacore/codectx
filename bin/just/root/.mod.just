@@ -1,6 +1,7 @@
 import "../settings.just"
 import "add.just"
 import "audit.just"
+import "build.just"
 import "clean.just"
 import "codectx.just"
 import "connect.just"
