@@ -3,19 +3,44 @@ package resolve
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 )
 
-// Fetch clones the resolved package at its exact tag into destDir.
-// It performs a shallow clone (depth 1) to minimize footprint.
+// Fetch downloads a resolved package into destDir. It first attempts to
+// fetch a release asset (package.tar.gz) from GitHub Releases. If no
+// release asset is available, it falls back to a shallow git clone.
 // The destination directory must not already exist.
 func Fetch(resolved *ResolvedPackage, destDir string) error {
 	if _, err := os.Stat(destDir); err == nil {
 		return fmt.Errorf("destination %s already exists", destDir)
 	}
 
+	// Try release asset first, fall back to git clone.
+	err := fetchReleaseAsset(resolved, destDir)
+	if err != nil {
+		_ = os.RemoveAll(destDir)
+		err = fetchGitClone(resolved, destDir)
+	}
+	if err != nil {
+		_ = os.RemoveAll(destDir)
+		return err
+	}
+
+	// Verify package.yml exists regardless of fetch method.
+	if _, err := os.Stat(filepath.Join(destDir, "package.yml")); os.IsNotExist(err) {
+		_ = os.RemoveAll(destDir)
+		return fmt.Errorf("fetched package has no package.yml at root")
+	}
+
+	return nil
+}
+
+// fetchGitClone performs a shallow git clone of the resolved package
+// into destDir.
+func fetchGitClone(resolved *ResolvedPackage, destDir string) error {
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return fmt.Errorf("create destination %s: %w", destDir, err)
 	}
@@ -26,15 +51,7 @@ func Fetch(resolved *ResolvedPackage, destDir string) error {
 		Depth:         1,
 	})
 	if err != nil {
-		// Clean up on failure.
-		_ = os.RemoveAll(destDir)
 		return fmt.Errorf("clone %s at tag %s: %w", resolved.Source, resolved.Tag, err)
-	}
-
-	// Verify package.yml exists in the cloned repo.
-	if _, err := os.Stat(fmt.Sprintf("%s/package.yml", destDir)); os.IsNotExist(err) {
-		_ = os.RemoveAll(destDir)
-		return fmt.Errorf("cloned package has no package.yml at root")
 	}
 
 	return nil
