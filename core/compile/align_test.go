@@ -174,3 +174,63 @@ func TestToSet_empty(t *testing.T) {
 	s := toSet([]string{})
 	assert.Len(t, s, 0)
 }
+
+// --- filterManifest granular Prompts/Plans ---
+
+func TestFilterManifest_granularPrompts(t *testing.T) {
+	m := testManifest()
+	activation := config.Activation{
+		Map: &config.ActivationMap{
+			Prompts: []string{"review"},
+		},
+	}
+
+	filtered := filterManifest(m, activation)
+
+	// Only Prompts section should have entries.
+	assert.Empty(t, filtered.Foundation)
+	assert.Empty(t, filtered.Topics)
+	require.Len(t, filtered.Prompts, 1)
+	assert.Equal(t, "review", filtered.Prompts[0].ID)
+	assert.Empty(t, filtered.Plans)
+}
+
+func TestFilterManifest_granularPlans(t *testing.T) {
+	m := testManifest()
+	activation := config.Activation{
+		Map: &config.ActivationMap{
+			Plans: []string{"migration"},
+		},
+	}
+
+	filtered := filterManifest(m, activation)
+
+	assert.Empty(t, filtered.Foundation)
+	assert.Empty(t, filtered.Topics)
+	assert.Empty(t, filtered.Prompts)
+	require.Len(t, filtered.Plans, 1)
+	assert.Equal(t, "migration", filtered.Plans[0].ID)
+}
+
+func TestFilterManifest_granularAllSections(t *testing.T) {
+	m := testManifest()
+	activation := config.Activation{
+		Map: &config.ActivationMap{
+			Foundation: []string{"philosophy"},
+			Topics:     []string{"react"},
+			Prompts:    []string{"review"},
+			Plans:      []string{"migration"},
+		},
+	}
+
+	filtered := filterManifest(m, activation)
+
+	require.Len(t, filtered.Foundation, 1)
+	assert.Equal(t, "philosophy", filtered.Foundation[0].ID)
+	require.Len(t, filtered.Topics, 1)
+	assert.Equal(t, "react", filtered.Topics[0].ID)
+	require.Len(t, filtered.Prompts, 1)
+	assert.Equal(t, "review", filtered.Prompts[0].ID)
+	require.Len(t, filtered.Plans, 1)
+	assert.Equal(t, "migration", filtered.Plans[0].ID)
+}

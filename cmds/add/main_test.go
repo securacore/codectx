@@ -1,6 +1,8 @@
 package add
 
 import (
+	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -478,4 +480,92 @@ func TestSplitKey_colonAtEnd(t *testing.T) {
 	section, id := splitKey("foo:")
 	assert.Equal(t, "foo", section)
 	assert.Equal(t, "", id)
+}
+
+// --- printActivation ---
+
+// captureStdout runs fn and returns whatever it writes to os.Stdout.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stdout = w
+
+	fn()
+
+	w.Close()
+	os.Stdout = old
+
+	var buf bytes.Buffer
+	_, err = io.Copy(&buf, r)
+	require.NoError(t, err)
+	return buf.String()
+}
+
+func TestPrintActivation_all(t *testing.T) {
+	out := captureStdout(t, func() {
+		printActivation(config.Activation{Mode: "all"})
+	})
+	assert.Contains(t, out, "all entries")
+}
+
+func TestPrintActivation_none(t *testing.T) {
+	out := captureStdout(t, func() {
+		printActivation(config.Activation{Mode: "none"})
+	})
+	assert.Contains(t, out, "none")
+	assert.Contains(t, out, "not active")
+}
+
+func TestPrintActivation_granular(t *testing.T) {
+	out := captureStdout(t, func() {
+		printActivation(config.Activation{
+			Map: &config.ActivationMap{
+				Foundation: []string{"philosophy"},
+				Topics:     []string{"react", "go"},
+				Prompts:    []string{"review"},
+				Plans:      []string{"migration"},
+			},
+		})
+	})
+	assert.Contains(t, out, "foundation: philosophy")
+	assert.Contains(t, out, "topics:     react, go")
+	assert.Contains(t, out, "prompts:    review")
+	assert.Contains(t, out, "plans:      migration")
+}
+
+func TestPrintActivation_granularPartial(t *testing.T) {
+	out := captureStdout(t, func() {
+		printActivation(config.Activation{
+			Map: &config.ActivationMap{
+				Topics: []string{"react"},
+			},
+		})
+	})
+	assert.Contains(t, out, "topics:     react")
+	assert.NotContains(t, out, "foundation")
+	assert.NotContains(t, out, "prompts")
+	assert.NotContains(t, out, "plans")
+}
+
+// --- toSetLocal ---
+
+func TestToSetLocal_normal(t *testing.T) {
+	s := toSetLocal([]string{"a", "b", "c"})
+	assert.Len(t, s, 3)
+	assert.True(t, s["a"])
+	assert.True(t, s["b"])
+	assert.True(t, s["c"])
+	assert.False(t, s["d"])
+}
+
+func TestToSetLocal_empty(t *testing.T) {
+	s := toSetLocal([]string{})
+	assert.Len(t, s, 0)
+}
+
+func TestToSetLocal_nil(t *testing.T) {
+	s := toSetLocal(nil)
+	assert.Len(t, s, 0)
 }

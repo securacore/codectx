@@ -387,4 +387,253 @@ func TestWriteCompiledManifest_omitsEmptySections(t *testing.T) {
 	assert.NotContains(t, content, "topics:")
 	assert.NotContains(t, content, "prompts:")
 	assert.NotContains(t, content, "plans:")
+	assert.NotContains(t, content, "manifests:")
+}
+
+// --- ManifestRef ---
+
+func TestWriteAndLoad_manifestRefs(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "manifest.yml")
+
+	original := &CompiledManifest{
+		Name:        "multi-manifest",
+		Description: "Decomposed project",
+		Foundation: []CompiledFoundationEntry{
+			{
+				ID:          "philosophy",
+				Object:      "objects/a1b2c3d4e5f67890.md",
+				Description: "Core philosophy",
+				Load:        "always",
+				Source:      "local",
+			},
+		},
+		Manifests: []ManifestRef{
+			{
+				Section:         "foundation",
+				Path:            "manifests/foundation.yml",
+				Entries:         15,
+				EstimatedTokens: 45000,
+				Description:     "Core operational context",
+			},
+			{
+				Section:         "topics",
+				Path:            "manifests/topics.yml",
+				Entries:         180,
+				EstimatedTokens: 198000,
+				Description:     "Technology and domain conventions",
+			},
+			{
+				Section:         "prompts",
+				Path:            "manifests/prompts.yml",
+				Entries:         92,
+				EstimatedTokens: 55200,
+				Description:     "Automated task definitions",
+			},
+			{
+				Section:         "plans",
+				Path:            "manifests/plans.yml",
+				Entries:         60,
+				EstimatedTokens: 14300,
+				Description:     "Implementation plans",
+			},
+		},
+	}
+
+	err := WriteCompiledManifest(path, original)
+	require.NoError(t, err)
+
+	loaded, err := LoadCompiledManifest(path)
+	require.NoError(t, err)
+
+	// Always-load entries are inlined.
+	require.Len(t, loaded.Foundation, 1)
+	assert.Equal(t, "philosophy", loaded.Foundation[0].ID)
+	assert.Equal(t, "always", loaded.Foundation[0].Load)
+
+	// Sub-manifest references round-trip.
+	require.Len(t, loaded.Manifests, 4)
+	assert.Equal(t, "foundation", loaded.Manifests[0].Section)
+	assert.Equal(t, "manifests/foundation.yml", loaded.Manifests[0].Path)
+	assert.Equal(t, 15, loaded.Manifests[0].Entries)
+	assert.Equal(t, 45000, loaded.Manifests[0].EstimatedTokens)
+	assert.Equal(t, "Core operational context", loaded.Manifests[0].Description)
+	assert.Empty(t, loaded.Manifests[0].Source)
+
+	assert.Equal(t, "topics", loaded.Manifests[1].Section)
+	assert.Equal(t, 180, loaded.Manifests[1].Entries)
+	assert.Equal(t, "plans", loaded.Manifests[3].Section)
+
+	// Section arrays (except always-load foundation) should be empty.
+	assert.Nil(t, loaded.Topics)
+	assert.Nil(t, loaded.Prompts)
+	assert.Nil(t, loaded.Plans)
+}
+
+func TestWriteAndLoad_manifestRefWithSource(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "manifest.yml")
+
+	// Level 2 decomposition: section manifest decomposed by source package.
+	original := &CompiledManifest{
+		Name:        "topics-index",
+		Description: "Topics section",
+		Manifests: []ManifestRef{
+			{
+				Section:         "topics",
+				Source:          "react@facebook",
+				Path:            "manifests/topics/react@facebook.yml",
+				Entries:         120,
+				EstimatedTokens: 132000,
+				Description:     "React documentation topics",
+			},
+			{
+				Section:         "topics",
+				Source:          "go@google",
+				Path:            "manifests/topics/go@google.yml",
+				Entries:         87,
+				EstimatedTokens: 66000,
+				Description:     "Go documentation topics",
+			},
+		},
+	}
+
+	err := WriteCompiledManifest(path, original)
+	require.NoError(t, err)
+
+	loaded, err := LoadCompiledManifest(path)
+	require.NoError(t, err)
+
+	require.Len(t, loaded.Manifests, 2)
+	assert.Equal(t, "react@facebook", loaded.Manifests[0].Source)
+	assert.Equal(t, "go@google", loaded.Manifests[1].Source)
+}
+
+func TestWriteCompiledManifest_omitsManifestsWhenEmpty(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "manifest.yml")
+
+	m := &CompiledManifest{
+		Name:        "single-mode",
+		Description: "Single manifest",
+		Foundation: []CompiledFoundationEntry{
+			{ID: "a", Object: "objects/aaa.md", Description: "A", Source: "local"},
+		},
+	}
+
+	err := WriteCompiledManifest(path, m)
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.NotContains(t, string(data), "manifests:")
+}
+
+func TestToCompiledManifest_topicSpecNotInPathToHash(t *testing.T) {
+	unified := &manifest.Manifest{
+		Name: "test",
+		Topics: []manifest.TopicEntry{
+			{
+				ID:          "react",
+				Path:        "topics/react/README.md",
+				Description: "React",
+				Spec:        "topics/react/spec/README.md",
+			},
+		},
+	}
+
+	// Only the main path is in pathToHash; Spec path is missing.
+	pathToHash := map[string]string{
+		"topics/react/README.md": "1111111111111111",
+	}
+	provenance := map[string]string{
+		"topics:react": "local",
+	}
+
+	cm := toCompiledManifest(unified, pathToHash, provenance)
+
+	require.Len(t, cm.Topics, 1)
+	assert.Equal(t, "objects/1111111111111111.md", cm.Topics[0].Object)
+	// Spec silently skipped because its path is not in pathToHash.
+	assert.Empty(t, cm.Topics[0].Spec)
+}
+
+func TestToCompiledManifest_topicFilesNotInPathToHash(t *testing.T) {
+	unified := &manifest.Manifest{
+		Name: "test",
+		Topics: []manifest.TopicEntry{
+			{
+				ID:          "react",
+				Path:        "topics/react/README.md",
+				Description: "React",
+				Files:       []string{"topics/react/hooks.md", "topics/react/state.md"},
+			},
+		},
+	}
+
+	// Main path is present, but only one of two Files entries is in pathToHash.
+	pathToHash := map[string]string{
+		"topics/react/README.md": "1111111111111111",
+		"topics/react/hooks.md":  "2222222222222222",
+		// "topics/react/state.md" deliberately missing
+	}
+	provenance := map[string]string{
+		"topics:react": "local",
+	}
+
+	cm := toCompiledManifest(unified, pathToHash, provenance)
+
+	require.Len(t, cm.Topics, 1)
+	// Only the file present in pathToHash should appear.
+	require.Len(t, cm.Topics[0].Files, 1)
+	assert.Equal(t, "objects/2222222222222222.md", cm.Topics[0].Files[0])
+}
+
+func TestToCompiledManifest_topicAllFilesSkipped(t *testing.T) {
+	unified := &manifest.Manifest{
+		Name: "test",
+		Topics: []manifest.TopicEntry{
+			{
+				ID:          "react",
+				Path:        "topics/react/README.md",
+				Description: "React",
+				Spec:        "topics/react/spec/README.md",
+				Files:       []string{"topics/react/hooks.md"},
+			},
+		},
+	}
+
+	// Only the main path is present. Both Spec and Files are missing.
+	pathToHash := map[string]string{
+		"topics/react/README.md": "1111111111111111",
+	}
+	provenance := map[string]string{
+		"topics:react": "local",
+	}
+
+	cm := toCompiledManifest(unified, pathToHash, provenance)
+
+	require.Len(t, cm.Topics, 1)
+	assert.Empty(t, cm.Topics[0].Spec)
+	assert.Nil(t, cm.Topics[0].Files)
+}
+
+func TestToCompiledManifest_noManifestRefs(t *testing.T) {
+	// toCompiledManifest never sets Manifests — that's a write-time concern.
+	unified := &manifest.Manifest{
+		Name:        "test",
+		Description: "Test",
+		Foundation: []manifest.FoundationEntry{
+			{ID: "a", Path: "foundation/a.md", Description: "A"},
+		},
+	}
+
+	cm := toCompiledManifest(unified, map[string]string{
+		"foundation/a.md": "aaaaaaaaaaaaaaaa",
+	}, map[string]string{
+		"foundation:a": "local",
+	})
+
+	assert.Nil(t, cm.Manifests)
+	require.Len(t, cm.Foundation, 1)
 }

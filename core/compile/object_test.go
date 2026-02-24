@@ -212,6 +212,46 @@ func TestPrune_nonexistentDir(t *testing.T) {
 	assert.Equal(t, 0, removed)
 }
 
+func TestList_skipsSubdirectories(t *testing.T) {
+	dir := t.TempDir()
+	objDir := filepath.Join(dir, "objects")
+	store := NewObjectStore(objDir)
+
+	h1, err := store.Store([]byte("A"))
+	require.NoError(t, err)
+
+	// Create a subdirectory inside the objects dir.
+	require.NoError(t, os.MkdirAll(filepath.Join(objDir, "subdir"), 0o755))
+
+	hashes, err := store.List()
+	require.NoError(t, err)
+	// Only the file should appear, not the subdirectory.
+	assert.Len(t, hashes, 1)
+	assert.True(t, hashes[h1])
+}
+
+func TestPrune_skipsSubdirectories(t *testing.T) {
+	dir := t.TempDir()
+	objDir := filepath.Join(dir, "objects")
+	store := NewObjectStore(objDir)
+
+	h1, err := store.Store([]byte("keep"))
+	require.NoError(t, err)
+
+	// Create a subdirectory inside the objects dir.
+	subdir := filepath.Join(objDir, "nested")
+	require.NoError(t, os.MkdirAll(subdir, 0o755))
+
+	active := map[string]bool{h1: true}
+	removed, err := store.Prune(active)
+	require.NoError(t, err)
+	assert.Equal(t, 0, removed)
+
+	// Subdirectory should still exist (not removed by Prune).
+	_, err = os.Stat(subdir)
+	assert.NoError(t, err)
+}
+
 func TestPrune_allActive(t *testing.T) {
 	dir := t.TempDir()
 	store := NewObjectStore(filepath.Join(dir, "objects"))

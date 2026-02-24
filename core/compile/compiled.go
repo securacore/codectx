@@ -8,6 +8,13 @@ import (
 // It is the AI's primary interface: a 2-way data map with content-addressed object
 // references and provenance tracking. Separate from the source manifest.Manifest type
 // which is the authoring format for package.yml files.
+//
+// A CompiledManifest can contain direct entries, sub-manifest references, or both.
+// In single mode (below decomposition threshold), section arrays hold all entries.
+// In multi mode (above threshold), the root manifest holds always-load entries and
+// Manifests references; section entries live in sub-manifest files.
+// Sub-manifests use the same CompiledManifest structure, enabling recursive
+// decomposition at any depth.
 type CompiledManifest struct {
 	Name        string                    `yaml:"name"`
 	Description string                    `yaml:"description"`
@@ -15,6 +22,20 @@ type CompiledManifest struct {
 	Topics      []CompiledTopicEntry      `yaml:"topics,omitempty"`
 	Prompts     []CompiledPromptEntry     `yaml:"prompts,omitempty"`
 	Plans       []CompiledPlanEntry       `yaml:"plans,omitempty"`
+	Manifests   []ManifestRef             `yaml:"manifests,omitempty"`
+}
+
+// ManifestRef is a reference to a sub-manifest file.
+// Used when a manifest is decomposed into multiple files for scale.
+// At level 1, decomposition is by section (foundation, topics, etc.).
+// At level 2+, decomposition is by source package within a section.
+type ManifestRef struct {
+	Section         string `yaml:"section"`
+	Path            string `yaml:"path"`
+	Entries         int    `yaml:"entries"`
+	EstimatedTokens int    `yaml:"estimated_tokens"`
+	Description     string `yaml:"description"`
+	Source          string `yaml:"source,omitempty"`
 }
 
 // CompiledFoundationEntry is the compiled form of a foundation document.

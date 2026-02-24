@@ -159,6 +159,29 @@ func TestValidate_packageWithPromptsPlans(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestNormalizeForJSONSchema_unmarshalable(t *testing.T) {
+	// Channels cannot be marshaled to JSON.
+	ch := make(chan int)
+	_, err := normalizeForJSONSchema(ch)
+	assert.Error(t, err)
+}
+
+func TestNormalizeForJSONSchema_roundTrip(t *testing.T) {
+	// Integers from YAML should become float64 after normalization.
+	input := map[string]any{
+		"count": 42,
+		"name":  "test",
+	}
+	result, err := normalizeForJSONSchema(input)
+	require.NoError(t, err)
+
+	m, ok := result.(map[string]any)
+	require.True(t, ok)
+	// JSON round-trip converts int to float64.
+	assert.Equal(t, float64(42), m["count"])
+	assert.Equal(t, "test", m["name"])
+}
+
 func TestValidate_packageWithDependsOn(t *testing.T) {
 	v := map[string]any{
 		"name":        "test-pkg",

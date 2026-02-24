@@ -1,11 +1,14 @@
 package compile
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"securacore/codectx/core/manifest"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCollectFilePaths_allSections(t *testing.T) {
@@ -66,4 +69,145 @@ func TestCollectFilePaths_empty(t *testing.T) {
 	m := &manifest.Manifest{}
 	paths := collectFilePaths(m)
 	assert.Nil(t, paths)
+}
+
+// --- copyFile ---
+
+func TestCopyFile_success(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.md")
+	dst := filepath.Join(dir, "out", "dst.md")
+
+	require.NoError(t, os.WriteFile(src, []byte("hello"), 0o644))
+
+	err := copyFile(src, dst)
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(dst)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("hello"), data)
+}
+
+func TestCopyFile_missingSource(t *testing.T) {
+	dir := t.TempDir()
+	err := copyFile(filepath.Join(dir, "missing.md"), filepath.Join(dir, "dst.md"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "read")
+}
+
+func TestCopyFile_createsParentDirs(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.md")
+	dst := filepath.Join(dir, "a", "b", "c", "dst.md")
+
+	require.NoError(t, os.WriteFile(src, []byte("deep"), 0o644))
+
+	err := copyFile(src, dst)
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(dst)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("deep"), data)
+}
+
+// --- copyManifestFiles ---
+
+func TestCopyManifestFiles_copiesAll(t *testing.T) {
+	srcRoot := t.TempDir()
+	dstRoot := t.TempDir()
+
+	// Create source files matching manifest paths.
+	require.NoError(t, os.MkdirAll(filepath.Join(srcRoot, "foundation"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(srcRoot, "topics", "go"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(srcRoot, "foundation", "a.md"), []byte("found"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(srcRoot, "topics", "go", "README.md"), []byte("topic"), 0o644))
+
+	m := &manifest.Manifest{
+		Foundation: []manifest.FoundationEntry{
+			{ID: "a", Path: "foundation/a.md"},
+		},
+		Topics: []manifest.TopicEntry{
+			{ID: "go", Path: "topics/go/README.md"},
+		},
+	}
+
+	copied, err := copyManifestFiles(m, srcRoot, dstRoot)
+	require.NoError(t, err)
+	assert.Equal(t, 2, copied)
+
+	// Verify files exist at destination.
+	data, err := os.ReadFile(filepath.Join(dstRoot, "foundation", "a.md"))
+	require.NoError(t, err)
+	assert.Equal(t, []byte("found"), data)
+
+	data, err = os.ReadFile(filepath.Join(dstRoot, "topics", "go", "README.md"))
+	require.NoError(t, err)
+	assert.Equal(t, []byte("topic"), data)
+}
+
+func TestCopyManifestFiles_skipsMissing(t *testing.T) {
+	srcRoot := t.TempDir()
+	dstRoot := t.TempDir()
+
+	// Create only one of two referenced files.
+	require.NoError(t, os.MkdirAll(filepath.Join(srcRoot, "foundation"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(srcRoot, "foundation", "a.md"), []byte("exists"), 0o644))
+
+	m := &manifest.Manifest{
+		Foundation: []manifest.FoundationEntry{
+			{ID: "a", Path: "foundation/a.md"},
+			{ID: "b", Path: "foundation/b.md"}, // does not exist on disk
+		},
+	}
+
+	copied, err := copyManifestFiles(m, srcRoot, dstRoot)
+	require.NoError(t, err)
+	assert.Equal(t, 1, copied)
+}
+
+func TestCopyManifestFiles_emptyManifest(t *testing.T) {
+	srcRoot := t.TempDir()
+	dstRoot := t.TempDir()
+
+	m := &manifest.Manifest{}
+
+	copied, err := copyManifestFiles(m, srcRoot, dstRoot)
+	require.NoError(t, err)
+	assert.Equal(t, 0, copied)
+}
+
+func TestCopyManifestFiles_allSections(t *testing.T) {
+	srcRoot := t.TempDir()
+	dstRoot := t.TempDir()
+
+	// Create files for all sections.
+	for _, dir := range []string{"foundation", "topics/go", "topics/go/spec", "prompts/lint", "plans/migrate"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(srcRoot, dir), 0o755))
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(srcRoot, "foundation", "a.md"), []byte("f"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(srcRoot, "topics", "go", "README.md"), []byte("t"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(srcRoot, "topics", "go", "spec", "README.md"), []byte("s"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(srcRoot, "topics", "go", "extra.md"), []byte("e"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(srcRoot, "prompts", "lint", "README.md"), []byte("p"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(srcRoot, "plans", "migrate", "README.md"), []byte("pl"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(srcRoot, "plans", "migrate", "state.yml"), []byte("st"), 0o644))
+
+	m := &manifest.Manifest{
+		Foundation: []manifest.FoundationEntry{
+			{ID: "a", Path: "foundation/a.md"},
+		},
+		Topics: []manifest.TopicEntry{
+			{ID: "go", Path: "topics/go/README.md", Spec: "topics/go/spec/README.md", Files: []string{"topics/go/extra.md"}},
+		},
+		Prompts: []manifest.PromptEntry{
+			{ID: "lint", Path: "prompts/lint/README.md"},
+		},
+		Plans: []manifest.PlanEntry{
+			{ID: "migrate", Path: "plans/migrate/README.md", State: "plans/migrate/state.yml"},
+		},
+	}
+
+	copied, err := copyManifestFiles(m, srcRoot, dstRoot)
+	require.NoError(t, err)
+	assert.Equal(t, 7, copied)
 }
