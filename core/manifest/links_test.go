@@ -102,45 +102,45 @@ func TestExtractLinks_relativePathPatterns(t *testing.T) {
 	}, links)
 }
 
-// --- resolveLink ---
+// --- ResolveLink ---
 
 func TestResolveLink_sameDirectory(t *testing.T) {
-	result := resolveLink("foundation/philosophy.md", "markdown.md")
+	result := ResolveLink("foundation/philosophy.md", "markdown.md")
 	assert.Equal(t, filepath.Join("foundation", "markdown.md"), result)
 }
 
 func TestResolveLink_parentDirectory(t *testing.T) {
-	result := resolveLink("topics/react/README.md", "../typescript/README.md")
+	result := ResolveLink("topics/react/README.md", "../typescript/README.md")
 	assert.Equal(t, filepath.Join("topics", "typescript", "README.md"), result)
 }
 
 func TestResolveLink_twoLevelsUp(t *testing.T) {
-	result := resolveLink("topics/react/README.md", "../../foundation/philosophy.md")
+	result := ResolveLink("topics/react/README.md", "../../foundation/philosophy.md")
 	assert.Equal(t, filepath.Join("foundation", "philosophy.md"), result)
 }
 
 func TestResolveLink_threeLevelsUp(t *testing.T) {
-	result := resolveLink("topics/react/spec/README.md", "../../../foundation/philosophy.md")
+	result := ResolveLink("topics/react/spec/README.md", "../../../foundation/philosophy.md")
 	assert.Equal(t, filepath.Join("foundation", "philosophy.md"), result)
 }
 
 func TestResolveLink_childPath(t *testing.T) {
-	result := resolveLink("topics/react/README.md", "spec/README.md")
+	result := ResolveLink("topics/react/README.md", "spec/README.md")
 	assert.Equal(t, filepath.Join("topics", "react", "spec", "README.md"), result)
 }
 
 func TestResolveLink_escapesRoot(t *testing.T) {
-	result := resolveLink("foundation/philosophy.md", "../../outside.md")
+	result := ResolveLink("foundation/philosophy.md", "../../outside.md")
 	assert.Equal(t, "", result)
 }
 
 func TestResolveLink_fromFoundationToTopic(t *testing.T) {
-	result := resolveLink("foundation/review-standards.md", "../prompts/docs-audit/README.md")
+	result := ResolveLink("foundation/review-standards.md", "../prompts/docs-audit/README.md")
 	assert.Equal(t, filepath.Join("prompts", "docs-audit", "README.md"), result)
 }
 
 func TestResolveLink_fromSpecToPeerTopic(t *testing.T) {
-	result := resolveLink("topics/nextjs/spec/README.md", "../../react/memoization.md")
+	result := ResolveLink("topics/nextjs/spec/README.md", "../../react/memoization.md")
 	assert.Equal(t, filepath.Join("topics", "react", "memoization.md"), result)
 }
 
@@ -670,31 +670,31 @@ func TestExtractLinks_trailingHashNoFragment(t *testing.T) {
 	assert.Equal(t, []string{"file.md"}, links)
 }
 
-// --- resolveLink: edge cases ---
+// --- ResolveLink: edge cases ---
 
 func TestResolveLink_emptyTarget(t *testing.T) {
-	result := resolveLink("foundation/a.md", "")
+	result := ResolveLink("foundation/a.md", "")
 	// filepath.Join("foundation", "") = "foundation", then Clean = "foundation"
 	assert.Equal(t, "foundation", result)
 }
 
 func TestResolveLink_emptySource(t *testing.T) {
-	result := resolveLink("", "foo.md")
+	result := ResolveLink("", "foo.md")
 	assert.Equal(t, "foo.md", result)
 }
 
 func TestResolveLink_dotSegment(t *testing.T) {
-	result := resolveLink("topics/react/README.md", "./spec/README.md")
+	result := ResolveLink("topics/react/README.md", "./spec/README.md")
 	assert.Equal(t, filepath.Join("topics", "react", "spec", "README.md"), result)
 }
 
 func TestResolveLink_rootLevelSource(t *testing.T) {
-	result := resolveLink("README.md", "other.md")
+	result := ResolveLink("README.md", "other.md")
 	assert.Equal(t, "other.md", result)
 }
 
 func TestResolveLink_upToRoot(t *testing.T) {
-	result := resolveLink("foundation/a.md", "../README.md")
+	result := ResolveLink("foundation/a.md", "../README.md")
 	assert.Equal(t, "README.md", result)
 }
 

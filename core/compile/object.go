@@ -43,6 +43,30 @@ func (s *ObjectStore) Store(content []byte) (string, error) {
 	return hash, nil
 }
 
+// StoreAs writes content to the object store under the given hash.
+// Unlike Store, the hash is provided externally rather than computed from content.
+// This supports the two-pass compilation model where the hash is based on raw
+// source content but the stored content has rewritten links.
+// If an object with the same hash already exists, it is not overwritten.
+func (s *ObjectStore) StoreAs(hash string, content []byte) error {
+	path := filepath.Join(s.dir, hash+".md")
+
+	// Skip if already exists (idempotent).
+	if _, err := os.Stat(path); err == nil {
+		return nil
+	}
+
+	if err := os.MkdirAll(s.dir, 0o755); err != nil {
+		return fmt.Errorf("create objects directory: %w", err)
+	}
+
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		return fmt.Errorf("write object %s: %w", hash, err)
+	}
+
+	return nil
+}
+
 // ContentHash computes the 16-char hex SHA256 prefix of the given data.
 // This provides 64 bits of collision resistance (~4 billion files).
 func ContentHash(data []byte) string {

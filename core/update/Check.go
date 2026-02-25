@@ -16,10 +16,11 @@ import (
 	"time"
 )
 
-const (
-	// releaseURL is the GitHub API endpoint for the latest release.
-	releaseURL = "https://api.github.com/repos/securacore/codectx/releases/latest"
+// releaseURL is the GitHub API endpoint for the latest release.
+// It is a var so tests can override it with a local httptest server.
+var releaseURL = "https://api.github.com/repos/securacore/codectx/releases/latest"
 
+const (
 	// checkInterval is the minimum time between network checks.
 	checkInterval = 24 * time.Hour
 

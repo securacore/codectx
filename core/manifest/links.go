@@ -9,11 +9,11 @@ import (
 	"strings"
 )
 
-// linkPattern matches markdown links: [text](url)
+// LinkPattern matches markdown links: [text](url)
 // Captures the URL portion (group 1). Excludes URLs starting with http://, https://,
 // or # (fragment-only links). Only matches .md file targets, optionally followed
 // by a #fragment.
-var linkPattern = regexp.MustCompile(`\[(?:[^\]]*)\]\(([^)]+\.md(?:#[^)]*)?)\)`)
+var LinkPattern = regexp.MustCompile(`\[(?:[^\]]*)\]\(([^)]+\.md(?:#[^)]*)?)\)`)
 
 // extractLinks reads a markdown file and returns all relative link targets
 // (the URL portion of [text](url) links). Only .md file targets are returned.
@@ -31,7 +31,7 @@ func extractLinks(path string) []string {
 
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
-		matches := linkPattern.FindAllStringSubmatch(scanner.Text(), -1)
+		matches := LinkPattern.FindAllStringSubmatch(scanner.Text(), -1)
 		for _, m := range matches {
 			target := m[1]
 			// Skip absolute URLs and fragment-only links.
@@ -57,14 +57,14 @@ func extractLinks(path string) []string {
 	return links
 }
 
-// resolveLink resolves a relative markdown link target to a path relative
+// ResolveLink resolves a relative markdown link target to a path relative
 // to pkgDir. sourceFile is the docs-relative path of the file containing the
 // link (e.g., "topics/react/README.md"). target is the raw link target
 // (e.g., "../../foundation/philosophy.md").
 //
 // Returns the cleaned docs-relative path, or "" if the resolution escapes
 // the package directory or produces an invalid path.
-func resolveLink(sourceFile, target string) string {
+func ResolveLink(sourceFile, target string) string {
 	// Resolve relative to the directory containing the source file.
 	sourceDir := filepath.Dir(sourceFile)
 	resolved := filepath.Join(sourceDir, target)
@@ -166,7 +166,7 @@ func inferRelationships(pkgDir string, m *Manifest) {
 		absPath := filepath.Join(pkgDir, fr.relPath)
 		links := extractLinks(absPath)
 		for _, link := range links {
-			resolved := resolveLink(fr.relPath, link)
+			resolved := ResolveLink(fr.relPath, link)
 			if resolved == "" {
 				continue
 			}

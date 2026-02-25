@@ -1,21 +1,27 @@
 # Configuration
 
-`codectx.yml` at the repository root is the sole source of truth for a project's documentation setup. It declares package dependencies, activation state, and build settings. It is validated by [codectx.schema.json](../schemas/codectx.schema.json).
+`codectx.yml` at the repository root is the single source of truth for your project's documentation setup. It declares package dependencies, what's activated, and where things live. It's validated by [codectx.schema.json](../schemas/codectx.schema.json).
 
 ## Settings
 
 | Field | Default | Description |
 |---|---|---|
-| `name` | -- | Project name |
-| `config.docs_dir` | `docs` | Documentation source directory |
-| `config.output_dir` | `.codectx` | Compiled output directory |
-| `packages` | `[]` | Package dependencies |
+| `name` | -- | Project name (used in compiled output and README) |
+| `config.docs_dir` | `docs` | Where your source documentation lives |
+| `config.output_dir` | `.codectx` | Where compiled output is written |
+| `packages` | `[]` | List of installed package dependencies |
 
 ## Package Dependencies
 
-Each entry in the `packages` array declares a dependency:
+Each entry in the `packages` array declares an installed package and what to activate from it:
 
 ```yaml
+name: my-project
+
+config:
+  docs_dir: docs
+  output_dir: .codectx
+
 packages:
   - name: react
     author: org
@@ -30,13 +36,27 @@ packages:
         - patterns
 ```
 
+You don't typically edit this file by hand. `codectx add` and `codectx activate` manage it interactively.
+
 ## Activation
 
-The `active` field on each package controls what is included in the compiled output:
+The `active` field on each package controls what gets included in the compiled output. There are three modes:
 
-- `all` -- activates every entry in the package
-- `none` -- installs the package but activates nothing (default when omitted)
-- **Granular object** -- lists specific entry IDs per section:
+**Activate everything:**
+
+```yaml
+active: all
+```
+
+**Activate nothing** (package is installed but contributes nothing to the compiled output):
+
+```yaml
+active: none
+```
+
+This is the default when `active` is omitted.
+
+**Activate specific entries** by listing entry IDs per section:
 
 ```yaml
 active:
@@ -49,28 +69,28 @@ active:
     - commit
 ```
 
-Activation is always explicit. When `active` is omitted, the default is `none`.
+Activation is always explicit. You choose exactly what documentation is included in your compiled output.
 
 ### Interactive Activation
 
-When a package is added with `codectx add`, the CLI reads the package's `manifest.yml`, presents its contents, and prompts the user to choose what to activate. The user can activate all entries, select specific entries, or activate none.
+When you add a package with `codectx add`, the CLI reads the package's manifest (or auto-discovers its contents), presents what's available, and prompts you to choose what to activate. You can activate all entries, select specific ones, or activate none and decide later.
 
 ## Conflict Handling
 
-Packages are namespaced by `name@author`, so installed packages never create file-level conflicts. Conflicts only arise at the activation level: when two packages both provide documentation for the same domain and both are activated.
+Packages are namespaced by `name@author`, so installed packages never create file-level conflicts. Conflicts only arise at the **activation level**: when two packages both provide documentation for the same domain (same entry ID) and both are activated.
 
 During `codectx add`:
 
-1. The CLI reads the new package's `manifest.yml` to inspect its contents
-2. If activating an entry would create a domain overlap with an already-active entry from another package, the CLI warns the user
-3. The user is prompted to resolve the conflict interactively
+1. The CLI inspects the new package's contents
+2. If activating an entry would overlap with an already-active entry from another package, the CLI warns you
+3. You're prompted to resolve the conflict interactively
 
-### Deduplication
+### Deduplication During Compilation
 
 During compilation, entries with duplicate IDs across packages are resolved by:
 
-- **Precedence**: local package always wins, then config order
-- **Content hash**: identical SHA256 content = silent dedup; different content = warning, precedence wins
+- **Precedence**: your local package always wins, then config order (first listed wins)
+- **Content hash**: if the content is byte-for-byte identical (same SHA256), it's silently deduplicated. If the content differs, the precedence winner is used and a warning is emitted.
 
 ## Directory Layout
 
@@ -78,31 +98,35 @@ A project using codectx has three distinct areas:
 
 ```text
 project-root/
-  codectx.yml                       # Configuration (sole source of truth)
-  codectx.lock                      # Resolved state from compile
+  codectx.yml                       # Configuration (your source of truth)
+  codectx.lock                      # Resolved state from last compile
 
-  docs/                             # Documentation source
-    manifest.yml                     # Local package data map
+  docs/                             # Source documentation
+    manifest.yml                    # Local package data map
     schemas/                        # Validation schemas
     packages/                       # Installed packages
-      [name]@[author]/
-        manifest.yml
+      [name]@[author]/              # Each package in its own directory
+        manifest.yml                # Package data map (optional, auto-discovered if missing)
+        topics/
+        foundation/
         ...
-    foundation/                     # Local foundation docs
-    topics/                         # Local topic docs
-    prompts/                        # Local prompts
-    plans/                          # Local plans
+    foundation/                     # Your own foundation docs
+    topics/                         # Your own topics
+    prompts/                        # Your own prompts
+    plans/                          # Your own plans
 
   .codectx/                         # Compiled output (gitignored)
-    manifest.yml                    # Compiled data map
+    manifest.yml                    # Compiled data map (what AI reads)
     README.md                       # Generated loading protocol
+    heuristics.yml                  # Size and token stats
+    objects/                        # Content-addressed files with rewritten links
     ...
 
   CLAUDE.md                         # AI entry point (created by codectx link)
   AGENTS.md                         # AI entry point (created by codectx link)
 ```
 
-Whether `docs/packages/` is checked into Git is the user's choice. The lock file ensures reproducibility regardless.
+Whether you check `docs/packages/` into Git is your choice. The lock file ensures reproducibility regardless.
 
 ## Related
 

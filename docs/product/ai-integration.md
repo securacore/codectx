@@ -1,40 +1,42 @@
 # AI Integration
 
-codectx bridges compiled documentation to AI coding tools. The `codectx link` command creates entry point files that AI tools discover automatically.
+codectx bridges your compiled documentation to AI coding tools. The `codectx link` command creates entry point files that AI tools discover and load automatically.
 
 ## Supported Tools
 
-| Tool | Entry Point |
-|---|---|
-| Claude Code | `CLAUDE.md` |
-| Cursor | `AGENTS.md` |
-| GitHub Copilot | `AGENTS.md` |
-| OpenCode | `AGENTS.md` |
+| Tool | Entry Point File | How it works |
+|---|---|---|
+| Claude Code | `CLAUDE.md` | Claude reads this file at the start of every session |
+| Cursor | `AGENTS.md` | Cursor loads agent instructions from this file |
+| GitHub Copilot | `AGENTS.md` | Copilot reads repository-level agent instructions |
+| OpenCode | `AGENTS.md` | OpenCode loads agent context from this file |
 
 ## How Linking Works
 
-`codectx link` creates entry point files at the repository root. Each file contains a single line referencing `.codectx/README.md`. Before creating a new entry point file, the command renames any existing file to `[file].[timestamp].bak` to preserve the original.
+Running `codectx link` creates entry point files at your repository root. Each file contains a single line pointing to `.codectx/README.md`, which bootstraps the loading protocol.
 
-Linking is a separate command from compilation. It is run once after initial setup or when the output directory changes.
+If an entry point file already exists (for example, you already have a `CLAUDE.md` with custom instructions), `codectx link` renames it to `[file].[timestamp].bak` before creating the new one. Your original content is never lost.
+
+Linking is a separate step from compilation. You typically run it once after initial setup, or again if you change the output directory.
 
 ## The Loading Protocol
 
-AI tools follow a predictable loading sequence:
+When an AI tool starts a session, it follows this sequence:
 
-1. **Entry point**: AI opens the entry point file (e.g., `CLAUDE.md`). It contains a single line pointing to `.codectx/README.md`.
-2. **README**: AI loads `README.md`, which describes the loading protocol and links to `manifest.yml`.
-3. **Data map**: AI loads `manifest.yml`. This is the compiled data map indexing all available documentation.
-4. **Foundation**: AI loads foundation documents marked `load: always`. This is the minimal initialization context.
-5. **On-demand loading**: As the task progresses, AI consults the data map to locate and load relevant topics, prompts, or plans.
-6. **Plan triage**: For plans, AI reads `state.yml` first to assess status without loading the full plan.
+1. **Entry point**: AI opens the entry point file (e.g., `CLAUDE.md`). It contains a single directive pointing to `.codectx/README.md`.
+2. **README**: AI loads `.codectx/README.md`, which describes the loading protocol and links to `manifest.yml`.
+3. **Data map**: AI loads `.codectx/manifest.yml` -- the compiled data map that indexes all available documentation.
+4. **Foundation**: AI loads foundation documents marked `load: always`. These are the minimum required context for every session.
+5. **On-demand loading**: As the task progresses, AI consults the data map to find and load relevant topics, prompts, or plans.
+6. **Plan triage**: For plans, AI reads `state.yml` first to assess status without loading the full plan document.
 
-This approach ensures AI never loads documentation blindly. The data map is the navigation layer that makes documentation consumption token-efficient.
+This protocol ensures AI never loads documentation blindly. The data map acts as a table of contents, and AI selectively loads only what the current task requires. Links within compiled documents reference other objects by their content-addressed filenames, so AI can navigate between related documents directly.
 
 ## Watch Mode
 
-`codectx watch` monitors your documentation source directory and recompiles automatically when files change. It uses filesystem events (fsnotify) with debouncing to avoid redundant compilations during rapid edits. New directories created under the watched tree are automatically monitored.
+`codectx watch` monitors your `docs/` directory and recompiles automatically whenever files change. It uses filesystem events (fsnotify) with debouncing to avoid redundant compilations during rapid edits. New directories created under the watched tree are automatically picked up.
 
-Watch mode is useful during documentation authoring: save a file, and the compiled output updates within seconds.
+Watch mode is useful during documentation authoring: save a file, and the compiled output updates within seconds. It also includes a polling heartbeat as a safety net for filesystem events that get missed.
 
 ## Related
 

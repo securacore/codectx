@@ -212,23 +212,40 @@ func Compile(cfg *config.Config) (*Result, error) {
 }
 
 // storeObjects iterates over the unified manifest and stores each referenced
-// file through the ObjectStore. It resolves the correct source directory for
-// each entry using the provenance map. Returns the pathToHash map and count.
+// file through the ObjectStore using a two-pass approach:
+//
+// Pass 1: Read all files, compute content hashes from raw source content, and
+// build the pathToHash map. Raw content is cached in memory for pass 2.
+//
+// Pass 2: Rewrite markdown links in each cached file to use content-addressed
+// object filenames (via rewriteLinks), then store the rewritten content under
+// the original raw-content hash. This preserves deduplication (hash reflects
+// source identity) while making links in compiled objects resolvable.
+//
+// It resolves the correct source directory for each entry using the provenance
+// map. Returns the pathToHash map and count.
 func storeObjects(
 	store *ObjectStore,
 	unified *manifest.Manifest,
 	srcDirs map[string]string,
 	provenance map[string]string,
 ) (map[string]string, int, error) {
-	pathToHash := make(map[string]string)
-	stored := 0
+	type cachedFile struct {
+		relPath string
+		data    []byte
+		hash    string
+	}
 
-	storeFile := func(section, id, relPath string) error {
+	pathToHash := make(map[string]string)
+	var cached []cachedFile
+
+	// Pass 1: Read all files, compute hashes, build pathToHash.
+	collectFile := func(section, id, relPath string) error {
 		if relPath == "" {
 			return nil
 		}
 		if _, ok := pathToHash[relPath]; ok {
-			return nil // already stored (same path, same content)
+			return nil // already collected (same path)
 		}
 
 		srcDir := srcDirs[provenance[section+":"+id]]
@@ -244,60 +261,66 @@ func storeObjects(
 			return fmt.Errorf("read %s from %s: %w", relPath, srcDir, err)
 		}
 
-		hash, err := store.Store(data)
-		if err != nil {
-			return err
-		}
-
+		hash := ContentHash(data)
 		pathToHash[relPath] = hash
-		stored++
+		cached = append(cached, cachedFile{relPath: relPath, data: data, hash: hash})
 		return nil
 	}
 
 	for _, e := range unified.Foundation {
-		if err := storeFile("foundation", e.ID, e.Path); err != nil {
-			return nil, stored, err
+		if err := collectFile("foundation", e.ID, e.Path); err != nil {
+			return nil, 0, err
 		}
 	}
 
 	for _, e := range unified.Application {
-		if err := storeFile("application", e.ID, e.Path); err != nil {
-			return nil, stored, err
+		if err := collectFile("application", e.ID, e.Path); err != nil {
+			return nil, 0, err
 		}
-		if err := storeFile("application", e.ID, e.Spec); err != nil {
-			return nil, stored, err
+		if err := collectFile("application", e.ID, e.Spec); err != nil {
+			return nil, 0, err
 		}
 		for _, f := range e.Files {
-			if err := storeFile("application", e.ID, f); err != nil {
-				return nil, stored, err
+			if err := collectFile("application", e.ID, f); err != nil {
+				return nil, 0, err
 			}
 		}
 	}
 
 	for _, e := range unified.Topics {
-		if err := storeFile("topics", e.ID, e.Path); err != nil {
-			return nil, stored, err
+		if err := collectFile("topics", e.ID, e.Path); err != nil {
+			return nil, 0, err
 		}
-		if err := storeFile("topics", e.ID, e.Spec); err != nil {
-			return nil, stored, err
+		if err := collectFile("topics", e.ID, e.Spec); err != nil {
+			return nil, 0, err
 		}
 		for _, f := range e.Files {
-			if err := storeFile("topics", e.ID, f); err != nil {
-				return nil, stored, err
+			if err := collectFile("topics", e.ID, f); err != nil {
+				return nil, 0, err
 			}
 		}
 	}
 
 	for _, e := range unified.Prompts {
-		if err := storeFile("prompts", e.ID, e.Path); err != nil {
-			return nil, stored, err
+		if err := collectFile("prompts", e.ID, e.Path); err != nil {
+			return nil, 0, err
 		}
 	}
 
 	for _, e := range unified.Plans {
-		if err := storeFile("plans", e.ID, e.Path); err != nil {
+		if err := collectFile("plans", e.ID, e.Path); err != nil {
+			return nil, 0, err
+		}
+	}
+
+	// Pass 2: Rewrite links and store objects.
+	stored := 0
+	for _, cf := range cached {
+		rewritten := rewriteLinks(cf.data, cf.relPath, pathToHash)
+		if err := store.StoreAs(cf.hash, rewritten); err != nil {
 			return nil, stored, err
 		}
+		stored++
 	}
 
 	return pathToHash, stored, nil

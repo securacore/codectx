@@ -184,6 +184,13 @@ func TestCheck_staleCache(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", dir)
 	t.Setenv("CODECTX_NO_UPDATE_CHECK", "")
 
+	// Point releaseURL at a closed server so FetchLatest always fails.
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	ts.Close()
+	old := releaseURL
+	releaseURL = ts.URL
+	t.Cleanup(func() { releaseURL = old })
+
 	// Write a stale cache entry (25 hours old).
 	cacheDir := filepath.Join(dir, "codectx")
 	require.NoError(t, os.MkdirAll(cacheDir, 0o755))
@@ -198,7 +205,7 @@ func TestCheck_staleCache(t *testing.T) {
 		0o644,
 	))
 
-	// With no real server, fetchLatest will fail and Check returns nil.
+	// FetchLatest fails (closed server), so Check returns nil.
 	result := Check("0.1.0")
 	assert.Nil(t, result)
 }

@@ -252,6 +252,36 @@ func TestPrune_skipsSubdirectories(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestStoreAs_failsMkdirAll(t *testing.T) {
+	// Create a file where the objects directory needs to be — MkdirAll will fail.
+	dir := t.TempDir()
+	blocker := filepath.Join(dir, "objects")
+	require.NoError(t, os.WriteFile(blocker, []byte("not a dir"), 0o644))
+
+	store := NewObjectStore(blocker)
+	err := store.StoreAs("abcdef1234567890", []byte("should fail"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "create objects directory")
+}
+
+func TestStoreAs_failsWriteFile(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("cannot test permission denial as root")
+	}
+	dir := t.TempDir()
+	objDir := filepath.Join(dir, "objects")
+	require.NoError(t, os.MkdirAll(objDir, 0o755))
+
+	// Make the directory read-only so WriteFile fails.
+	require.NoError(t, os.Chmod(objDir, 0o555))
+	t.Cleanup(func() { _ = os.Chmod(objDir, 0o755) })
+
+	store := NewObjectStore(objDir)
+	err := store.StoreAs("abcdef1234567890", []byte("should fail"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "write object")
+}
+
 func TestStore_failsMkdirAll(t *testing.T) {
 	// Create a file where the objects directory needs to be — MkdirAll will fail.
 	dir := t.TempDir()
@@ -262,6 +292,24 @@ func TestStore_failsMkdirAll(t *testing.T) {
 	_, err := store.Store([]byte("should fail"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "create objects directory")
+}
+
+func TestStore_failsWriteFile(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("cannot test permission denial as root")
+	}
+	dir := t.TempDir()
+	objDir := filepath.Join(dir, "objects")
+	require.NoError(t, os.MkdirAll(objDir, 0o755))
+
+	// Make the directory read-only so WriteFile fails.
+	require.NoError(t, os.Chmod(objDir, 0o555))
+	t.Cleanup(func() { _ = os.Chmod(objDir, 0o755) })
+
+	store := NewObjectStore(objDir)
+	_, err := store.Store([]byte("should fail"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "write object")
 }
 
 func TestPrune_failsRemove(t *testing.T) {

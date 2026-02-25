@@ -1,49 +1,61 @@
 # Package Format
 
-Every documentation package follows the same structure, whether it is the project's local documentation or an installed dependency. A package is a directory containing a `manifest.yml` manifest and optional documentation directories.
+A codectx package is a directory of Markdown documentation files organized by convention. Packages follow the same structure whether they're your project's local documentation in `docs/` or an installed dependency in `docs/packages/`.
 
 ## Structure
 
 ```text
 [package]/
-  manifest.yml
-  foundation/
-  topics/
-  prompts/
-  plans/
+  manifest.yml          # Optional: declares entries, metadata, and relationships
+  foundation/           # Always-loaded context documents
+  topics/               # On-demand topic documentation
+    [topic-name]/
+      README.md         # Entry point for the topic
+      spec/             # Optional: design decisions for this topic
+        README.md
+      *.md              # Additional files for this topic
+  prompts/              # Executable AI instructions
+  plans/                # Implementation plans with state tracking
     [plan-name]/
       README.md
       state.yml
 ```
 
-Not every package contains all directories. A package may provide only topics, or only prompts, or any combination.
+Not every package contains all directories. A package may provide only topics, or only foundation documents, or any combination.
 
-## The Data Map (`manifest.yml`)
+## The Manifest (`manifest.yml`)
 
-Every package has a `manifest.yml` at its root. This file is the data map: a navigation index that tells AI what documentation exists and how to load it. It is validated by [manifest.schema.json](../schemas/manifest.schema.json).
+A package's `manifest.yml` is its data map: a YAML file that tells codectx what documentation exists and how entries relate to each other. It's validated by [manifest.schema.json](../schemas/manifest.schema.json).
 
-`manifest.yml` contains:
+**The manifest is optional.** If a package doesn't include a `manifest.yml`, codectx auto-discovers entries from the directory structure during compilation. Files in `foundation/` become foundation entries, directories in `topics/` with a `README.md` become topic entries, and so on. Auto-discovery extracts descriptions from the first `# Heading` in each file.
+
+When a manifest IS present, it contains:
 
 - **Package metadata**: name, author, version, description
-- **Documentation entries** organized into four sections: foundation, topics, prompts, plans
+- **Documentation entries** organized into sections: foundation, application, topics, prompts, plans
+- **Dependency relationships** (`depends_on` / `required_by`) between entries
 
-Each entry in the data map has:
+Each entry has:
 
-- A unique ID
+- A unique ID (derived from the filename or directory name)
 - A file path relative to the package root
 - A description
-- Dependency relationships (`depends_on` / `required_by`)
+- Optional dependency edges to other entries
 
 ### Foundation Entries
 
-Foundation entries have a `load` field that controls when they are loaded into AI context:
+Foundation entries represent always-available context like coding principles, conventions, or standards. They have a `load` field that controls when AI loads them:
 
-- `always` -- loaded at the start of every session
+- `always` -- loaded at the start of every AI session
 - `documentation` -- loaded only when the task involves documentation work
+
+### Topic Entries
+
+Topic entries are on-demand reference documentation, typically organized by technology or domain (e.g., React, Go, API patterns). A topic entry points to a `README.md` and can include additional files and a spec directory.
 
 ### Plan Entries
 
-Plan entries have a `state` field pointing to a `state.yml` file for lightweight status tracking. AI reads `state.yml` first to assess plan status without loading the full plan document.
+Plan entries describe implementation work. Each plan has a `state` field pointing to a `state.yml` file for lightweight status tracking. AI reads `state.yml` first to assess plan status without loading the full plan document.
 
 ## Naming and Resolution
 
@@ -61,6 +73,17 @@ The `codectx-` prefix is always implied. `react@org` resolves to the `codectx-re
 Versions follow semver. Range syntax is supported: `^1.0.0` (compatible), `~1.0.0` (patch-level), `1.0.0` (exact). Versions are resolved from Git tags in semver format (e.g., `v1.0.0`).
 
 Package resolution is Git-first. Packages are fetched from Git repositories. The source URL is either specified explicitly in `codectx.yml` or inferred from the name and author. The naming convention is designed to support a future package registry without breaking changes.
+
+## Source Manifest vs. Compiled Manifest
+
+There are two kinds of `manifest.yml` in a codectx project:
+
+| Manifest | Location | Purpose |
+|---|---|---|
+| **Source** | `docs/manifest.yml` and `docs/packages/[name]@[author]/manifest.yml` | Indexes source documentation with relative file paths. Authored by humans (or auto-generated). |
+| **Compiled** | `.codectx/manifest.yml` | Indexes compiled output with content-addressed object paths. Generated by `codectx compile`. |
+
+See [Compilation](compilation.md) for details on how the source manifest is transformed into the compiled manifest.
 
 ## Plans and State Tracking
 

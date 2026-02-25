@@ -1270,3 +1270,203 @@ func TestCompile_syncInfersRelationshipsInCompiledOutput(t *testing.T) {
 	}
 	assert.True(t, foundAlpha, "alpha entry should exist in reloaded manifest")
 }
+
+// --- storeObjects unit tests ---
+// These tests exercise storeObjects directly to cover edge cases that are
+// difficult to trigger through the full Compile integration path.
+
+func TestStoreObjects_dedupByPath(t *testing.T) {
+	// When two entries reference the same file path, the file should be
+	// stored only once (dedup-by-path on line 247-249 of Compile.go).
+	dir := t.TempDir()
+	srcDir := filepath.Join(dir, "docs")
+	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, "foundation"), 0o755))
+
+	sharedContent := []byte("# Shared\nShared content.\n")
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "foundation", "shared.md"), sharedContent, 0o644))
+
+	store := NewObjectStore(filepath.Join(dir, "objects"))
+	unified := &manifest.Manifest{
+		Foundation: []manifest.FoundationEntry{
+			{ID: "a", Path: "foundation/shared.md"},
+			{ID: "b", Path: "foundation/shared.md"}, // same path as "a"
+		},
+	}
+	srcDirs := map[string]string{"local": srcDir}
+	provenance := map[string]string{
+		"foundation:a": "local",
+		"foundation:b": "local",
+	}
+
+	pathToHash, stored, err := storeObjects(store, unified, srcDirs, provenance)
+	require.NoError(t, err)
+
+	// Only 1 object should be stored (same path deduped).
+	assert.Equal(t, 1, stored)
+	assert.Len(t, pathToHash, 1)
+	assert.Equal(t, ContentHash(sharedContent), pathToHash["foundation/shared.md"])
+}
+
+func TestStoreObjects_emptyProvenanceKeySkipsFile(t *testing.T) {
+	// When provenance has no entry for a section:id key, srcDir is "" and
+	// the file is silently skipped (line 252-254 of Compile.go).
+	dir := t.TempDir()
+	srcDir := filepath.Join(dir, "docs")
+	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, "foundation"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "foundation", "orphan.md"), []byte("# Orphan\n"), 0o644))
+
+	store := NewObjectStore(filepath.Join(dir, "objects"))
+	unified := &manifest.Manifest{
+		Foundation: []manifest.FoundationEntry{
+			{ID: "orphan", Path: "foundation/orphan.md"},
+		},
+	}
+	srcDirs := map[string]string{"local": srcDir}
+	// Provenance is empty — no mapping for "foundation:orphan".
+	provenance := map[string]string{}
+
+	pathToHash, stored, err := storeObjects(store, unified, srcDirs, provenance)
+	require.NoError(t, err)
+
+	// File should be skipped entirely.
+	assert.Equal(t, 0, stored)
+	assert.Empty(t, pathToHash)
+}
+
+func TestStoreObjects_skipsMissingFiles(t *testing.T) {
+	// When a file referenced by an entry doesn't exist on disk, it should
+	// be silently skipped (line 258-259 of Compile.go).
+	dir := t.TempDir()
+	srcDir := filepath.Join(dir, "docs")
+	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, "foundation"), 0o755))
+	// Do NOT write the file to disk.
+
+	store := NewObjectStore(filepath.Join(dir, "objects"))
+	unified := &manifest.Manifest{
+		Foundation: []manifest.FoundationEntry{
+			{ID: "missing", Path: "foundation/missing.md"},
+		},
+	}
+	srcDirs := map[string]string{"local": srcDir}
+	provenance := map[string]string{"foundation:missing": "local"}
+
+	pathToHash, stored, err := storeObjects(store, unified, srcDirs, provenance)
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, stored)
+	assert.Empty(t, pathToHash)
+}
+
+func TestStoreObjects_readErrorNonNotExist(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("cannot test permission denial as root")
+	}
+	// When a file exists but is unreadable, storeObjects should return an error
+	// (line 261 of Compile.go).
+	dir := t.TempDir()
+	srcDir := filepath.Join(dir, "docs")
+	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, "foundation"), 0o755))
+
+	unreadable := filepath.Join(srcDir, "foundation", "secret.md")
+	require.NoError(t, os.WriteFile(unreadable, []byte("# Secret\n"), 0o000))
+	t.Cleanup(func() { _ = os.Chmod(unreadable, 0o644) })
+
+	store := NewObjectStore(filepath.Join(dir, "objects"))
+	unified := &manifest.Manifest{
+		Foundation: []manifest.FoundationEntry{
+			{ID: "secret", Path: "foundation/secret.md"},
+		},
+	}
+	srcDirs := map[string]string{"local": srcDir}
+	provenance := map[string]string{"foundation:secret": "local"}
+
+	_, _, err := storeObjects(store, unified, srcDirs, provenance)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "read")
+}
+
+func TestStoreObjects_storeAsFailureDuringPass2(t *testing.T) {
+	// When StoreAs fails during pass 2 (line 320-321), storeObjects should
+	// return the error with the count of files stored before the failure.
+	dir := t.TempDir()
+	srcDir := filepath.Join(dir, "docs")
+	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, "foundation"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "foundation", "doc.md"), []byte("# Doc\n"), 0o644))
+
+	// Create a blocker file where the objects directory needs to be.
+	objPath := filepath.Join(dir, "objects")
+	require.NoError(t, os.WriteFile(objPath, []byte("not a dir"), 0o644))
+
+	store := NewObjectStore(objPath)
+	unified := &manifest.Manifest{
+		Foundation: []manifest.FoundationEntry{
+			{ID: "doc", Path: "foundation/doc.md"},
+		},
+	}
+	srcDirs := map[string]string{"local": srcDir}
+	provenance := map[string]string{"foundation:doc": "local"}
+
+	_, stored, err := storeObjects(store, unified, srcDirs, provenance)
+	require.Error(t, err)
+	assert.Equal(t, 0, stored)
+	assert.Contains(t, err.Error(), "create objects directory")
+}
+
+func TestStoreObjects_applicationSpecAndFiles(t *testing.T) {
+	// Verify storeObjects correctly collects Spec and Files from application entries.
+	dir := t.TempDir()
+	srcDir := filepath.Join(dir, "docs")
+	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, "application", "arch", "spec"), 0o755))
+
+	mainContent := []byte("# Architecture\n")
+	specContent := []byte("# Spec\n")
+	fileContent := []byte("# Details\n")
+
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "application", "arch", "README.md"), mainContent, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "application", "arch", "spec", "README.md"), specContent, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "application", "arch", "details.md"), fileContent, 0o644))
+
+	store := NewObjectStore(filepath.Join(dir, "objects"))
+	unified := &manifest.Manifest{
+		Application: []manifest.ApplicationEntry{
+			{
+				ID:    "arch",
+				Path:  "application/arch/README.md",
+				Spec:  "application/arch/spec/README.md",
+				Files: []string{"application/arch/details.md"},
+			},
+		},
+	}
+	srcDirs := map[string]string{"local": srcDir}
+	provenance := map[string]string{"application:arch": "local"}
+
+	pathToHash, stored, err := storeObjects(store, unified, srcDirs, provenance)
+	require.NoError(t, err)
+
+	assert.Equal(t, 3, stored)
+	assert.Len(t, pathToHash, 3)
+	assert.Equal(t, ContentHash(mainContent), pathToHash["application/arch/README.md"])
+	assert.Equal(t, ContentHash(specContent), pathToHash["application/arch/spec/README.md"])
+	assert.Equal(t, ContentHash(fileContent), pathToHash["application/arch/details.md"])
+}
+
+func TestStoreObjects_emptyRelPathSkipped(t *testing.T) {
+	// Entries with empty Path should be silently skipped (line 244-246).
+	dir := t.TempDir()
+	srcDir := filepath.Join(dir, "docs")
+	require.NoError(t, os.MkdirAll(srcDir, 0o755))
+
+	store := NewObjectStore(filepath.Join(dir, "objects"))
+	unified := &manifest.Manifest{
+		Foundation: []manifest.FoundationEntry{
+			{ID: "empty", Path: ""},
+		},
+	}
+	srcDirs := map[string]string{"local": srcDir}
+	provenance := map[string]string{"foundation:empty": "local"}
+
+	pathToHash, stored, err := storeObjects(store, unified, srcDirs, provenance)
+	require.NoError(t, err)
+	assert.Equal(t, 0, stored)
+	assert.Empty(t, pathToHash)
+}
