@@ -41,7 +41,7 @@ func setupWatchProject(t *testing.T) string {
 		Name:    "watch-test",
 		Version: "1.0.0",
 	}
-	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), m))
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
 
 	return dir
 }
@@ -122,7 +122,7 @@ func TestRun_detectsFileChange(t *testing.T) {
 		Version:     "1.0.1",
 		Description: "Updated",
 	}
-	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), m))
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
 
 	// Wait for the change-triggered compile.
 	select {
@@ -141,7 +141,10 @@ func TestRun_debounce(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	w := New("codectx.yml", WithDebounce(200*time.Millisecond))
+	w := New("codectx.yml",
+		WithDebounce(200*time.Millisecond),
+		WithPollInterval(0), // disable polling to avoid interference
+	)
 
 	go func() {
 		_ = w.Run(ctx)
@@ -154,13 +157,13 @@ func TestRun_debounce(t *testing.T) {
 		t.Fatal("timed out waiting for initial compile")
 	}
 
-	// Write to package.yml multiple times rapidly -- should coalesce.
+	// Write to manifest.yml multiple times rapidly -- should coalesce.
 	for i := range 5 {
 		m := &manifest.Manifest{
 			Name:    "watch-test",
 			Version: fmt.Sprintf("1.0.%d", i+1),
 		}
-		require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), m))
+		require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
 		time.Sleep(10 * time.Millisecond)
 	}
 
@@ -174,6 +177,8 @@ func TestRun_debounce(t *testing.T) {
 	}
 
 	// Verify no additional compile result arrives (debouncing worked).
+	// The conditional manifest.Write prevents Compile's sync write-back
+	// from generating a self-triggering filesystem event.
 	select {
 	case <-w.Results():
 		t.Fatal("received unexpected second compile result")
@@ -238,7 +243,7 @@ func TestRun_compileErrorContinues(t *testing.T) {
 	// Corrupt the package manifest to cause a compile error.
 	// This changes the watched file content, triggering an event.
 	require.NoError(t, os.WriteFile(
-		filepath.Join(docsDir, "package.yml"),
+		filepath.Join(docsDir, "manifest.yml"),
 		[]byte("{{{{not valid yaml"), 0o644))
 
 	// The error result should be received but the watcher continues.
@@ -251,7 +256,7 @@ func TestRun_compileErrorContinues(t *testing.T) {
 
 	// Fix the manifest to trigger another change.
 	m := &manifest.Manifest{Name: "watch-test", Version: "1.0.1"}
-	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), m))
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
 
 	// Should get a successful compile.
 	select {
@@ -290,11 +295,11 @@ func TestRun_newDirectoryWatched(t *testing.T) {
 	newDir := filepath.Join(docsDir, "topics", "newlang")
 	require.NoError(t, os.MkdirAll(newDir, 0o755))
 
-	// Now modify package.yml so the fingerprint changes, to verify
+	// Now modify manifest.yml so the fingerprint changes, to verify
 	// the watcher is still functional after adding the new directory.
 	time.Sleep(200 * time.Millisecond) // let dir creation event settle
 	m := &manifest.Manifest{Name: "watch-test", Version: "2.0.0"}
-	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), m))
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
 
 	// Should trigger a compile (may get UpToDate from dir create first).
 	deadline := time.After(5 * time.Second)
@@ -454,7 +459,7 @@ func TestRun_docsDirChange(t *testing.T) {
 	// Brief pause to ensure watcher is fully set up.
 	time.Sleep(100 * time.Millisecond)
 
-	// Create the alternative docs directory with its own package.yml.
+	// Create the alternative docs directory with its own manifest.yml.
 	newDocsDir := filepath.Join(dir, "documentation")
 	for _, sub := range []string{"foundation", "topics", "prompts", "plans"} {
 		require.NoError(t, os.MkdirAll(filepath.Join(newDocsDir, sub), 0o755))
@@ -463,7 +468,7 @@ func TestRun_docsDirChange(t *testing.T) {
 		Name:    "watch-test",
 		Version: "1.0.0",
 	}
-	require.NoError(t, manifest.Write(filepath.Join(newDocsDir, "package.yml"), m))
+	require.NoError(t, manifest.Write(filepath.Join(newDocsDir, "manifest.yml"), m))
 
 	// Modify codectx.yml to point docs_dir to "documentation".
 	cfg := &config.Config{
@@ -491,7 +496,7 @@ func TestRun_docsDirChange(t *testing.T) {
 		Version:     "2.0.0",
 		Description: "Updated in new docs dir",
 	}
-	require.NoError(t, manifest.Write(filepath.Join(newDocsDir, "package.yml"), m2))
+	require.NoError(t, manifest.Write(filepath.Join(newDocsDir, "manifest.yml"), m2))
 
 	// Verify a compile is triggered from the new docs directory.
 	deadline := time.After(5 * time.Second)
@@ -506,4 +511,174 @@ func TestRun_docsDirChange(t *testing.T) {
 			t.Fatal("timed out waiting for compile from new docs directory")
 		}
 	}
+}
+
+// --- Sync integration tests ---
+
+func TestRun_initialCompileIncludesSyncResult(t *testing.T) {
+	setupWatchProject(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	w := New("codectx.yml", WithDebounce(50*time.Millisecond), WithPollInterval(0))
+
+	go func() {
+		_ = w.Run(ctx)
+	}()
+
+	select {
+	case result := <-w.Results():
+		assert.NoError(t, result.Error)
+		assert.NotNil(t, result.Sync, "initial compile should include sync result")
+		assert.Equal(t, 0, result.Sync.Entries)
+		assert.Equal(t, 0, result.Sync.Discovered)
+		assert.Equal(t, 0, result.Sync.Removed)
+		assert.Equal(t, 0, result.Sync.Relationships)
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for initial compile")
+	}
+}
+
+func TestRun_syncReportsDiscoveredEntry(t *testing.T) {
+	dir := setupWatchProject(t)
+	docsDir := filepath.Join(dir, "docs")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	w := New("codectx.yml", WithDebounce(100*time.Millisecond), WithPollInterval(0))
+
+	go func() {
+		_ = w.Run(ctx)
+	}()
+
+	// Consume initial compile (empty project).
+	select {
+	case result := <-w.Results():
+		require.NoError(t, result.Error)
+		require.NotNil(t, result.Sync)
+		assert.Equal(t, 0, result.Sync.Entries)
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for initial compile")
+	}
+
+	// Brief pause to ensure watcher is set up.
+	time.Sleep(100 * time.Millisecond)
+
+	// Create a new foundation file that Sync will discover.
+	require.NoError(t, os.WriteFile(
+		filepath.Join(docsDir, "foundation", "new-doc.md"),
+		[]byte("# New Document\n"), 0o644))
+
+	// The file creation triggers a compile. Sync should discover the entry.
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case result := <-w.Results():
+			if result.Error != nil {
+				continue
+			}
+			if result.Sync != nil && result.Sync.Discovered > 0 {
+				assert.Equal(t, 1, result.Sync.Discovered)
+				assert.Equal(t, 1, result.Sync.Entries)
+				return // success
+			}
+			// May get UpToDate results; keep waiting.
+		case <-deadline:
+			t.Fatal("timed out waiting for sync to discover new entry")
+		}
+	}
+}
+
+func TestRun_syncReportsRelationships(t *testing.T) {
+	dir := setupWatchProject(t)
+	docsDir := filepath.Join(dir, "docs")
+
+	// Pre-create two foundation files that link to each other.
+	require.NoError(t, os.WriteFile(
+		filepath.Join(docsDir, "foundation", "alpha.md"),
+		[]byte("# Alpha\nSee [beta](beta.md).\n"), 0o644))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(docsDir, "foundation", "beta.md"),
+		[]byte("# Beta\nSee [alpha](alpha.md).\n"), 0o644))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	w := New("codectx.yml", WithDebounce(50*time.Millisecond), WithPollInterval(0))
+
+	go func() {
+		_ = w.Run(ctx)
+	}()
+
+	// Initial compile should discover both entries and infer relationships.
+	select {
+	case result := <-w.Results():
+		require.NoError(t, result.Error)
+		require.NotNil(t, result.Sync)
+		assert.Equal(t, 2, result.Sync.Entries)
+		assert.Equal(t, 2, result.Sync.Discovered)
+		// alpha→beta and beta→alpha = 2 depends_on relationships.
+		assert.Equal(t, 2, result.Sync.Relationships)
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for initial compile")
+	}
+}
+
+// --- Helper unit tests ---
+
+func TestCountManifestEntries(t *testing.T) {
+	m := &manifest.Manifest{
+		Foundation:  []manifest.FoundationEntry{{ID: "a"}, {ID: "b"}},
+		Application: []manifest.ApplicationEntry{{ID: "c"}},
+		Topics:      []manifest.TopicEntry{{ID: "d"}, {ID: "e"}, {ID: "f"}},
+		Prompts:     []manifest.PromptEntry{{ID: "g"}},
+		Plans:       []manifest.PlanEntry{{ID: "h"}},
+	}
+	assert.Equal(t, 8, countManifestEntries(m))
+}
+
+func TestCountManifestEntries_empty(t *testing.T) {
+	m := &manifest.Manifest{}
+	assert.Equal(t, 0, countManifestEntries(m))
+}
+
+func TestCountRelationships_watch(t *testing.T) {
+	m := &manifest.Manifest{
+		Foundation: []manifest.FoundationEntry{
+			{ID: "a", DependsOn: []string{"b", "c"}},
+			{ID: "b", DependsOn: []string{"a"}},
+		},
+		Topics: []manifest.TopicEntry{
+			{ID: "d", DependsOn: []string{"a"}},
+		},
+	}
+	assert.Equal(t, 4, countRelationships(m))
+}
+
+func TestCountRelationships_empty(t *testing.T) {
+	m := &manifest.Manifest{}
+	assert.Equal(t, 0, countRelationships(m))
+}
+
+func TestCountRelationships_allSections(t *testing.T) {
+	m := &manifest.Manifest{
+		Foundation: []manifest.FoundationEntry{
+			{ID: "a", DependsOn: []string{"b"}},
+		},
+		Application: []manifest.ApplicationEntry{
+			{ID: "b", DependsOn: []string{"c", "d"}},
+		},
+		Topics: []manifest.TopicEntry{
+			{ID: "c", DependsOn: []string{"a"}},
+		},
+		Prompts: []manifest.PromptEntry{
+			{ID: "d", DependsOn: []string{"a"}},
+		},
+		Plans: []manifest.PlanEntry{
+			{ID: "e", DependsOn: []string{"a", "b"}},
+		},
+	}
+	assert.Equal(t, 7, countRelationships(m))
 }

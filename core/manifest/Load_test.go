@@ -11,7 +11,7 @@ import (
 
 func TestLoad_minimal(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "package.yml")
+	path := filepath.Join(dir, "manifest.yml")
 
 	content := `name: test-pkg
 author: test-author
@@ -31,7 +31,7 @@ description: A test package
 
 func TestLoad_withEntries(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "package.yml")
+	path := filepath.Join(dir, "manifest.yml")
 
 	content := `name: full-pkg
 author: org
@@ -84,7 +84,7 @@ plans:
 
 func TestLoad_schemaValidationFailure(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "package.yml")
+	path := filepath.Join(dir, "manifest.yml")
 
 	// Missing required fields.
 	content := `name: bad-pkg
@@ -98,7 +98,7 @@ func TestLoad_schemaValidationFailure(t *testing.T) {
 }
 
 func TestLoad_nonexistentFile(t *testing.T) {
-	_, err := Load("/nonexistent/package.yml")
+	_, err := Load("/nonexistent/manifest.yml")
 	assert.Error(t, err)
 }
 
@@ -106,7 +106,7 @@ func TestLoad_nonexistentFile(t *testing.T) {
 
 func TestLoad_invalidYAML(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "package.yml")
+	path := filepath.Join(dir, "manifest.yml")
 
 	err := os.WriteFile(path, []byte(":\n  :\n- {\n  invalid:\n"), 0o644)
 	require.NoError(t, err)
@@ -118,7 +118,7 @@ func TestLoad_invalidYAML(t *testing.T) {
 
 func TestLoad_dependsOnRequiredBy(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "package.yml")
+	path := filepath.Join(dir, "manifest.yml")
 
 	content := `name: dep-pkg
 author: test-author
@@ -153,7 +153,7 @@ topics:
 
 func TestLoad_multipleEntriesPerSection(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "package.yml")
+	path := filepath.Join(dir, "manifest.yml")
 
 	content := `name: multi-pkg
 author: test-author
@@ -195,7 +195,7 @@ topics:
 
 func TestLoad_withPromptsAndPlans(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "package.yml")
+	path := filepath.Join(dir, "manifest.yml")
 
 	content := `name: prompts-plans-pkg
 author: test-author
@@ -243,7 +243,7 @@ plans:
 
 func TestWrite_standalone(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "package.yml")
+	path := filepath.Join(dir, "manifest.yml")
 
 	m := &Manifest{
 		Name:        "standalone-pkg",
@@ -265,7 +265,7 @@ func TestWrite_standalone(t *testing.T) {
 
 func TestWrite_withAllSections(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "package.yml")
+	path := filepath.Join(dir, "manifest.yml")
 
 	m := &Manifest{
 		Name:        "all-sections-pkg",
@@ -313,13 +313,13 @@ func TestWrite_invalidPath(t *testing.T) {
 		Description: "Invalid path test",
 	}
 
-	err := Write("/nonexistent/deep/package.yml", m)
+	err := Write("/nonexistent/deep/manifest.yml", m)
 	assert.Error(t, err)
 }
 
 func TestWrite_overwriteExisting(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "package.yml")
+	path := filepath.Join(dir, "manifest.yml")
 
 	first := &Manifest{
 		Name:        "first-pkg",
@@ -352,7 +352,7 @@ func TestWrite_overwriteExisting(t *testing.T) {
 
 func TestWriteAndLoad_roundTrip(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "package.yml")
+	path := filepath.Join(dir, "manifest.yml")
 
 	original := &Manifest{
 		Name:        "round-trip-pkg",
@@ -396,7 +396,7 @@ topics:
     depends_on: [core-principles]
     required_by: [react-patterns]
 `
-	path := filepath.Join(dir, "package.yml")
+	path := filepath.Join(dir, "manifest.yml")
 	require.NoError(t, os.WriteFile(path, []byte(yaml), 0o644))
 
 	m, err := Load(path)
@@ -419,7 +419,7 @@ prompts:
     depends_on: [conventions]
     required_by: [review]
 `
-	path := filepath.Join(dir, "package.yml")
+	path := filepath.Join(dir, "manifest.yml")
 	require.NoError(t, os.WriteFile(path, []byte(yaml), 0o644))
 
 	m, err := Load(path)
@@ -443,7 +443,7 @@ plans:
     depends_on: [schema-design]
     required_by: [deployment]
 `
-	path := filepath.Join(dir, "package.yml")
+	path := filepath.Join(dir, "manifest.yml")
 	require.NoError(t, os.WriteFile(path, []byte(yaml), 0o644))
 
 	m, err := Load(path)

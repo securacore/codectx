@@ -16,7 +16,7 @@ import (
 
 // releaseAssetName is the conventional filename for the package tarball
 // in GitHub Releases. Package release workflows produce this asset
-// containing the package contents with package.yml at the archive root.
+// containing the package contents with manifest.yml at the archive root.
 const releaseAssetName = "package.tar.gz"
 
 // githubRelease maps the subset of the GitHub release response needed

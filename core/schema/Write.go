@@ -9,7 +9,7 @@ import (
 // schemaFiles lists all embedded schema files.
 var schemaFiles = []string{
 	CodectxSchemaFile,
-	PackageSchemaFile,
+	ManifestSchemaFile,
 	StateSchemaFile,
 }
 

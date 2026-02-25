@@ -1,12 +1,12 @@
 # Package Format
 
-Every documentation package follows the same structure, whether it is the project's local documentation or an installed dependency. A package is a directory containing a `package.yml` manifest and optional documentation directories.
+Every documentation package follows the same structure, whether it is the project's local documentation or an installed dependency. A package is a directory containing a `manifest.yml` manifest and optional documentation directories.
 
 ## Structure
 
 ```text
 [package]/
-  package.yml
+  manifest.yml
   foundation/
   topics/
   prompts/
@@ -18,11 +18,11 @@ Every documentation package follows the same structure, whether it is the projec
 
 Not every package contains all directories. A package may provide only topics, or only prompts, or any combination.
 
-## The Data Map (`package.yml`)
+## The Data Map (`manifest.yml`)
 
-Every package has a `package.yml` at its root. This file is the data map: a navigation index that tells AI what documentation exists and how to load it. It is validated by [package.schema.json](../schemas/package.schema.json).
+Every package has a `manifest.yml` at its root. This file is the data map: a navigation index that tells AI what documentation exists and how to load it. It is validated by [manifest.schema.json](../schemas/manifest.schema.json).
 
-`package.yml` contains:
+`manifest.yml` contains:
 
 - **Package metadata**: name, author, version, description
 - **Documentation entries** organized into four sections: foundation, topics, prompts, plans

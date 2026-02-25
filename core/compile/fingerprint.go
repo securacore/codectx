@@ -30,7 +30,7 @@ func computeFingerprint(cfg *config.Config) (string, error) {
 	docsDir := cfg.DocsDir()
 
 	// Hash the local package manifest.
-	localManifestPath := filepath.Join(docsDir, packageFile)
+	localManifestPath := filepath.Join(docsDir, manifestFile)
 	if err := hashFile(h, localManifestPath); err != nil {
 		return "", fmt.Errorf("hash local manifest: %w", err)
 	}
@@ -40,6 +40,7 @@ func computeFingerprint(cfg *config.Config) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("load local manifest for fingerprint: %w", err)
 	}
+	localManifest = manifest.Sync(docsDir, localManifest)
 	if err := hashManifestFiles(h, localManifest, docsDir); err != nil {
 		return "", fmt.Errorf("hash local files: %w", err)
 	}
@@ -47,7 +48,7 @@ func computeFingerprint(cfg *config.Config) (string, error) {
 	// Hash installed package manifests and their files.
 	for _, pkg := range cfg.Packages {
 		pkgDir := filepath.Join(docsDir, "packages", fmt.Sprintf("%s@%s", pkg.Name, pkg.Author))
-		pkgManifestPath := filepath.Join(pkgDir, packageFile)
+		pkgManifestPath := filepath.Join(pkgDir, manifestFile)
 
 		if err := hashFile(h, pkgManifestPath); err != nil {
 			// Package directory may not exist yet (not fetched).
@@ -65,6 +66,7 @@ func computeFingerprint(cfg *config.Config) (string, error) {
 		if err != nil {
 			continue
 		}
+		pkgManifest = manifest.Discover(pkgDir, pkgManifest)
 
 		if err := hashManifestFiles(h, pkgManifest, pkgDir); err != nil {
 			return "", fmt.Errorf("hash package %s@%s files: %w", pkg.Name, pkg.Author, err)
@@ -93,6 +95,13 @@ func hashManifestFiles(h hash.Hash, m *manifest.Manifest, baseDir string) error 
 
 	for _, e := range m.Foundation {
 		paths = append(paths, e.Path)
+	}
+	for _, e := range m.Application {
+		paths = append(paths, e.Path)
+		if e.Spec != "" {
+			paths = append(paths, e.Spec)
+		}
+		paths = append(paths, e.Files...)
 	}
 	for _, e := range m.Topics {
 		paths = append(paths, e.Path)

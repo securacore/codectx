@@ -9,7 +9,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Load reads and parses a package.yml file from the given path.
+// Load reads and parses a manifest.yml file from the given path.
 // It validates the parsed content against the package JSON schema.
 func Load(path string) (*Manifest, error) {
 	data, err := os.ReadFile(path)
@@ -23,7 +23,7 @@ func Load(path string) (*Manifest, error) {
 		return nil, fmt.Errorf("parse manifest %s: %w", path, err)
 	}
 
-	if err := schema.Validate(schema.PackageSchemaFile, raw); err != nil {
+	if err := schema.Validate(schema.ManifestSchemaFile, raw); err != nil {
 		return nil, fmt.Errorf("validate manifest %s: %w", path, err)
 	}
 

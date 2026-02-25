@@ -241,3 +241,101 @@ func TestSearch_emptyQuery(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, results)
 }
+
+// --- Search (direct, via searchBaseURL override) ---
+
+func TestSearch_queryOnly(t *testing.T) {
+	var capturedQuery string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedQuery = r.URL.Query().Get("q")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"total_count": 1,
+			"items": [{
+				"full_name": "org/codectx-react",
+				"name": "codectx-react",
+				"description": "React docs",
+				"html_url": "https://github.com/org/codectx-react",
+				"stargazers_count": 42,
+				"owner": {"login": "org"}
+			}]
+		}`))
+	}))
+	defer ts.Close()
+
+	origBase := searchBaseURL
+	searchBaseURL = ts.URL
+	t.Cleanup(func() { searchBaseURL = origBase })
+
+	results, err := Search("react", "")
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, "react", results[0].Name)
+	assert.Equal(t, "org", results[0].Author)
+	assert.Equal(t, 42, results[0].Stars)
+
+	// Verify query format: "codectx-react in:name" (no user: filter).
+	assert.Contains(t, capturedQuery, "codectx-react")
+	assert.Contains(t, capturedQuery, "in:name")
+	assert.NotContains(t, capturedQuery, "user:")
+}
+
+func TestSearch_withAuthor(t *testing.T) {
+	var capturedQuery string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedQuery = r.URL.Query().Get("q")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"total_count": 0, "items": []}`))
+	}))
+	defer ts.Close()
+
+	origBase := searchBaseURL
+	searchBaseURL = ts.URL
+	t.Cleanup(func() { searchBaseURL = origBase })
+
+	results, err := Search("react", "facebook")
+	require.NoError(t, err)
+	assert.Empty(t, results)
+
+	// Verify the author filter is appended.
+	assert.Contains(t, capturedQuery, "user:facebook")
+}
+
+func TestSearch_apiError(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte("rate limited"))
+	}))
+	defer ts.Close()
+
+	origBase := searchBaseURL
+	searchBaseURL = ts.URL
+	t.Cleanup(func() { searchBaseURL = origBase })
+
+	_, err := Search("react", "")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "403")
+}
+
+func TestSearch_sortAndPagination(t *testing.T) {
+	var capturedSort, capturedOrder, capturedPerPage string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedSort = r.URL.Query().Get("sort")
+		capturedOrder = r.URL.Query().Get("order")
+		capturedPerPage = r.URL.Query().Get("per_page")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"total_count": 0, "items": []}`))
+	}))
+	defer ts.Close()
+
+	origBase := searchBaseURL
+	searchBaseURL = ts.URL
+	t.Cleanup(func() { searchBaseURL = origBase })
+
+	_, err := Search("go", "")
+	require.NoError(t, err)
+
+	assert.Equal(t, "stars", capturedSort)
+	assert.Equal(t, "desc", capturedOrder)
+	assert.Equal(t, "25", capturedPerPage)
+}

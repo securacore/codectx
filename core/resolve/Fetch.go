@@ -29,10 +29,10 @@ func Fetch(resolved *ResolvedPackage, destDir string) error {
 		return err
 	}
 
-	// Verify package.yml exists regardless of fetch method.
-	if _, err := os.Stat(filepath.Join(destDir, "package.yml")); os.IsNotExist(err) {
+	// Verify manifest.yml exists regardless of fetch method.
+	if _, err := os.Stat(filepath.Join(destDir, "manifest.yml")); os.IsNotExist(err) {
 		_ = os.RemoveAll(destDir)
-		return fmt.Errorf("fetched package has no package.yml at root")
+		return fmt.Errorf("fetched package has no manifest.yml at root")
 	}
 
 	return nil

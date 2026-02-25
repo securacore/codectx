@@ -211,6 +211,9 @@ func TestActivateModel_drillIn(t *testing.T) {
 		Foundation: []manifest.FoundationEntry{
 			{ID: "core", Description: "Core principles"},
 		},
+		Application: []manifest.ApplicationEntry{
+			{ID: "arch", Description: "System architecture"},
+		},
 		Topics: []manifest.TopicEntry{
 			{ID: "conventions", Description: "React conventions"},
 			{ID: "patterns", Description: "React patterns"},
@@ -224,7 +227,7 @@ func TestActivateModel_drillIn(t *testing.T) {
 	assert.Equal(t, viewEntries, result.view)
 	assert.Equal(t, 0, result.drillIndex)
 	assert.Equal(t, 0, result.cursor)
-	assert.Len(t, result.entries, 3) // 1 foundation + 2 topics
+	assert.Len(t, result.entries, 4) // 1 foundation + 1 application + 2 topics
 
 	// All should be active since package is "all".
 	for _, e := range result.entries {
@@ -474,6 +477,8 @@ func TestActivationsEqual(t *testing.T) {
 		{"same granular", config.Activation{Map: &config.ActivationMap{Topics: []string{"a"}}}, config.Activation{Map: &config.ActivationMap{Topics: []string{"a"}}}, true},
 		{"diff granular", config.Activation{Map: &config.ActivationMap{Topics: []string{"a"}}}, config.Activation{Map: &config.ActivationMap{Topics: []string{"b"}}}, false},
 		{"map vs string", config.Activation{Map: &config.ActivationMap{Topics: []string{"a"}}}, config.Activation{Mode: "all"}, false},
+		{"same application", config.Activation{Map: &config.ActivationMap{Application: []string{"arch"}}}, config.Activation{Map: &config.ActivationMap{Application: []string{"arch"}}}, true},
+		{"diff application", config.Activation{Map: &config.ActivationMap{Application: []string{"arch"}}}, config.Activation{Map: &config.ActivationMap{Application: []string{"other"}}}, false},
 	}
 
 	for _, tt := range tests {
@@ -485,11 +490,13 @@ func TestActivationsEqual(t *testing.T) {
 
 func TestBuildActiveIDSet_all(t *testing.T) {
 	m := &manifest.Manifest{
-		Foundation: []manifest.FoundationEntry{{ID: "core"}},
-		Topics:     []manifest.TopicEntry{{ID: "react"}},
+		Foundation:  []manifest.FoundationEntry{{ID: "core"}},
+		Application: []manifest.ApplicationEntry{{ID: "arch"}},
+		Topics:      []manifest.TopicEntry{{ID: "react"}},
 	}
 	ids := buildActiveIDSet(config.Activation{Mode: "all"}, m)
 	assert.True(t, ids["foundation:core"])
+	assert.True(t, ids["application:arch"])
 	assert.True(t, ids["topics:react"])
 }
 
@@ -509,6 +516,16 @@ func TestBuildActiveIDSet_granular(t *testing.T) {
 	ids := buildActiveIDSet(activation, m)
 	assert.True(t, ids["topics:react"])
 	assert.False(t, ids["topics:go"])
+}
+
+func TestBuildActiveIDSet_granularApplication(t *testing.T) {
+	m := &manifest.Manifest{
+		Application: []manifest.ApplicationEntry{{ID: "arch"}, {ID: "design"}},
+	}
+	activation := config.Activation{Map: &config.ActivationMap{Application: []string{"arch"}}}
+	ids := buildActiveIDSet(activation, m)
+	assert.True(t, ids["application:arch"])
+	assert.False(t, ids["application:design"])
 }
 
 func TestActivationLabel(t *testing.T) {

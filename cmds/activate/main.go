@@ -68,8 +68,9 @@ func runCLI(identifiers []string, activateFlag string) error {
 		if !activation.IsNone() {
 			docsDir := cfg.DocsDir()
 			pkgDir := filepath.Join(docsDir, "packages", fmt.Sprintf("%s@%s", cfg.Packages[idx].Name, cfg.Packages[idx].Author))
-			pkgManifestPath := filepath.Join(pkgDir, "package.yml")
+			pkgManifestPath := filepath.Join(pkgDir, "manifest.yml")
 			if pkgManifest, err := manifest.Load(pkgManifestPath); err == nil {
+				pkgManifest = manifest.Discover(pkgDir, pkgManifest)
 				collisions := detectCollisions(cfg, idx, pkgManifest, activation)
 				if len(collisions) > 0 {
 					ui.Warn(fmt.Sprintf("%d collision(s) for %s:", len(collisions), ident))
@@ -128,6 +129,9 @@ func activationLabel(a config.Activation) string {
 	if len(a.Map.Foundation) > 0 {
 		parts = append(parts, fmt.Sprintf("foundation: %s", strings.Join(a.Map.Foundation, ", ")))
 	}
+	if len(a.Map.Application) > 0 {
+		parts = append(parts, fmt.Sprintf("application: %s", strings.Join(a.Map.Application, ", ")))
+	}
 	if len(a.Map.Topics) > 0 {
 		parts = append(parts, fmt.Sprintf("topics: %s", strings.Join(a.Map.Topics, ", ")))
 	}
@@ -145,7 +149,7 @@ func activationEntryCount(a config.Activation) int {
 	if a.IsNone() || a.Map == nil {
 		return 0
 	}
-	return len(a.Map.Foundation) + len(a.Map.Topics) + len(a.Map.Prompts) + len(a.Map.Plans)
+	return len(a.Map.Foundation) + len(a.Map.Application) + len(a.Map.Topics) + len(a.Map.Prompts) + len(a.Map.Plans)
 }
 
 // collision represents a single entry ID that collides with an already-active entry.
@@ -161,8 +165,9 @@ func detectCollisions(cfg *config.Config, skipIdx int, pkgManifest *manifest.Man
 	activeIDs := make(map[string]string)
 
 	docsDir := cfg.DocsDir()
-	localManifestPath := filepath.Join(docsDir, "package.yml")
+	localManifestPath := filepath.Join(docsDir, "manifest.yml")
 	if localManifest, err := manifest.Load(localManifestPath); err == nil {
+		localManifest = manifest.Sync(docsDir, localManifest)
 		for key := range compile.CollectActiveIDs(localManifest) {
 			activeIDs[key] = "local"
 		}
@@ -173,11 +178,12 @@ func detectCollisions(cfg *config.Config, skipIdx int, pkgManifest *manifest.Man
 			continue
 		}
 		pkgDir := filepath.Join(docsDir, "packages", fmt.Sprintf("%s@%s", pkg.Name, pkg.Author))
-		pkgPath := filepath.Join(pkgDir, "package.yml")
+		pkgPath := filepath.Join(pkgDir, "manifest.yml")
 		m, err := manifest.Load(pkgPath)
 		if err != nil {
 			continue
 		}
+		m = manifest.Discover(pkgDir, m)
 		filtered := filterManifestForIDs(m, pkg.Active)
 		pkgLabel := fmt.Sprintf("%s@%s", pkg.Name, pkg.Author)
 		for key := range compile.CollectActiveIDs(filtered) {
@@ -216,6 +222,14 @@ func filterManifestForIDs(m *manifest.Manifest, activation config.Activation) *m
 		for _, e := range m.Foundation {
 			if ids[e.ID] {
 				filtered.Foundation = append(filtered.Foundation, e)
+			}
+		}
+	}
+	if am.Application != nil {
+		ids := toSet(am.Application)
+		for _, e := range m.Application {
+			if ids[e.ID] {
+				filtered.Application = append(filtered.Application, e)
 			}
 		}
 	}
@@ -290,6 +304,8 @@ func parseActivateFlag(value string) (config.Activation, error) {
 		switch section {
 		case "foundation":
 			am.Foundation = append(am.Foundation, id)
+		case "application":
+			am.Application = append(am.Application, id)
 		case "topics":
 			am.Topics = append(am.Topics, id)
 		case "prompts":

@@ -27,8 +27,8 @@ var nameAtAuthor = regexp.MustCompile(`^[a-zA-Z0-9_-]+@[a-zA-Z0-9_-]+$`)
 func checkCompatibility(dir string) []compatIssue {
 	var issues []compatIssue
 
-	// Check package.yml if it exists.
-	pkgPath := filepath.Join(dir, "package.yml")
+	// Check manifest.yml if it exists.
+	pkgPath := filepath.Join(dir, "manifest.yml")
 	if data, err := os.ReadFile(pkgPath); err == nil {
 		var raw any
 		if err := yaml.Unmarshal(data, &raw); err != nil {
@@ -36,7 +36,7 @@ func checkCompatibility(dir string) []compatIssue {
 				path:   pkgPath,
 				reason: fmt.Sprintf("invalid YAML: %s", err),
 			})
-		} else if err := schema.Validate(schema.PackageSchemaFile, raw); err != nil {
+		} else if err := schema.Validate(schema.ManifestSchemaFile, raw); err != nil {
 			issues = append(issues, compatIssue{
 				path:   pkgPath,
 				reason: fmt.Sprintf("schema validation failed: %s", err),
@@ -64,7 +64,7 @@ func checkCompatibility(dir string) []compatIssue {
 	schemasDir := filepath.Join(dir, "schemas")
 	codectxSchemas := map[string]bool{
 		"codectx.schema.json":    true,
-		"package.schema.json":    true,
+		"manifest.schema.json":   true,
 		"state.schema.json":      true,
 		"compiled.schema.json":   true,
 		"heuristics.schema.json": true,
@@ -104,7 +104,7 @@ func checkCompatibility(dir string) []compatIssue {
 		}
 	}
 
-	// Validate existing package.yml can be loaded if it exists and passed schema.
+	// Validate existing manifest.yml can be loaded if it exists and passed schema.
 	if _, err := os.Stat(pkgPath); err == nil && len(issues) == 0 {
 		if _, err := manifest.Load(pkgPath); err != nil {
 			issues = append(issues, compatIssue{

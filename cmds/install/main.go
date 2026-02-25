@@ -25,7 +25,7 @@ import (
 
 const configFile = "codectx.yml"
 const lockFile = "codectx.lock"
-const packageFile = "package.yml"
+const manifestFile = "manifest.yml"
 const defaultBackupDir = ".codectx-docs"
 
 var Command = &cli.Command{
@@ -90,9 +90,10 @@ func run(activateFlag string) error {
 		pkgDir := filepath.Join(docsDir, "packages", fmt.Sprintf("%s@%s", pkg.Name, pkg.Author))
 
 		// Skip if already fetched.
-		if _, err := os.Stat(filepath.Join(pkgDir, packageFile)); err == nil {
-			m, loadErr := manifest.Load(filepath.Join(pkgDir, packageFile))
+		if _, err := os.Stat(filepath.Join(pkgDir, manifestFile)); err == nil {
+			m, loadErr := manifest.Load(filepath.Join(pkgDir, manifestFile))
 			if loadErr == nil {
+				m = manifest.Discover(pkgDir, m)
 				successes = append(successes, installedPkg{idx: i, pkg: pkg, manifest: m})
 				ui.Done(fmt.Sprintf("Already installed: %s@%s", pkg.Name, pkg.Author))
 				continue
@@ -140,11 +141,12 @@ func run(activateFlag string) error {
 			continue
 		}
 
-		m, loadErr := manifest.Load(filepath.Join(pkgDir, packageFile))
+		m, loadErr := manifest.Load(filepath.Join(pkgDir, manifestFile))
 		if loadErr != nil {
 			failures = append(failures, fmt.Sprintf("%s@%s: load manifest: %s", pkg.Name, pkg.Author, loadErr))
 			continue
 		}
+		m = manifest.Discover(pkgDir, m)
 
 		successes = append(successes, installedPkg{idx: i, pkg: pkg, manifest: m})
 		ui.Done(fmt.Sprintf("Installed %s@%s v%s", pkg.Name, pkg.Author, resolved.Version))
@@ -226,6 +228,13 @@ func run(activateFlag string) error {
 		if err := preferences.Write(outputDir, prefs); err != nil {
 			return fmt.Errorf("write preferences: %w", err)
 		}
+	}
+
+	// Sync local manifest: discover new entries, remove stale, infer relationships.
+	manifestPath := filepath.Join(docsDir, manifestFile)
+	if localManifest, loadErr := manifest.Load(manifestPath); loadErr == nil {
+		synced := manifest.Sync(docsDir, localManifest)
+		_ = manifest.Write(manifestPath, synced)
 	}
 
 	// Run initial compilation.
@@ -315,8 +324,8 @@ func setupDocsDir(cfg *config.Config, docsDir *string) error {
 		return fmt.Errorf("write schemas: %w", err)
 	}
 
-	// Create minimal package.yml if it doesn't exist.
-	pkgPath := filepath.Join(*docsDir, packageFile)
+	// Create minimal manifest.yml if it doesn't exist.
+	pkgPath := filepath.Join(*docsDir, manifestFile)
 	if _, err := os.Stat(pkgPath); os.IsNotExist(err) {
 		m := &manifest.Manifest{
 			Name:        cfg.Name,
@@ -364,34 +373,102 @@ func ensureGitignore(outputDir string) error {
 
 // promptCombinedActivation shows a single multi-select with entries from all
 // inactive packages, grouped by package label.
-func promptCombinedActivation(cfg *config.Config, successes []installedPkg) error {
-	type entry struct {
-		pkgIdx  int // index into cfg.Packages
-		section string
-		id      string
-		label   string
-	}
+// activationEntry represents a selectable manifest entry for activation prompts.
+type activationEntry struct {
+	pkgIdx  int // index into cfg.Packages
+	section string
+	id      string
+	label   string
+}
 
-	var entries []entry
+// buildActivationEntries collects all selectable manifest entries from
+// newly installed packages that have no activation set yet.
+func buildActivationEntries(successes []installedPkg) []activationEntry {
+	var entries []activationEntry
 	for _, s := range successes {
 		if !s.pkg.Active.IsNone() {
 			continue
 		}
 		pkgLabel := fmt.Sprintf("%s@%s", s.pkg.Name, s.pkg.Author)
 		for _, e := range s.manifest.Foundation {
-			entries = append(entries, entry{s.idx, "foundation", e.ID, fmt.Sprintf("[%s / foundation] %s - %s", pkgLabel, e.ID, e.Description)})
+			entries = append(entries, activationEntry{s.idx, "foundation", e.ID, fmt.Sprintf("[%s / foundation] %s - %s", pkgLabel, e.ID, e.Description)})
+		}
+		for _, e := range s.manifest.Application {
+			entries = append(entries, activationEntry{s.idx, "application", e.ID, fmt.Sprintf("[%s / application] %s - %s", pkgLabel, e.ID, e.Description)})
 		}
 		for _, e := range s.manifest.Topics {
-			entries = append(entries, entry{s.idx, "topics", e.ID, fmt.Sprintf("[%s / topics] %s - %s", pkgLabel, e.ID, e.Description)})
+			entries = append(entries, activationEntry{s.idx, "topics", e.ID, fmt.Sprintf("[%s / topics] %s - %s", pkgLabel, e.ID, e.Description)})
 		}
 		for _, e := range s.manifest.Prompts {
-			entries = append(entries, entry{s.idx, "prompts", e.ID, fmt.Sprintf("[%s / prompts] %s - %s", pkgLabel, e.ID, e.Description)})
+			entries = append(entries, activationEntry{s.idx, "prompts", e.ID, fmt.Sprintf("[%s / prompts] %s - %s", pkgLabel, e.ID, e.Description)})
 		}
 		for _, e := range s.manifest.Plans {
-			entries = append(entries, entry{s.idx, "plans", e.ID, fmt.Sprintf("[%s / plans] %s - %s", pkgLabel, e.ID, e.Description)})
+			entries = append(entries, activationEntry{s.idx, "plans", e.ID, fmt.Sprintf("[%s / plans] %s - %s", pkgLabel, e.ID, e.Description)})
+		}
+	}
+	return entries
+}
+
+// applyActivationSelection takes the user's entry selection and updates
+// the config packages with the appropriate activation mode per package.
+// If all entries for a package are selected, it uses "all" mode.
+// If no entries are selected, it uses "none" mode.
+// Otherwise, it uses a granular activation map.
+func applyActivationSelection(cfg *config.Config, successes []installedPkg, entries []activationEntry, selected []int) {
+	perPkg := make(map[int]*config.ActivationMap)
+	totalPerPkg := make(map[int]int)
+
+	for _, s := range successes {
+		if !s.pkg.Active.IsNone() {
+			continue
+		}
+		total := len(s.manifest.Foundation) + len(s.manifest.Application) +
+			len(s.manifest.Topics) + len(s.manifest.Prompts) + len(s.manifest.Plans)
+		totalPerPkg[s.idx] = total
+	}
+
+	for _, idx := range selected {
+		e := entries[idx]
+		if perPkg[e.pkgIdx] == nil {
+			perPkg[e.pkgIdx] = &config.ActivationMap{}
+		}
+		am := perPkg[e.pkgIdx]
+		switch e.section {
+		case "foundation":
+			am.Foundation = append(am.Foundation, e.id)
+		case "application":
+			am.Application = append(am.Application, e.id)
+		case "topics":
+			am.Topics = append(am.Topics, e.id)
+		case "prompts":
+			am.Prompts = append(am.Prompts, e.id)
+		case "plans":
+			am.Plans = append(am.Plans, e.id)
 		}
 	}
 
+	for _, s := range successes {
+		if !s.pkg.Active.IsNone() {
+			continue
+		}
+
+		am, hasAny := perPkg[s.idx]
+		if !hasAny {
+			cfg.Packages[s.idx].Active = config.Activation{Mode: "none"}
+			continue
+		}
+
+		count := len(am.Foundation) + len(am.Application) + len(am.Topics) + len(am.Prompts) + len(am.Plans)
+		if count == totalPerPkg[s.idx] {
+			cfg.Packages[s.idx].Active = config.Activation{Mode: "all"}
+		} else {
+			cfg.Packages[s.idx].Active = config.Activation{Map: am}
+		}
+	}
+}
+
+func promptCombinedActivation(cfg *config.Config, successes []installedPkg) error {
+	entries := buildActivationEntries(successes)
 	if len(entries) == 0 {
 		return nil
 	}
@@ -417,57 +494,7 @@ func promptCombinedActivation(cfg *config.Config, successes []installedPkg) erro
 		return err
 	}
 
-	// Build per-package activation maps.
-	perPkg := make(map[int]*config.ActivationMap)
-	totalPerPkg := make(map[int]int)
-
-	for _, s := range successes {
-		if !s.pkg.Active.IsNone() {
-			continue
-		}
-		total := len(s.manifest.Foundation) + len(s.manifest.Topics) +
-			len(s.manifest.Prompts) + len(s.manifest.Plans)
-		totalPerPkg[s.idx] = total
-	}
-
-	for _, idx := range selected {
-		e := entries[idx]
-		if perPkg[e.pkgIdx] == nil {
-			perPkg[e.pkgIdx] = &config.ActivationMap{}
-		}
-		am := perPkg[e.pkgIdx]
-		switch e.section {
-		case "foundation":
-			am.Foundation = append(am.Foundation, e.id)
-		case "topics":
-			am.Topics = append(am.Topics, e.id)
-		case "prompts":
-			am.Prompts = append(am.Prompts, e.id)
-		case "plans":
-			am.Plans = append(am.Plans, e.id)
-		}
-	}
-
-	// Convert to Activation per package.
-	for _, s := range successes {
-		if !s.pkg.Active.IsNone() {
-			continue
-		}
-
-		am, hasAny := perPkg[s.idx]
-		if !hasAny {
-			cfg.Packages[s.idx].Active = config.Activation{Mode: "none"}
-			continue
-		}
-
-		count := len(am.Foundation) + len(am.Topics) + len(am.Prompts) + len(am.Plans)
-		if count == totalPerPkg[s.idx] {
-			cfg.Packages[s.idx].Active = config.Activation{Mode: "all"}
-		} else {
-			cfg.Packages[s.idx].Active = config.Activation{Map: am}
-		}
-	}
-
+	applyActivationSelection(cfg, successes, entries, selected)
 	return nil
 }
 
@@ -497,6 +524,8 @@ func parseActivateFlag(value string) (config.Activation, error) {
 		switch section {
 		case "foundation":
 			am.Foundation = append(am.Foundation, id)
+		case "application":
+			am.Application = append(am.Application, id)
 		case "topics":
 			am.Topics = append(am.Topics, id)
 		case "prompts":

@@ -8,7 +8,7 @@
   "properties": {
     "plan": {
       "type": "string",
-      "description": "Plan identifier. Matches the plan's ID in package.yml."
+      "description": "Plan identifier. Matches the plan's ID in manifest.yml."
     },
     "status": {
       "type": "string",

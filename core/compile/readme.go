@@ -25,7 +25,7 @@ func generateReadme(m *manifest.Manifest, h *Heuristics) string {
 	b.WriteString("4. As the task progresses, consult the data map to load relevant topics, prompts, or plans.\n")
 
 	// Build sections list dynamically.
-	hasSections := len(m.Foundation) > 0 || len(m.Topics) > 0 || len(m.Prompts) > 0 || len(m.Plans) > 0
+	hasSections := len(m.Foundation) > 0 || len(m.Application) > 0 || len(m.Topics) > 0 || len(m.Prompts) > 0 || len(m.Plans) > 0
 	if hasSections {
 		b.WriteString("\n## Sections\n\n")
 
@@ -40,6 +40,16 @@ func generateReadme(m *manifest.Manifest, h *Heuristics) string {
 				line += fmt.Sprintf(" %d %s auto-loaded.",
 					h.Totals.AlwaysLoad, pluralize(h.Totals.AlwaysLoad, "is", "are"))
 			}
+			b.WriteString(line + "\n")
+		}
+
+		if len(m.Application) > 0 {
+			line := fmt.Sprintf("- **Application**: %d %s.",
+				len(m.Application), pluralize(len(m.Application), "entry", "entries"))
+			if h != nil && h.Sections.Application != nil {
+				line += fmt.Sprintf(" ~%s.", formatTokens(h.Sections.Application.EstimatedTokens))
+			}
+			line += " Product architecture and design documentation."
 			b.WriteString(line + "\n")
 		}
 

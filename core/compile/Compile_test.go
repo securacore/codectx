@@ -42,7 +42,7 @@ func setupTestProject(t *testing.T) (string, *config.Config) {
 		Version:     "1.0.0",
 		Description: "Test project for compile",
 	}
-	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), m))
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
 
 	cfg := &config.Config{
 		Name: "test-project",
@@ -102,7 +102,7 @@ func TestCompile_withLocalFiles(t *testing.T) {
 			{ID: "philosophy", Path: "foundation/philosophy.md", Description: "Core philosophy", Load: "always"},
 		},
 	}
-	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), m))
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
 
 	result, err := Compile(cfg)
 	require.NoError(t, err)
@@ -154,7 +154,7 @@ func TestCompile_readmeContent(t *testing.T) {
 			{ID: "doc", Path: "foundation/doc.md", Description: "A document"},
 		},
 	}
-	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), m))
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
 
 	result, err := Compile(cfg)
 	require.NoError(t, err)
@@ -233,7 +233,7 @@ func TestCompile_dedupsSameContent(t *testing.T) {
 			{ID: "philosophy", Path: "foundation/philosophy.md", Description: "Shared philosophy", Load: "always"},
 		},
 	}
-	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), localManifest))
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), localManifest))
 
 	// Create installed package with same foundation entry and same content.
 	pkgDir := filepath.Join(docsDir, "packages", "react@org")
@@ -248,7 +248,7 @@ func TestCompile_dedupsSameContent(t *testing.T) {
 			{ID: "philosophy", Path: "foundation/philosophy.md", Description: "Shared philosophy"},
 		},
 	}
-	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "package.yml"), pkgManifest))
+	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "manifest.yml"), pkgManifest))
 
 	cfg.Packages = []config.PackageDep{
 		{Name: "react", Author: "org", Version: "^1.0.0", Active: config.Activation{Mode: "all"}},
@@ -281,7 +281,7 @@ func TestCompile_conflictDifferentContent(t *testing.T) {
 			{ID: "conventions", Path: "foundation/conventions.md", Description: "Local conventions"},
 		},
 	}
-	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), localManifest))
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), localManifest))
 
 	// Installed package has version B of the doc (different content).
 	pkgDir := filepath.Join(docsDir, "packages", "go@org")
@@ -298,7 +298,7 @@ func TestCompile_conflictDifferentContent(t *testing.T) {
 			{ID: "conventions", Path: "foundation/conventions.md", Description: "Go conventions"},
 		},
 	}
-	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "package.yml"), pkgManifest))
+	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "manifest.yml"), pkgManifest))
 
 	cfg.Packages = []config.PackageDep{
 		{Name: "go", Author: "org", Version: "^1.0.0", Active: config.Activation{Mode: "all"}},
@@ -335,7 +335,7 @@ func TestCompile_inactivePackageInLockFile(t *testing.T) {
 			{ID: "guide", Path: "foundation/guide.md", Description: "Inert guide"},
 		},
 	}
-	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "package.yml"), pkgManifest))
+	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "manifest.yml"), pkgManifest))
 
 	// Add as inactive package (mode: "none").
 	cfg.Packages = []config.PackageDep{
@@ -374,7 +374,7 @@ func TestCompile_multiplePackages(t *testing.T) {
 			{ID: "react", Path: "topics/react.md", Description: "React conventions"},
 		},
 	}
-	require.NoError(t, manifest.Write(filepath.Join(pkgADir, "package.yml"), pkgAManifest))
+	require.NoError(t, manifest.Write(filepath.Join(pkgADir, "manifest.yml"), pkgAManifest))
 
 	// Create installed package B with a foundation entry.
 	pkgBDir := filepath.Join(docsDir, "packages", "pkgB@org")
@@ -391,7 +391,7 @@ func TestCompile_multiplePackages(t *testing.T) {
 			{ID: "conventions", Path: "foundation/conventions.md", Description: "Conventions"},
 		},
 	}
-	require.NoError(t, manifest.Write(filepath.Join(pkgBDir, "package.yml"), pkgBManifest))
+	require.NoError(t, manifest.Write(filepath.Join(pkgBDir, "manifest.yml"), pkgBManifest))
 
 	cfg.Packages = []config.PackageDep{
 		{Name: "pkgA", Author: "org", Version: "^1.0.0", Active: config.Activation{Mode: "all"}},
@@ -436,7 +436,7 @@ func TestCompile_lockFileContent(t *testing.T) {
 			{ID: "guide", Path: "foundation/guide.md", Description: "A guide"},
 		},
 	}
-	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "package.yml"), pkgManifest))
+	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "manifest.yml"), pkgManifest))
 
 	cfg.Packages = []config.PackageDep{
 		{
@@ -472,6 +472,88 @@ func TestCompile_lockFileContent(t *testing.T) {
 	assert.True(t, pkg.Active.IsAll())
 }
 
+func TestCompile_failsWhenLocalManifestInvalid(t *testing.T) {
+	_, cfg := setupTestProject(t)
+	docsDir := cfg.DocsDir()
+
+	// Overwrite the local manifest with corrupt YAML.
+	require.NoError(t, os.WriteFile(
+		filepath.Join(docsDir, "manifest.yml"),
+		[]byte("{{{{not valid yaml"),
+		0o644,
+	))
+
+	_, err := Compile(cfg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "load local manifest")
+}
+
+func TestCompile_corruptPackageManifestFails(t *testing.T) {
+	_, cfg := setupTestProject(t)
+	docsDir := cfg.DocsDir()
+
+	// Create an installed package directory with a corrupt manifest.
+	// This is the fingerprint gap: computeFingerprint silently skips
+	// corrupt manifests (line 67), but Compile itself catches it (line 105).
+	pkgDir := filepath.Join(docsDir, "packages", "corrupt@org")
+	require.NoError(t, os.MkdirAll(pkgDir, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(pkgDir, "manifest.yml"),
+		[]byte("{{{{not valid yaml at all"),
+		0o644,
+	))
+
+	cfg.Packages = []config.PackageDep{
+		{Name: "corrupt", Author: "org", Version: "^1.0.0", Active: config.Activation{Mode: "all"}},
+	}
+
+	// Write codectx.yml so fingerprint can read it.
+	require.NoError(t, config.Write("codectx.yml", cfg))
+
+	_, err := Compile(cfg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "corrupt@org")
+}
+
+func TestCompile_fingerprintChangesOnContentModification(t *testing.T) {
+	_, cfg := setupTestProject(t)
+	docsDir := cfg.DocsDir()
+
+	// Add a foundation document.
+	require.NoError(t, os.WriteFile(
+		filepath.Join(docsDir, "foundation", "doc.md"),
+		[]byte("# Original\n"), 0o644))
+
+	m := &manifest.Manifest{
+		Name: "test-project", Version: "1.0.0",
+		Foundation: []manifest.FoundationEntry{
+			{ID: "doc", Path: "foundation/doc.md", Description: "A document"},
+		},
+	}
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
+	require.NoError(t, config.Write("codectx.yml", cfg))
+
+	// First compile.
+	result1, err := Compile(cfg)
+	require.NoError(t, err)
+	assert.False(t, result1.UpToDate)
+
+	// Second compile without changes: should be up-to-date.
+	result2, err := Compile(cfg)
+	require.NoError(t, err)
+	assert.True(t, result2.UpToDate)
+
+	// Modify the file content.
+	require.NoError(t, os.WriteFile(
+		filepath.Join(docsDir, "foundation", "doc.md"),
+		[]byte("# Modified\n"), 0o644))
+
+	// Third compile: should detect change via fingerprint.
+	result3, err := Compile(cfg)
+	require.NoError(t, err)
+	assert.False(t, result3.UpToDate)
+}
+
 func TestCompile_failsWhenInstalledManifestInvalid(t *testing.T) {
 	_, cfg := setupTestProject(t)
 	docsDir := cfg.DocsDir()
@@ -480,7 +562,7 @@ func TestCompile_failsWhenInstalledManifestInvalid(t *testing.T) {
 	pkgDir := filepath.Join(docsDir, "packages", "broken@org")
 	require.NoError(t, os.MkdirAll(pkgDir, 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(pkgDir, "package.yml"),
+		filepath.Join(pkgDir, "manifest.yml"),
 		[]byte("{{{{not valid yaml"),
 		0o644,
 	))
@@ -519,7 +601,7 @@ func TestCompile_granularActivation(t *testing.T) {
 			{ID: "go", Path: "topics/go/README.md", Description: "Go"},
 		},
 	}
-	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "package.yml"), pkgManifest))
+	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "manifest.yml"), pkgManifest))
 
 	// Only activate foundation:philosophy and topics:react (not topics:go).
 	cfg.Packages = []config.PackageDep{
@@ -574,7 +656,7 @@ func TestCompile_recompileReplacesOldObjects(t *testing.T) {
 			{ID: "original", Path: "foundation/original.md", Description: "Original"},
 		},
 	}
-	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), m))
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
 
 	result1, err := Compile(cfg)
 	require.NoError(t, err)
@@ -587,7 +669,8 @@ func TestCompile_recompileReplacesOldObjects(t *testing.T) {
 	_, err = os.Stat(filepath.Join(result1.OutputDir, "objects", originalHash+".md"))
 	require.NoError(t, err)
 
-	// Second compile: remove the entry, add a different one.
+	// Second compile: remove the old file and add a different one.
+	require.NoError(t, os.Remove(filepath.Join(docsDir, "foundation", "original.md")))
 	require.NoError(t, os.WriteFile(
 		filepath.Join(docsDir, "foundation", "replacement.md"),
 		[]byte("# Replacement\n"), 0o644))
@@ -599,7 +682,7 @@ func TestCompile_recompileReplacesOldObjects(t *testing.T) {
 			{ID: "replacement", Path: "foundation/replacement.md", Description: "Replacement"},
 		},
 	}
-	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), m2))
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m2))
 
 	result2, err := Compile(cfg)
 	require.NoError(t, err)
@@ -631,7 +714,7 @@ func TestCompile_contentAddressedDedup(t *testing.T) {
 			{ID: "b", Path: "foundation/b.md", Description: "B"},
 		},
 	}
-	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), m))
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
 
 	result, err := Compile(cfg)
 	require.NoError(t, err)
@@ -680,7 +763,7 @@ func TestCompile_topicWithSpecAndFiles(t *testing.T) {
 			},
 		},
 	}
-	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), m))
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
 
 	result, err := Compile(cfg)
 	require.NoError(t, err)
@@ -741,7 +824,7 @@ func TestCompile_planWithStateFile(t *testing.T) {
 			},
 		},
 	}
-	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), m))
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
 
 	result, err := Compile(cfg)
 	require.NoError(t, err)
@@ -783,7 +866,7 @@ func TestCompile_fingerprintSkipWithPackages(t *testing.T) {
 			{ID: "guide", Path: "foundation/guide.md", Description: "React guide"},
 		},
 	}
-	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "package.yml"), pkgManifest))
+	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "manifest.yml"), pkgManifest))
 
 	cfg.Packages = []config.PackageDep{
 		{Name: "react", Author: "org", Version: "^1.0.0", Active: config.Activation{Mode: "all"}},
@@ -843,7 +926,7 @@ func TestCompile_decompositionTriggered(t *testing.T) {
 		Version:    "1.0.0",
 		Foundation: foundationEntries,
 	}
-	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), m))
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
 
 	result, err := Compile(cfg)
 	require.NoError(t, err)
@@ -904,7 +987,7 @@ func TestCompile_planStateMissing(t *testing.T) {
 			},
 		},
 	}
-	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), m))
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
 
 	// Should succeed: missing state files are silently skipped.
 	result, err := Compile(cfg)
@@ -914,4 +997,276 @@ func TestCompile_planStateMissing(t *testing.T) {
 	// State directory should not exist (no state files copied).
 	_, err = os.Stat(filepath.Join(result.OutputDir, "state"))
 	assert.True(t, os.IsNotExist(err))
+}
+
+// --- Discovery integration tests ---
+
+func TestCompile_discoversLocalEntries(t *testing.T) {
+	_, cfg := setupTestProject(t)
+	docsDir := cfg.DocsDir()
+
+	// Create files on disk but do NOT declare them in the manifest.
+	// The manifest remains empty (metadata only) — exactly the bug scenario.
+	require.NoError(t, os.WriteFile(
+		filepath.Join(docsDir, "foundation", "philosophy.md"),
+		[]byte("# Philosophy\n\nGuiding principles.\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "topics", "react"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(docsDir, "topics", "react", "README.md"),
+		[]byte("# React\n\nComponent conventions.\n"), 0o644))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(docsDir, "topics", "react", "hooks.md"),
+		[]byte("# Hooks\n\nHook patterns.\n"), 0o644))
+
+	result, err := Compile(cfg)
+	require.NoError(t, err)
+
+	// Discovery should find the foundation doc and the topic.
+	// 3 objects: philosophy.md, react/README.md, react/hooks.md
+	assert.Equal(t, 3, result.ObjectsStored)
+
+	// Verify the compiled manifest has the discovered entries.
+	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
+	require.NoError(t, err)
+	require.Len(t, cm.Foundation, 1)
+	assert.Equal(t, "philosophy", cm.Foundation[0].ID)
+	assert.Equal(t, "local", cm.Foundation[0].Source)
+	require.Len(t, cm.Topics, 1)
+	assert.Equal(t, "react", cm.Topics[0].ID)
+	require.Len(t, cm.Topics[0].Files, 1)
+
+	// Verify heuristics reflect the discovered entries.
+	h, err := LoadHeuristics(filepath.Join(result.OutputDir, "heuristics.yml"))
+	require.NoError(t, err)
+	assert.Equal(t, 2, h.Totals.Entries) // 1 foundation + 1 topic
+	assert.Equal(t, 3, h.Totals.Objects) // 3 unique files
+}
+
+func TestCompile_discoversInstalledPackageEntries(t *testing.T) {
+	_, cfg := setupTestProject(t)
+	docsDir := cfg.DocsDir()
+
+	// Create an installed package with files on disk but an empty manifest.
+	// This is THE critical bug scenario: manifest.yml has only metadata.
+	pkgDir := filepath.Join(docsDir, "packages", "react@securacore")
+	require.NoError(t, os.MkdirAll(filepath.Join(pkgDir, "topics", "react"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(pkgDir, "topics", "react", "README.md"),
+		[]byte("# React\n\nComponent patterns.\n"), 0o644))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(pkgDir, "topics", "react", "hooks.md"),
+		[]byte("# Hooks\n\nHook patterns.\n"), 0o644))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(pkgDir, "topics", "react", "state.md"),
+		[]byte("# State Management\n\nState patterns.\n"), 0o644))
+
+	// Write an empty manifest (metadata only — no entry arrays).
+	emptyPkgManifest := &manifest.Manifest{
+		Name:        "codectx-react",
+		Author:      "securacore",
+		Version:     "0.0.3",
+		Description: "Documentation package for codectx-react",
+	}
+	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "manifest.yml"), emptyPkgManifest))
+
+	cfg.Packages = []config.PackageDep{
+		{Name: "react", Author: "securacore", Version: "^0.0.3", Active: config.Activation{Mode: "all"}},
+	}
+
+	result, err := Compile(cfg)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, result.Packages)
+	// 3 objects: README.md + hooks.md + state.md
+	assert.Equal(t, 3, result.ObjectsStored)
+
+	// Verify the compiled manifest has the discovered topic.
+	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
+	require.NoError(t, err)
+	require.Len(t, cm.Topics, 1)
+	assert.Equal(t, "react", cm.Topics[0].ID)
+	assert.Equal(t, "react@securacore", cm.Topics[0].Source)
+	assert.NotEmpty(t, cm.Topics[0].Object)
+	require.Len(t, cm.Topics[0].Files, 2) // hooks.md + state.md
+
+	// Verify heuristics reflect the discovered entries.
+	h, err := LoadHeuristics(filepath.Join(result.OutputDir, "heuristics.yml"))
+	require.NoError(t, err)
+	assert.Equal(t, 1, h.Totals.Entries)
+	assert.Equal(t, 3, h.Totals.Objects)
+	// Only react@securacore appears (local project has no entries).
+	require.Len(t, h.Packages, 1)
+	assert.Equal(t, "react@securacore", h.Packages[0].Name)
+}
+
+func TestCompile_discoveryWithGranularActivation(t *testing.T) {
+	_, cfg := setupTestProject(t)
+	docsDir := cfg.DocsDir()
+
+	// Create an installed package with files but empty manifest.
+	pkgDir := filepath.Join(docsDir, "packages", "docs@org")
+	for _, topicName := range []string{"react", "go", "typescript"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(pkgDir, "topics", topicName), 0o755))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(pkgDir, "topics", topicName, "README.md"),
+			[]byte(fmt.Sprintf("# %s\n\nConventions.\n", topicName)), 0o644))
+	}
+
+	emptyPkgManifest := &manifest.Manifest{
+		Name:        "docs",
+		Author:      "org",
+		Version:     "1.0.0",
+		Description: "Documentation package",
+	}
+	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "manifest.yml"), emptyPkgManifest))
+
+	// Only activate the react and go topics (not typescript).
+	cfg.Packages = []config.PackageDep{
+		{
+			Name:    "docs",
+			Author:  "org",
+			Version: "^1.0.0",
+			Active: config.Activation{
+				Map: &config.ActivationMap{
+					Topics: []string{"react", "go"},
+				},
+			},
+		},
+	}
+
+	result, err := Compile(cfg)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, result.Packages)
+	// Only 2 objects: react/README.md + go/README.md (typescript excluded).
+	assert.Equal(t, 2, result.ObjectsStored)
+
+	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
+	require.NoError(t, err)
+
+	require.Len(t, cm.Topics, 2)
+	topicIDs := []string{cm.Topics[0].ID, cm.Topics[1].ID}
+	assert.Contains(t, topicIDs, "react")
+	assert.Contains(t, topicIDs, "go")
+}
+
+// --- Sync integration tests ---
+// These tests verify that Compile's internal Sync() call (line 45) correctly
+// discovers entries, removes stale entries, infers relationships, and writes
+// the synced manifest back to disk (line 48).
+
+func TestCompile_syncRemovesStaleLocalEntries(t *testing.T) {
+	_, cfg := setupTestProject(t)
+	docsDir := cfg.DocsDir()
+
+	// Create a foundation file on disk.
+	require.NoError(t, os.WriteFile(
+		filepath.Join(docsDir, "foundation", "alive.md"),
+		[]byte("# Alive\n"), 0o644))
+
+	// Write a manifest that declares two entries: "alive" (file exists) and "stale" (file deleted).
+	m := &manifest.Manifest{
+		Name:    "test-project",
+		Version: "1.0.0",
+		Foundation: []manifest.FoundationEntry{
+			{ID: "alive", Path: "foundation/alive.md", Description: "Still here"},
+			{ID: "stale", Path: "foundation/stale.md", Description: "File was deleted"},
+		},
+	}
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
+
+	result, err := Compile(cfg)
+	require.NoError(t, err)
+
+	// Only the alive entry should appear in compiled output.
+	assert.Equal(t, 1, result.ObjectsStored)
+	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
+	require.NoError(t, err)
+	require.Len(t, cm.Foundation, 1)
+	assert.Equal(t, "alive", cm.Foundation[0].ID)
+
+	// Verify the source manifest was written back WITHOUT the stale entry.
+	reloaded, err := manifest.Load(filepath.Join(docsDir, "manifest.yml"))
+	require.NoError(t, err)
+	require.Len(t, reloaded.Foundation, 1)
+	assert.Equal(t, "alive", reloaded.Foundation[0].ID)
+}
+
+func TestCompile_writesBackSyncedManifest(t *testing.T) {
+	_, cfg := setupTestProject(t)
+	docsDir := cfg.DocsDir()
+
+	// Create files on disk but leave the manifest completely empty (metadata only).
+	require.NoError(t, os.WriteFile(
+		filepath.Join(docsDir, "foundation", "discovered.md"),
+		[]byte("# Discovered\n"), 0o644))
+
+	_, err := Compile(cfg)
+	require.NoError(t, err)
+
+	// Read back the source manifest — it should now contain the discovered entry.
+	reloaded, err := manifest.Load(filepath.Join(docsDir, "manifest.yml"))
+	require.NoError(t, err)
+	require.Len(t, reloaded.Foundation, 1)
+	assert.Equal(t, "discovered", reloaded.Foundation[0].ID)
+	assert.Equal(t, "foundation/discovered.md", reloaded.Foundation[0].Path)
+}
+
+func TestCompile_syncInfersRelationshipsInCompiledOutput(t *testing.T) {
+	_, cfg := setupTestProject(t)
+	docsDir := cfg.DocsDir()
+
+	// Create two foundation files that link to each other.
+	require.NoError(t, os.WriteFile(
+		filepath.Join(docsDir, "foundation", "alpha.md"),
+		[]byte("# Alpha\nSee [beta](beta.md) for details.\n"), 0o644))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(docsDir, "foundation", "beta.md"),
+		[]byte("# Beta\nBuilds on [alpha](alpha.md).\n"), 0o644))
+
+	m := &manifest.Manifest{
+		Name:    "test-project",
+		Version: "1.0.0",
+		Foundation: []manifest.FoundationEntry{
+			{ID: "alpha", Path: "foundation/alpha.md", Description: "Alpha doc"},
+			{ID: "beta", Path: "foundation/beta.md", Description: "Beta doc"},
+		},
+	}
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
+
+	result, err := Compile(cfg)
+	require.NoError(t, err)
+	assert.Equal(t, 2, result.ObjectsStored)
+
+	// Verify the compiled manifest carries the inferred relationships.
+	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
+	require.NoError(t, err)
+	require.Len(t, cm.Foundation, 2)
+
+	// Build a lookup for easier assertion.
+	byID := map[string]CompiledFoundationEntry{}
+	for _, e := range cm.Foundation {
+		byID[e.ID] = e
+	}
+
+	// alpha links to beta → alpha depends_on beta, beta required_by alpha.
+	assert.Contains(t, byID["alpha"].DependsOn, "beta", "alpha should depend on beta")
+	assert.Contains(t, byID["beta"].RequiredBy, "alpha", "beta should be required by alpha")
+
+	// beta links to alpha → beta depends_on alpha, alpha required_by beta.
+	assert.Contains(t, byID["beta"].DependsOn, "alpha", "beta should depend on alpha")
+	assert.Contains(t, byID["alpha"].RequiredBy, "beta", "alpha should be required by beta")
+
+	// Verify the source manifest was also written back with relationships.
+	reloaded, err := manifest.Load(filepath.Join(docsDir, "manifest.yml"))
+	require.NoError(t, err)
+	foundAlpha := false
+	for _, e := range reloaded.Foundation {
+		if e.ID == "alpha" {
+			foundAlpha = true
+			assert.Contains(t, e.DependsOn, "beta")
+			assert.Contains(t, e.RequiredBy, "beta")
+		}
+	}
+	assert.True(t, foundAlpha, "alpha entry should exist in reloaded manifest")
 }

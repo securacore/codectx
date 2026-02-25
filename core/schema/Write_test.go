@@ -104,7 +104,7 @@ func TestWriteAll_idempotent(t *testing.T) {
 func TestSchemaFiles_expectedSubset(t *testing.T) {
 	expected := []string{
 		CodectxSchemaFile,
-		PackageSchemaFile,
+		ManifestSchemaFile,
 		StateSchemaFile,
 	}
 	assert.Equal(t, expected, schemaFiles)

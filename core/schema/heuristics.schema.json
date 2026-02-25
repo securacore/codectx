@@ -67,6 +67,9 @@
         "foundation": {
           "$ref": "#/$defs/sectionStats"
         },
+        "application": {
+          "$ref": "#/$defs/sectionStats"
+        },
         "topics": {
           "$ref": "#/$defs/sectionStats"
         },

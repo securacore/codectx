@@ -67,6 +67,16 @@ func mergeManifestDedup(
 		seen[key] = seenEntry{pkg: srcPkg, hash: fileHash(filepath.Join(srcRoot, e.Path))}
 	}
 
+	for _, e := range src.Application {
+		key := "application:" + e.ID
+		if ev, skip := checkDedup(key, e.Path, "application", srcRoot, dstRoot, srcPkg, seen); skip {
+			events = append(events, ev)
+			continue
+		}
+		dst.Application = append(dst.Application, e)
+		seen[key] = seenEntry{pkg: srcPkg, hash: fileHash(filepath.Join(srcRoot, e.Path))}
+	}
+
 	for _, e := range src.Topics {
 		key := "topics:" + e.ID
 		if ev, skip := checkDedup(key, e.Path, "topics", srcRoot, dstRoot, srcPkg, seen); skip {
@@ -161,6 +171,9 @@ func CollectActiveIDs(m *manifest.Manifest) map[string]bool {
 	ids := make(map[string]bool)
 	for _, e := range m.Foundation {
 		ids["foundation:"+e.ID] = true
+	}
+	for _, e := range m.Application {
+		ids["application:"+e.ID] = true
 	}
 	for _, e := range m.Topics {
 		ids["topics:"+e.ID] = true

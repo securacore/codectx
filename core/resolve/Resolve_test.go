@@ -28,11 +28,11 @@ func setupBareRepo(t *testing.T, tags []string, includePackageYml bool) string {
 	wt, err := repo.Worktree()
 	require.NoError(t, err)
 
-	// Create package.yml if requested.
+	// Create manifest.yml if requested.
 	if includePackageYml {
 		content := "name: test-pkg\nauthor: test-author\nversion: \"1.0.0\"\ndescription: Test\n"
-		require.NoError(t, os.WriteFile(filepath.Join(workDir, "package.yml"), []byte(content), 0o644))
-		_, err = wt.Add("package.yml")
+		require.NoError(t, os.WriteFile(filepath.Join(workDir, "manifest.yml"), []byte(content), 0o644))
+		_, err = wt.Add("manifest.yml")
 		require.NoError(t, err)
 	}
 
@@ -160,8 +160,8 @@ func TestFetch_success(t *testing.T) {
 	err := Fetch(resolved, destDir)
 	require.NoError(t, err)
 
-	// Verify package.yml exists.
-	_, err = os.Stat(filepath.Join(destDir, "package.yml"))
+	// Verify manifest.yml exists.
+	_, err = os.Stat(filepath.Join(destDir, "manifest.yml"))
 	assert.NoError(t, err)
 
 	// Verify README.md exists.
@@ -198,7 +198,7 @@ func TestFetch_noPackageYml(t *testing.T) {
 
 	err := Fetch(resolved, destDir)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "no package.yml")
+	assert.Contains(t, err.Error(), "no manifest.yml")
 
 	// Verify cleanup: destDir should not exist.
 	_, statErr := os.Stat(destDir)
@@ -254,7 +254,7 @@ func TestResolveAndFetch_endToEnd(t *testing.T) {
 	err = Fetch(resolved, destDir)
 	require.NoError(t, err)
 
-	// Verify the fetched repo has package.yml.
-	_, err = os.Stat(filepath.Join(destDir, "package.yml"))
+	// Verify the fetched repo has manifest.yml.
+	_, err = os.Stat(filepath.Join(destDir, "manifest.yml"))
 	assert.NoError(t, err)
 }

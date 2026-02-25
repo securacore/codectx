@@ -7,7 +7,7 @@ import (
 // CompiledManifest is the consumption-format manifest written to .codectx/manifest.yml.
 // It is the AI's primary interface: a 2-way data map with content-addressed object
 // references and provenance tracking. Separate from the source manifest.Manifest type
-// which is the authoring format for package.yml files.
+// which is the authoring format for manifest.yml files.
 //
 // A CompiledManifest can contain direct entries, sub-manifest references, or both.
 // In single mode (below decomposition threshold), section arrays hold all entries.
@@ -16,13 +16,14 @@ import (
 // Sub-manifests use the same CompiledManifest structure, enabling recursive
 // decomposition at any depth.
 type CompiledManifest struct {
-	Name        string                    `yaml:"name"`
-	Description string                    `yaml:"description"`
-	Foundation  []CompiledFoundationEntry `yaml:"foundation,omitempty"`
-	Topics      []CompiledTopicEntry      `yaml:"topics,omitempty"`
-	Prompts     []CompiledPromptEntry     `yaml:"prompts,omitempty"`
-	Plans       []CompiledPlanEntry       `yaml:"plans,omitempty"`
-	Manifests   []ManifestRef             `yaml:"manifests,omitempty"`
+	Name        string                     `yaml:"name"`
+	Description string                     `yaml:"description"`
+	Foundation  []CompiledFoundationEntry  `yaml:"foundation,omitempty"`
+	Application []CompiledApplicationEntry `yaml:"application,omitempty"`
+	Topics      []CompiledTopicEntry       `yaml:"topics,omitempty"`
+	Prompts     []CompiledPromptEntry      `yaml:"prompts,omitempty"`
+	Plans       []CompiledPlanEntry        `yaml:"plans,omitempty"`
+	Manifests   []ManifestRef              `yaml:"manifests,omitempty"`
 }
 
 // ManifestRef is a reference to a sub-manifest file.
@@ -44,6 +45,19 @@ type CompiledFoundationEntry struct {
 	Object      string   `yaml:"object"`
 	Description string   `yaml:"description"`
 	Load        string   `yaml:"load,omitempty"`
+	Source      string   `yaml:"source"`
+	DependsOn   []string `yaml:"depends_on,omitempty"`
+	RequiredBy  []string `yaml:"required_by,omitempty"`
+}
+
+// CompiledApplicationEntry is the compiled form of an application entry.
+type CompiledApplicationEntry struct {
+	ID          string   `yaml:"id"`
+	Object      string   `yaml:"object"`
+	Description string   `yaml:"description"`
+	Spec        string   `yaml:"spec,omitempty"`
+	Load        string   `yaml:"load,omitempty"`
+	Files       []string `yaml:"files,omitempty"`
 	Source      string   `yaml:"source"`
 	DependsOn   []string `yaml:"depends_on,omitempty"`
 	RequiredBy  []string `yaml:"required_by,omitempty"`
@@ -106,6 +120,29 @@ func toCompiledManifest(
 			RequiredBy:  e.RequiredBy,
 		}
 		cm.Foundation = append(cm.Foundation, ce)
+	}
+
+	for _, e := range unified.Application {
+		ce := CompiledApplicationEntry{
+			ID:          e.ID,
+			Object:      ObjectPath(pathToHash[e.Path]),
+			Description: e.Description,
+			Load:        e.Load,
+			Source:      provenance["application:"+e.ID],
+			DependsOn:   e.DependsOn,
+			RequiredBy:  e.RequiredBy,
+		}
+		if e.Spec != "" {
+			if h, ok := pathToHash[e.Spec]; ok {
+				ce.Spec = ObjectPath(h)
+			}
+		}
+		for _, f := range e.Files {
+			if h, ok := pathToHash[f]; ok {
+				ce.Files = append(ce.Files, ObjectPath(h))
+			}
+		}
+		cm.Application = append(cm.Application, ce)
 	}
 
 	for _, e := range unified.Topics {

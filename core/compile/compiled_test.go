@@ -197,12 +197,78 @@ func TestToCompiledManifest_planNoState(t *testing.T) {
 	assert.Empty(t, cm.Plans[0].State)
 }
 
+func TestToCompiledManifest_applicationWithSpecAndFiles(t *testing.T) {
+	unified := &manifest.Manifest{
+		Name: "test",
+		Application: []manifest.ApplicationEntry{
+			{
+				ID:          "architecture",
+				Path:        "application/architecture/README.md",
+				Description: "System architecture",
+				Spec:        "application/architecture/spec/README.md",
+				Files:       []string{"application/architecture/diagrams.md", "application/architecture/decisions.md"},
+				Load:        "always",
+				DependsOn:   []string{"philosophy"},
+			},
+		},
+	}
+
+	pathToHash := map[string]string{
+		"application/architecture/README.md":      "1111111111111111",
+		"application/architecture/spec/README.md": "2222222222222222",
+		"application/architecture/diagrams.md":    "3333333333333333",
+		"application/architecture/decisions.md":   "4444444444444444",
+	}
+	provenance := map[string]string{
+		"application:architecture": "local",
+	}
+
+	cm := toCompiledManifest(unified, pathToHash, provenance)
+
+	require.Len(t, cm.Application, 1)
+	e := cm.Application[0]
+	assert.Equal(t, "objects/1111111111111111.md", e.Object)
+	assert.Equal(t, "objects/2222222222222222.md", e.Spec)
+	require.Len(t, e.Files, 2)
+	assert.Equal(t, "objects/3333333333333333.md", e.Files[0])
+	assert.Equal(t, "objects/4444444444444444.md", e.Files[1])
+	assert.Equal(t, "always", e.Load)
+	assert.Equal(t, "local", e.Source)
+	assert.Equal(t, []string{"philosophy"}, e.DependsOn)
+}
+
+func TestToCompiledManifest_applicationNoSpecNoFiles(t *testing.T) {
+	unified := &manifest.Manifest{
+		Name: "test",
+		Application: []manifest.ApplicationEntry{
+			{ID: "overview", Path: "application/overview/README.md", Description: "Overview"},
+		},
+	}
+
+	pathToHash := map[string]string{
+		"application/overview/README.md": "5555555555555555",
+	}
+	provenance := map[string]string{
+		"application:overview": "local",
+	}
+
+	cm := toCompiledManifest(unified, pathToHash, provenance)
+
+	require.Len(t, cm.Application, 1)
+	assert.Empty(t, cm.Application[0].Spec)
+	assert.Nil(t, cm.Application[0].Files)
+	assert.Empty(t, cm.Application[0].Load)
+}
+
 func TestToCompiledManifest_allSections(t *testing.T) {
 	unified := &manifest.Manifest{
 		Name:        "full-project",
 		Description: "A full project",
 		Foundation: []manifest.FoundationEntry{
 			{ID: "a", Path: "foundation/a.md", Description: "A"},
+		},
+		Application: []manifest.ApplicationEntry{
+			{ID: "arch", Path: "application/arch/README.md", Description: "Arch"},
 		},
 		Topics: []manifest.TopicEntry{
 			{ID: "b", Path: "topics/b/README.md", Description: "B"},
@@ -216,21 +282,24 @@ func TestToCompiledManifest_allSections(t *testing.T) {
 	}
 
 	pathToHash := map[string]string{
-		"foundation/a.md":     "aaaaaaaaaaaaaaaa",
-		"topics/b/README.md":  "bbbbbbbbbbbbbbbb",
-		"prompts/c/README.md": "cccccccccccccccc",
-		"plans/d/README.md":   "dddddddddddddddd",
+		"foundation/a.md":            "aaaaaaaaaaaaaaaa",
+		"application/arch/README.md": "abababababababab",
+		"topics/b/README.md":         "bbbbbbbbbbbbbbbb",
+		"prompts/c/README.md":        "cccccccccccccccc",
+		"plans/d/README.md":          "dddddddddddddddd",
 	}
 	provenance := map[string]string{
-		"foundation:a": "local",
-		"topics:b":     "pkg@org",
-		"prompts:c":    "local",
-		"plans:d":      "local",
+		"foundation:a":     "local",
+		"application:arch": "local",
+		"topics:b":         "pkg@org",
+		"prompts:c":        "local",
+		"plans:d":          "local",
 	}
 
 	cm := toCompiledManifest(unified, pathToHash, provenance)
 
 	assert.Len(t, cm.Foundation, 1)
+	assert.Len(t, cm.Application, 1)
 	assert.Len(t, cm.Topics, 1)
 	assert.Len(t, cm.Prompts, 1)
 	assert.Len(t, cm.Plans, 1)
@@ -288,6 +357,19 @@ func TestWriteAndLoad_compiledManifest(t *testing.T) {
 				RequiredBy:  []string{"conventions"},
 			},
 		},
+		Application: []CompiledApplicationEntry{
+			{
+				ID:          "architecture",
+				Object:      "objects/aaaa111122223333.md",
+				Description: "System architecture",
+				Spec:        "objects/aaaa444455556666.md",
+				Load:        "always",
+				Files:       []string{"objects/aaaa777788889999.md"},
+				Source:      "local",
+				DependsOn:   []string{"philosophy"},
+				RequiredBy:  []string{"react"},
+			},
+		},
 		Topics: []CompiledTopicEntry{
 			{
 				ID:          "react",
@@ -334,6 +416,16 @@ func TestWriteAndLoad_compiledManifest(t *testing.T) {
 	assert.Equal(t, "always", loaded.Foundation[0].Load)
 	assert.Equal(t, "local", loaded.Foundation[0].Source)
 	assert.Equal(t, []string{"conventions"}, loaded.Foundation[0].RequiredBy)
+
+	require.Len(t, loaded.Application, 1)
+	assert.Equal(t, "architecture", loaded.Application[0].ID)
+	assert.Equal(t, "objects/aaaa111122223333.md", loaded.Application[0].Object)
+	assert.Equal(t, "objects/aaaa444455556666.md", loaded.Application[0].Spec)
+	assert.Equal(t, "always", loaded.Application[0].Load)
+	assert.Equal(t, []string{"objects/aaaa777788889999.md"}, loaded.Application[0].Files)
+	assert.Equal(t, "local", loaded.Application[0].Source)
+	assert.Equal(t, []string{"philosophy"}, loaded.Application[0].DependsOn)
+	assert.Equal(t, []string{"react"}, loaded.Application[0].RequiredBy)
 
 	require.Len(t, loaded.Topics, 1)
 	assert.Equal(t, "objects/2222222222222222.md", loaded.Topics[0].Spec)

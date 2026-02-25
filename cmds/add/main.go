@@ -156,6 +156,13 @@ func Run(inputs []string, sourceFlag, activateFlag string) error {
 		return fmt.Errorf("write config: %w", err)
 	}
 
+	// Sync local manifest: discover new entries, remove stale, infer relationships.
+	manifestPath := filepath.Join(docsDir, "manifest.yml")
+	if localManifest, loadErr := manifest.Load(manifestPath); loadErr == nil {
+		synced := manifest.Sync(docsDir, localManifest)
+		_ = manifest.Write(manifestPath, synced)
+	}
+
 	// Print results.
 	ui.Blank()
 	for _, t := range targets {
@@ -231,12 +238,13 @@ func parseAndResolve(input, sourceFlag string, cfg *config.Config, docsDir strin
 		return nil, fmt.Errorf("fetch: %w", err)
 	}
 
-	// Load the fetched package's manifest.
-	pkgManifestPath := filepath.Join(pkgDir, "package.yml")
+	// Load the fetched package's manifest and discover entries from disk.
+	pkgManifestPath := filepath.Join(pkgDir, "manifest.yml")
 	pkgManifest, err := manifest.Load(pkgManifestPath)
 	if err != nil {
 		return nil, fmt.Errorf("load package manifest: %w", err)
 	}
+	pkgManifest = manifest.Discover(pkgDir, pkgManifest)
 
 	return &addTarget{
 		input:    input,
@@ -248,32 +256,74 @@ func parseAndResolve(input, sourceFlag string, cfg *config.Config, docsDir strin
 	}, nil
 }
 
+// activationEntry represents a selectable manifest entry for activation prompts.
+type activationEntry struct {
+	section string
+	id      string
+	label   string
+}
+
+// buildCombinedEntries collects all selectable manifest entries from the
+// given add targets, grouped by package label.
+func buildCombinedEntries(targets []*addTarget) []activationEntry {
+	var entries []activationEntry
+	for _, t := range targets {
+		pkgLabel := fmt.Sprintf("%s@%s", t.resolved.Name, t.resolved.Author)
+		for _, e := range t.manifest.Foundation {
+			entries = append(entries, activationEntry{"foundation", e.ID, fmt.Sprintf("[%s / foundation] %s - %s", pkgLabel, e.ID, e.Description)})
+		}
+		for _, e := range t.manifest.Application {
+			entries = append(entries, activationEntry{"application", e.ID, fmt.Sprintf("[%s / application] %s - %s", pkgLabel, e.ID, e.Description)})
+		}
+		for _, e := range t.manifest.Topics {
+			entries = append(entries, activationEntry{"topics", e.ID, fmt.Sprintf("[%s / topics] %s - %s", pkgLabel, e.ID, e.Description)})
+		}
+		for _, e := range t.manifest.Prompts {
+			entries = append(entries, activationEntry{"prompts", e.ID, fmt.Sprintf("[%s / prompts] %s - %s", pkgLabel, e.ID, e.Description)})
+		}
+		for _, e := range t.manifest.Plans {
+			entries = append(entries, activationEntry{"plans", e.ID, fmt.Sprintf("[%s / plans] %s - %s", pkgLabel, e.ID, e.Description)})
+		}
+	}
+	return entries
+}
+
+// resolveActivation converts a user's entry selection into an Activation.
+// If all entries are selected, it returns "all" mode.
+// If none are selected, it returns "none" mode.
+// Otherwise, it builds a granular ActivationMap.
+func resolveActivation(entries []activationEntry, selected []int) config.Activation {
+	if len(selected) == len(entries) {
+		return config.Activation{Mode: "all"}
+	}
+	if len(selected) == 0 {
+		return config.Activation{Mode: "none"}
+	}
+
+	am := &config.ActivationMap{}
+	for _, idx := range selected {
+		e := entries[idx]
+		switch e.section {
+		case "foundation":
+			am.Foundation = append(am.Foundation, e.id)
+		case "application":
+			am.Application = append(am.Application, e.id)
+		case "topics":
+			am.Topics = append(am.Topics, e.id)
+		case "prompts":
+			am.Prompts = append(am.Prompts, e.id)
+		case "plans":
+			am.Plans = append(am.Plans, e.id)
+		}
+	}
+	return config.Activation{Map: am}
+}
+
 // promptCombinedActivation shows a single multi-select with entries from all
 // packages grouped by package label. Each entry is prefixed with the package
 // it belongs to.
 func promptCombinedActivation(targets []*addTarget) (config.Activation, error) {
-	type entry struct {
-		section string
-		id      string
-		label   string
-	}
-
-	var entries []entry
-	for _, t := range targets {
-		pkgLabel := fmt.Sprintf("%s@%s", t.resolved.Name, t.resolved.Author)
-		for _, e := range t.manifest.Foundation {
-			entries = append(entries, entry{"foundation", e.ID, fmt.Sprintf("[%s / foundation] %s - %s", pkgLabel, e.ID, e.Description)})
-		}
-		for _, e := range t.manifest.Topics {
-			entries = append(entries, entry{"topics", e.ID, fmt.Sprintf("[%s / topics] %s - %s", pkgLabel, e.ID, e.Description)})
-		}
-		for _, e := range t.manifest.Prompts {
-			entries = append(entries, entry{"prompts", e.ID, fmt.Sprintf("[%s / prompts] %s - %s", pkgLabel, e.ID, e.Description)})
-		}
-		for _, e := range t.manifest.Plans {
-			entries = append(entries, entry{"plans", e.ID, fmt.Sprintf("[%s / plans] %s - %s", pkgLabel, e.ID, e.Description)})
-		}
-	}
+	entries := buildCombinedEntries(targets)
 
 	if len(entries) == 0 {
 		ui.Done("Packages have no entries to activate.")
@@ -302,33 +352,7 @@ func promptCombinedActivation(targets []*addTarget) (config.Activation, error) {
 		return config.Activation{}, err
 	}
 
-	// If all selected, use "all" mode.
-	if len(selected) == len(entries) {
-		return config.Activation{Mode: "all"}, nil
-	}
-
-	// If none selected, use "none" mode.
-	if len(selected) == 0 {
-		return config.Activation{Mode: "none"}, nil
-	}
-
-	// Build granular activation map.
-	am := &config.ActivationMap{}
-	for _, idx := range selected {
-		e := entries[idx]
-		switch e.section {
-		case "foundation":
-			am.Foundation = append(am.Foundation, e.id)
-		case "topics":
-			am.Topics = append(am.Topics, e.id)
-		case "prompts":
-			am.Prompts = append(am.Prompts, e.id)
-		case "plans":
-			am.Plans = append(am.Plans, e.id)
-		}
-	}
-
-	return config.Activation{Map: am}, nil
+	return resolveActivation(entries, selected), nil
 }
 
 // parseActivateFlag parses the --activate flag value into an Activation.
@@ -359,6 +383,8 @@ func parseActivateFlag(value string) (config.Activation, error) {
 		switch section {
 		case "foundation":
 			am.Foundation = append(am.Foundation, id)
+		case "application":
+			am.Application = append(am.Application, id)
 		case "topics":
 			am.Topics = append(am.Topics, id)
 		case "prompts":
@@ -386,10 +412,11 @@ func detectCollisions(cfg *config.Config, newManifest *manifest.Manifest, activa
 	// Collect all currently active entry IDs.
 	activeIDs := make(map[string]string) // "section:id" -> source package label
 
-	// Load local manifest.
+	// Load and sync local manifest.
 	docsDir := cfg.DocsDir()
-	localManifestPath := filepath.Join(docsDir, "package.yml")
+	localManifestPath := filepath.Join(docsDir, "manifest.yml")
 	if localManifest, err := manifest.Load(localManifestPath); err == nil {
+		localManifest = manifest.Sync(docsDir, localManifest)
 		for key := range compile.CollectActiveIDs(localManifest) {
 			activeIDs[key] = "local"
 		}
@@ -401,11 +428,12 @@ func detectCollisions(cfg *config.Config, newManifest *manifest.Manifest, activa
 			continue
 		}
 		pkgDir := filepath.Join(docsDir, "packages", fmt.Sprintf("%s@%s", pkg.Name, pkg.Author))
-		pkgManifestPath := filepath.Join(pkgDir, "package.yml")
+		pkgManifestPath := filepath.Join(pkgDir, "manifest.yml")
 		pkgManifest, err := manifest.Load(pkgManifestPath)
 		if err != nil {
 			continue
 		}
+		pkgManifest = manifest.Discover(pkgDir, pkgManifest)
 		filtered := filterManifestForIDs(pkgManifest, pkg.Active)
 		pkgLabel := fmt.Sprintf("%s@%s", pkg.Name, pkg.Author)
 		for key := range compile.CollectActiveIDs(filtered) {
@@ -446,6 +474,14 @@ func filterManifestForIDs(m *manifest.Manifest, activation config.Activation) *m
 		for _, e := range m.Foundation {
 			if ids[e.ID] {
 				filtered.Foundation = append(filtered.Foundation, e)
+			}
+		}
+	}
+	if am.Application != nil {
+		ids := toSetLocal(am.Application)
+		for _, e := range m.Application {
+			if ids[e.ID] {
+				filtered.Application = append(filtered.Application, e)
 			}
 		}
 	}
@@ -508,6 +544,9 @@ func printActivation(a config.Activation) {
 	ui.Header("Activation:")
 	if len(a.Map.Foundation) > 0 {
 		ui.KV("foundation", strings.Join(a.Map.Foundation, ", "), 14)
+	}
+	if len(a.Map.Application) > 0 {
+		ui.KV("application", strings.Join(a.Map.Application, ", "), 14)
 	}
 	if len(a.Map.Topics) > 0 {
 		ui.KV("topics", strings.Join(a.Map.Topics, ", "), 14)

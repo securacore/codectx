@@ -23,6 +23,26 @@ const (
 	upgradeTimeout = 60 * time.Second
 )
 
+// upgradeDownloadBase returns the base URL for downloading release assets.
+// Tests override this to point at an httptest server.
+var upgradeDownloadBase = func(tag string) string {
+	return releaseDownloadURL(tag)
+}
+
+// resolveExecutable locates the running binary for replacement.
+// Tests override this to avoid replacing the test runner.
+var resolveExecutable = func() (string, error) {
+	execPath, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("locate executable: %w", err)
+	}
+	execPath, err = filepath.EvalSymlinks(execPath)
+	if err != nil {
+		return "", fmt.Errorf("resolve symlinks: %w", err)
+	}
+	return execPath, nil
+}
+
 // Upgrade downloads and installs the specified version, replacing the
 // running binary. It downloads the platform-appropriate archive from
 // GitHub Releases, verifies its SHA-256 checksum, extracts the binary,
@@ -30,7 +50,7 @@ const (
 func Upgrade(tag string) error {
 	version := strings.TrimPrefix(tag, "v")
 	archive := archiveName(version)
-	baseURL := releaseDownloadURL(tag)
+	baseURL := upgradeDownloadBase(tag)
 
 	// Create a temp directory for all downloads.
 	tmpDir, err := os.MkdirTemp("", "codectx-update-*")
@@ -212,15 +232,10 @@ func extractBinary(archivePath, dir string) (string, error) {
 // binary to a temp file in the same directory (ensuring same filesystem),
 // and renames it over the original.
 func replaceBinary(newPath string) error {
-	execPath, err := os.Executable()
+	execPath, err := resolveExecutable()
 	if err != nil {
-		return fmt.Errorf("locate executable: %w", err)
+		return err
 	}
-	execPath, err = filepath.EvalSymlinks(execPath)
-	if err != nil {
-		return fmt.Errorf("resolve symlinks: %w", err)
-	}
-
 	return replaceFile(newPath, execPath)
 }
 

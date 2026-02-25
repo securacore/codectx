@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Documentation Package",
-  "description": "Schema for package.yml. Validates documentation package manifests that serve as data maps for AI-driven documentation navigation and loading. Every package (local project, installed dependency, compiled output) uses this format.",
+  "title": "Documentation Manifest",
+  "description": "Schema for manifest.yml. Validates documentation manifests that serve as data maps for AI-driven documentation navigation and loading. Every package (local project, installed dependency, compiled output) uses this format.",
   "type": "object",
   "required": ["name", "author", "version", "description"],
   "additionalProperties": false,
@@ -27,6 +27,13 @@
       "description": "Foundational documents. Loaded into AI context based on the load field.",
       "items": {
         "$ref": "#/$defs/foundationEntry"
+      }
+    },
+    "application": {
+      "type": "array",
+      "description": "Application-level documentation. Product architecture, design decisions, and system-level documentation.",
+      "items": {
+        "$ref": "#/$defs/applicationEntry"
       }
     },
     "topics": {
@@ -73,6 +80,49 @@
         "description": {
           "type": "string",
           "description": "One-line purpose statement."
+        },
+        "depends_on": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "IDs of entries this depends on."
+        },
+        "required_by": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "IDs of entries that depend on this."
+        }
+      }
+    },
+    "applicationEntry": {
+      "type": "object",
+      "required": ["id", "path", "description"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier across all sections. Used in depends_on and required_by."
+        },
+        "path": {
+          "type": "string",
+          "description": "File path to the application README.md, relative to the package root."
+        },
+        "description": {
+          "type": "string",
+          "description": "One-line purpose statement."
+        },
+        "spec": {
+          "type": "string",
+          "description": "File path to the application spec, relative to the package root."
+        },
+        "load": {
+          "type": "string",
+          "enum": ["always", "documentation"],
+          "description": "When to load into AI context. 'always' loads every session. 'documentation' loads only for documentation tasks."
+        },
+        "files": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Sub-files for the application entry, relative to the package root."
         },
         "depends_on": {
           "type": "array",

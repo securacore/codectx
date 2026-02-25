@@ -21,6 +21,13 @@
         "$ref": "#/$defs/compiledFoundationEntry"
       }
     },
+    "application": {
+      "type": "array",
+      "description": "Compiled application entries with content-addressed object references.",
+      "items": {
+        "$ref": "#/$defs/compiledApplicationEntry"
+      }
+    },
     "topics": {
       "type": "array",
       "description": "Compiled topic entries with content-addressed object references.",
@@ -77,6 +84,58 @@
         "source": {
           "type": "string",
           "description": "Provenance label ('local' or 'name@author')."
+        },
+        "depends_on": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "IDs of entries this depends on."
+        },
+        "required_by": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "IDs of entries that depend on this."
+        }
+      }
+    },
+    "compiledApplicationEntry": {
+      "type": "object",
+      "required": ["id", "object", "description", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier."
+        },
+        "object": {
+          "type": "string",
+          "pattern": "^objects/[0-9a-f]{16}\\.md$",
+          "description": "Content-addressed object path."
+        },
+        "description": {
+          "type": "string",
+          "description": "One-line purpose statement."
+        },
+        "spec": {
+          "type": "string",
+          "pattern": "^objects/[0-9a-f]{16}\\.md$",
+          "description": "Content-addressed object path for the application spec."
+        },
+        "load": {
+          "type": "string",
+          "enum": ["always", "documentation"],
+          "description": "When to load into AI context."
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^objects/[0-9a-f]{16}\\.md$"
+          },
+          "description": "Content-addressed object paths for sub-files."
+        },
+        "source": {
+          "type": "string",
+          "description": "Provenance label."
         },
         "depends_on": {
           "type": "array",
@@ -217,7 +276,7 @@
       "properties": {
         "section": {
           "type": "string",
-          "enum": ["foundation", "topics", "prompts", "plans"],
+          "enum": ["foundation", "application", "topics", "prompts", "plans"],
           "description": "Which section this sub-manifest covers."
         },
         "path": {

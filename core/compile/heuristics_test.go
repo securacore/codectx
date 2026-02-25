@@ -21,12 +21,13 @@ func setupHeuristicsTest(t *testing.T) (string, *ObjectStore, map[string]string)
 	pathToHash := make(map[string]string)
 
 	files := map[string]string{
-		"foundation/a.md":         "# Philosophy\n\nThis is the philosophy document with enough content.\n",
-		"foundation/b.md":         "# Conventions\n\nStandard conventions.\n",
-		"topics/go/README.md":     "# Go\n\nGo conventions and patterns for the project.\n",
-		"topics/go/spec.md":       "# Go Spec\n\nDetailed specification.\n",
-		"prompts/lint/README.md":  "# Lint\n\nRun the linter.\n",
-		"plans/migrate/README.md": "# Migration\n\nMigration plan.\n",
+		"foundation/a.md":            "# Philosophy\n\nThis is the philosophy document with enough content.\n",
+		"foundation/b.md":            "# Conventions\n\nStandard conventions.\n",
+		"application/arch/README.md": "# Architecture\n\nSystem architecture overview.\n",
+		"topics/go/README.md":        "# Go\n\nGo conventions and patterns for the project.\n",
+		"topics/go/spec.md":          "# Go Spec\n\nDetailed specification.\n",
+		"prompts/lint/README.md":     "# Lint\n\nRun the linter.\n",
+		"plans/migrate/README.md":    "# Migration\n\nMigration plan.\n",
 	}
 
 	for path, content := range files {
@@ -48,6 +49,9 @@ func TestGenerateHeuristics_basic(t *testing.T) {
 			{ID: "philosophy", Path: "foundation/a.md", Load: "always"},
 			{ID: "conventions", Path: "foundation/b.md"},
 		},
+		Application: []manifest.ApplicationEntry{
+			{ID: "arch", Path: "application/arch/README.md"},
+		},
 		Topics: []manifest.TopicEntry{
 			{ID: "go", Path: "topics/go/README.md", Spec: "topics/go/spec.md"},
 		},
@@ -62,6 +66,7 @@ func TestGenerateHeuristics_basic(t *testing.T) {
 	provenance := map[string]string{
 		"foundation:philosophy":  "local",
 		"foundation:conventions": "local",
+		"application:arch":       "local",
 		"topics:go":              "go@org",
 		"prompts:lint":           "local",
 		"plans:migrate":          "local",
@@ -70,7 +75,7 @@ func TestGenerateHeuristics_basic(t *testing.T) {
 	h := generateHeuristics(m, pathToHash, provenance, objectsDir)
 
 	// Totals.
-	assert.Equal(t, 5, h.Totals.Entries)
+	assert.Equal(t, 6, h.Totals.Entries)
 	assert.Greater(t, h.Totals.Objects, 0)
 	assert.Greater(t, h.Totals.SizeBytes, 0)
 	assert.Greater(t, h.Totals.EstimatedTokens, 0)
@@ -82,6 +87,10 @@ func TestGenerateHeuristics_basic(t *testing.T) {
 	assert.Equal(t, 1, h.Sections.Foundation.AlwaysLoad)
 	assert.Greater(t, h.Sections.Foundation.SizeBytes, 0)
 	assert.Greater(t, h.Sections.Foundation.EstimatedTokens, 0)
+
+	require.NotNil(t, h.Sections.Application)
+	assert.Equal(t, 1, h.Sections.Application.Entries)
+	assert.Greater(t, h.Sections.Application.SizeBytes, 0)
 
 	require.NotNil(t, h.Sections.Topics)
 	assert.Equal(t, 1, h.Sections.Topics.Entries)
@@ -97,7 +106,7 @@ func TestGenerateHeuristics_basic(t *testing.T) {
 	// Packages: local first, then go@org.
 	require.Len(t, h.Packages, 2)
 	assert.Equal(t, "local", h.Packages[0].Name)
-	assert.Equal(t, 4, h.Packages[0].Entries) // philosophy, conventions, lint, migrate
+	assert.Equal(t, 5, h.Packages[0].Entries) // philosophy, conventions, arch, lint, migrate
 	assert.Equal(t, "go@org", h.Packages[1].Name)
 	assert.Equal(t, 1, h.Packages[1].Entries)
 
@@ -297,4 +306,84 @@ func TestLoadHeuristics_invalidYAML(t *testing.T) {
 	_, err := LoadHeuristics(path)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "parse heuristics")
+}
+
+func TestGenerateHeuristics_applicationWithFiles(t *testing.T) {
+	dir, store, _ := setupHeuristicsTest(t)
+	objectsDir := filepath.Join(dir, "objects")
+
+	// Create additional file objects for application entry.
+	pathToHash := make(map[string]string)
+	files := map[string]string{
+		"application/arch/README.md":      "# Architecture\n\nSystem architecture.\n",
+		"application/arch/spec/README.md": "# Arch Spec\n\nDetailed spec.\n",
+		"application/arch/decisions.md":   "# Decisions\n\nDesign decisions.\n",
+	}
+	for path, content := range files {
+		hash, err := store.Store([]byte(content))
+		require.NoError(t, err)
+		pathToHash[path] = hash
+	}
+
+	m := &manifest.Manifest{
+		Name: "app-files-test",
+		Application: []manifest.ApplicationEntry{
+			{
+				ID:   "arch",
+				Path: "application/arch/README.md",
+				Spec: "application/arch/spec/README.md",
+				Files: []string{
+					"application/arch/decisions.md",
+				},
+			},
+		},
+	}
+
+	provenance := map[string]string{
+		"application:arch": "local",
+	}
+
+	h := generateHeuristics(m, pathToHash, provenance, objectsDir)
+
+	require.NotNil(t, h.Sections.Application)
+	assert.Equal(t, 1, h.Sections.Application.Entries)
+	// Size should include README + spec + decisions.
+	assert.Greater(t, h.Sections.Application.SizeBytes, 0)
+
+	// Package stats should include all file sizes.
+	require.Len(t, h.Packages, 1)
+	assert.Equal(t, "local", h.Packages[0].Name)
+	assert.Equal(t, h.Sections.Application.SizeBytes, h.Packages[0].SizeBytes)
+}
+
+func TestGenerateHeuristics_applicationAlwaysLoad(t *testing.T) {
+	dir, store, _ := setupHeuristicsTest(t)
+	objectsDir := filepath.Join(dir, "objects")
+
+	pathToHash := make(map[string]string)
+	files := map[string]string{
+		"application/arch/README.md": "# Architecture\n\nSystem architecture.\n",
+	}
+	for path, content := range files {
+		hash, err := store.Store([]byte(content))
+		require.NoError(t, err)
+		pathToHash[path] = hash
+	}
+
+	m := &manifest.Manifest{
+		Name: "always-load-app",
+		Application: []manifest.ApplicationEntry{
+			{ID: "arch", Path: "application/arch/README.md", Load: "always"},
+		},
+	}
+
+	provenance := map[string]string{
+		"application:arch": "local",
+	}
+
+	h := generateHeuristics(m, pathToHash, provenance, objectsDir)
+
+	assert.Equal(t, 1, h.Totals.AlwaysLoad)
+	require.NotNil(t, h.Sections.Application)
+	assert.Equal(t, 1, h.Sections.Application.AlwaysLoad)
 }

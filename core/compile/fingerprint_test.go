@@ -47,7 +47,7 @@ func setupFingerprintProject(t *testing.T) (string, *config.Config) {
 			{ID: "philosophy", Path: "foundation/philosophy.md", Description: "Core philosophy", Load: "always"},
 		},
 	}
-	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), m))
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
 
 	cfg := &config.Config{
 		Name: "fp-test",
@@ -135,7 +135,7 @@ func TestComputeFingerprint_changesWhenManifestChanges(t *testing.T) {
 			{ID: "conventions", Path: "foundation/conventions.md", Description: "Conventions"},
 		},
 	}
-	require.NoError(t, manifest.Write(filepath.Join(dir, "docs", "package.yml"), m))
+	require.NoError(t, manifest.Write(filepath.Join(dir, "docs", "manifest.yml"), m))
 
 	fp2, err := computeFingerprint(cfg)
 	require.NoError(t, err)
@@ -301,4 +301,97 @@ func TestHashManifestFiles_includesSpecAndFiles(t *testing.T) {
 
 	assert.NotEqual(t, fmt.Sprintf("%x", h1.Sum(nil)), fmt.Sprintf("%x", h2.Sum(nil)),
 		"spec and files should contribute to the hash")
+}
+
+func TestHashManifestFiles_applicationSection(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "app.md"), []byte("app content"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "app-spec.md"), []byte("spec content"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "app-file.md"), []byte("file content"), 0o644))
+
+	m := &manifest.Manifest{
+		Application: []manifest.ApplicationEntry{
+			{ID: "a1", Path: "app.md", Spec: "app-spec.md", Files: []string{"app-file.md"}},
+		},
+	}
+	withoutApp := &manifest.Manifest{}
+
+	h1 := sha256.New()
+	require.NoError(t, hashManifestFiles(h1, m, dir))
+	h2 := sha256.New()
+	require.NoError(t, hashManifestFiles(h2, withoutApp, dir))
+
+	assert.NotEqual(t, fmt.Sprintf("%x", h1.Sum(nil)), fmt.Sprintf("%x", h2.Sum(nil)),
+		"application entries with spec and files should change the hash")
+}
+
+func TestHashManifestFiles_promptsSection(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "prompt.md"), []byte("prompt content"), 0o644))
+
+	m := &manifest.Manifest{
+		Prompts: []manifest.PromptEntry{
+			{ID: "p1", Path: "prompt.md"},
+		},
+	}
+	empty := &manifest.Manifest{}
+
+	h1 := sha256.New()
+	require.NoError(t, hashManifestFiles(h1, m, dir))
+	h2 := sha256.New()
+	require.NoError(t, hashManifestFiles(h2, empty, dir))
+
+	assert.NotEqual(t, fmt.Sprintf("%x", h1.Sum(nil)), fmt.Sprintf("%x", h2.Sum(nil)),
+		"prompts entries should change the hash")
+}
+
+func TestHashManifestFiles_plansWithState(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "plan.md"), []byte("plan content"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "state.yml"), []byte("state: active"), 0o644))
+
+	withState := &manifest.Manifest{
+		Plans: []manifest.PlanEntry{
+			{ID: "pl1", Path: "plan.md", State: "state.yml"},
+		},
+	}
+	withoutState := &manifest.Manifest{
+		Plans: []manifest.PlanEntry{
+			{ID: "pl1", Path: "plan.md"},
+		},
+	}
+
+	h1 := sha256.New()
+	require.NoError(t, hashManifestFiles(h1, withState, dir))
+	h2 := sha256.New()
+	require.NoError(t, hashManifestFiles(h2, withoutState, dir))
+
+	assert.NotEqual(t, fmt.Sprintf("%x", h1.Sum(nil)), fmt.Sprintf("%x", h2.Sum(nil)),
+		"plan state files should change the hash")
+}
+
+func TestHashManifestFiles_applicationSpecChangeDetected(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "app.md"), []byte("app"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "spec.md"), []byte("spec v1"), 0o644))
+
+	m := &manifest.Manifest{
+		Application: []manifest.ApplicationEntry{
+			{ID: "a1", Path: "app.md", Spec: "spec.md"},
+		},
+	}
+
+	h1 := sha256.New()
+	require.NoError(t, hashManifestFiles(h1, m, dir))
+	hash1 := fmt.Sprintf("%x", h1.Sum(nil))
+
+	// Modify spec content.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "spec.md"), []byte("spec v2"), 0o644))
+
+	h2 := sha256.New()
+	require.NoError(t, hashManifestFiles(h2, m, dir))
+	hash2 := fmt.Sprintf("%x", h2.Sum(nil))
+
+	assert.NotEqual(t, hash1, hash2,
+		"changing an application spec file should produce a different hash")
 }

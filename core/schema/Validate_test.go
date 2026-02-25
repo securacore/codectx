@@ -66,7 +66,7 @@ func TestValidate_validPackage(t *testing.T) {
 		"version":     "1.0.0",
 		"description": "A test package",
 	}
-	err := Validate(PackageSchemaFile, v)
+	err := Validate(ManifestSchemaFile, v)
 	assert.NoError(t, err)
 }
 
@@ -92,7 +92,7 @@ func TestValidate_validPackageWithEntries(t *testing.T) {
 			},
 		},
 	}
-	err := Validate(PackageSchemaFile, v)
+	err := Validate(ManifestSchemaFile, v)
 	assert.NoError(t, err)
 }
 
@@ -101,7 +101,7 @@ func TestValidate_invalidPackage_missingRequired(t *testing.T) {
 		"name": "test-pkg",
 		// missing author, version, description
 	}
-	err := Validate(PackageSchemaFile, v)
+	err := Validate(ManifestSchemaFile, v)
 	assert.Error(t, err)
 }
 
@@ -155,7 +155,7 @@ func TestValidate_packageWithPromptsPlans(t *testing.T) {
 			},
 		},
 	}
-	err := Validate(PackageSchemaFile, v)
+	err := Validate(ManifestSchemaFile, v)
 	assert.NoError(t, err)
 }
 
@@ -197,7 +197,7 @@ func TestValidate_packageWithDependsOn(t *testing.T) {
 			},
 		},
 	}
-	err := Validate(PackageSchemaFile, v)
+	err := Validate(ManifestSchemaFile, v)
 	assert.NoError(t, err)
 }
 
@@ -357,7 +357,7 @@ func TestValidate_heuristics_emptySections(t *testing.T) {
 func TestEmbeddedSchemas_readable(t *testing.T) {
 	schemaConstants := []string{
 		CodectxSchemaFile,
-		PackageSchemaFile,
+		ManifestSchemaFile,
 		StateSchemaFile,
 		CompiledSchemaFile,
 		HeuristicsSchemaFile,

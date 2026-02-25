@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/securacore/codectx/core/manifest"
 	"github.com/securacore/codectx/core/preferences"
 
 	"github.com/stretchr/testify/assert"
@@ -40,8 +41,8 @@ func TestRun_withName_createsDirectoryAndProject(t *testing.T) {
 	_, err = os.Stat(filepath.Join(projectDir, "codectx.yml"))
 	assert.NoError(t, err)
 
-	// Verify docs/package.yml was created.
-	_, err = os.Stat(filepath.Join(projectDir, "docs", "package.yml"))
+	// Verify docs/manifest.yml was created.
+	_, err = os.Stat(filepath.Join(projectDir, "docs", "manifest.yml"))
 	assert.NoError(t, err)
 
 	// Verify git was initialized.
@@ -72,7 +73,7 @@ func TestRun_withName_createsDirectoryAndProject(t *testing.T) {
 	// Verify schemas were written.
 	schemaFiles := []string{
 		"docs/schemas/codectx.schema.json",
-		"docs/schemas/package.schema.json",
+		"docs/schemas/manifest.schema.json",
 		"docs/schemas/state.schema.json",
 	}
 	for _, f := range schemaFiles {
@@ -311,8 +312,8 @@ func TestRun_withName_configContent(t *testing.T) {
 	assert.Equal(t, "my-project", codectxYAML.Name)
 	assert.Empty(t, codectxYAML.Packages)
 
-	// Verify docs/package.yml content.
-	pkgData, err := os.ReadFile(filepath.Join(projectDir, "docs", "package.yml"))
+	// Verify docs/manifest.yml content.
+	pkgData, err := os.ReadFile(filepath.Join(projectDir, "docs", "manifest.yml"))
 	require.NoError(t, err)
 
 	var pkgYAML struct {
@@ -331,6 +332,72 @@ func TestRun_withName_configContent(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, prefs.AutoCompile)
 	assert.False(t, *prefs.AutoCompile) // We passed BoolPtr(false).
+}
+
+func TestRun_initDiscoversExistingDocs(t *testing.T) {
+	dir := t.TempDir()
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(dir))
+
+	// Pre-create the project directory with docs files BEFORE init runs.
+	// init uses MkdirAll which is a no-op for existing dirs.
+	projectDir := filepath.Join(dir, "discover-test")
+	require.NoError(t, os.MkdirAll(filepath.Join(projectDir, "docs", "foundation"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(projectDir, "docs", "foundation", "philosophy.md"),
+		[]byte("# Philosophy\nCore principles.\n"), 0o644))
+
+	err = run("discover-test", preferences.BoolPtr(true))
+	require.NoError(t, err)
+
+	// Read back the manifest — it should contain the discovered entry.
+	m, err := manifest.Load(filepath.Join(projectDir, "docs", "manifest.yml"))
+	require.NoError(t, err)
+	require.Len(t, m.Foundation, 1)
+	assert.Equal(t, "philosophy", m.Foundation[0].ID)
+	assert.Equal(t, "foundation/philosophy.md", m.Foundation[0].Path)
+}
+
+func TestRun_initInfersRelationships(t *testing.T) {
+	dir := t.TempDir()
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(dir))
+
+	// Pre-create foundation files that link to each other.
+	projectDir := filepath.Join(dir, "rel-test")
+	require.NoError(t, os.MkdirAll(filepath.Join(projectDir, "docs", "foundation"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(projectDir, "docs", "foundation", "alpha.md"),
+		[]byte("# Alpha\nSee [beta](beta.md) for more.\n"), 0o644))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(projectDir, "docs", "foundation", "beta.md"),
+		[]byte("# Beta\nExtends [alpha](alpha.md).\n"), 0o644))
+
+	err = run("rel-test", preferences.BoolPtr(true))
+	require.NoError(t, err)
+
+	// Read back the manifest — relationships should be inferred.
+	m, err := manifest.Load(filepath.Join(projectDir, "docs", "manifest.yml"))
+	require.NoError(t, err)
+	require.Len(t, m.Foundation, 2)
+
+	byID := map[string]manifest.FoundationEntry{}
+	for _, e := range m.Foundation {
+		byID[e.ID] = e
+	}
+
+	// alpha links to beta → alpha depends_on beta.
+	assert.Contains(t, byID["alpha"].DependsOn, "beta")
+	assert.Contains(t, byID["alpha"].RequiredBy, "beta")
+	// beta links to alpha → beta depends_on alpha.
+	assert.Contains(t, byID["beta"].DependsOn, "alpha")
+	assert.Contains(t, byID["beta"].RequiredBy, "alpha")
 }
 
 func TestRun_withName_preferencesAutoCompileTrue(t *testing.T) {

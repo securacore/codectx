@@ -17,10 +17,11 @@ const (
 
 // sectionDescriptions maps section names to human-readable descriptions.
 var sectionDescriptions = map[string]string{
-	"foundation": "Core operational context",
-	"topics":     "Technology and domain conventions",
-	"prompts":    "Automated task definitions",
-	"plans":      "Implementation plans with state tracking",
+	"foundation":  "Core operational context",
+	"application": "Product architecture and design documentation",
+	"topics":      "Technology and domain conventions",
+	"prompts":     "Automated task definitions",
+	"plans":       "Implementation plans with state tracking",
 }
 
 // shouldDecompose checks whether the compiled manifest exceeds any
@@ -81,6 +82,48 @@ func decompose(cm *CompiledManifest, h *Heuristics, outputDir string) error {
 			EstimatedTokens: tokens,
 			Description:     sectionDescriptions["foundation"],
 		})
+	}
+
+	// Application sub-manifest.
+	if len(cm.Application) > 0 {
+		// Extract always-load application entries for inlining in root.
+		var alwaysLoadApp []CompiledApplicationEntry
+		var nonAlwaysLoadApp []CompiledApplicationEntry
+		for _, e := range cm.Application {
+			if e.Load == "always" {
+				alwaysLoadApp = append(alwaysLoadApp, e)
+			} else {
+				nonAlwaysLoadApp = append(nonAlwaysLoadApp, e)
+			}
+		}
+
+		if len(nonAlwaysLoadApp) > 0 {
+			sub := &CompiledManifest{
+				Name:        cm.Name + " - Application",
+				Description: sectionDescriptions["application"],
+				Application: nonAlwaysLoadApp,
+			}
+			subPath := filepath.Join(manifestsDir, "application.yml")
+			if err := WriteCompiledManifest(subPath, sub); err != nil {
+				return fmt.Errorf("write application sub-manifest: %w", err)
+			}
+
+			tokens := 0
+			if h != nil && h.Sections.Application != nil {
+				tokens = h.Sections.Application.EstimatedTokens
+			}
+
+			refs = append(refs, ManifestRef{
+				Section:         "application",
+				Path:            "manifests/application.yml",
+				Entries:         len(nonAlwaysLoadApp),
+				EstimatedTokens: tokens,
+				Description:     sectionDescriptions["application"],
+			})
+		}
+
+		// Keep only always-load application entries in root.
+		cm.Application = alwaysLoadApp
 	}
 
 	// Topics sub-manifest.
@@ -161,8 +204,9 @@ func decompose(cm *CompiledManifest, h *Heuristics, outputDir string) error {
 		})
 	}
 
-	// Rewrite root manifest: keep only always-load foundation + refs.
+	// Rewrite root manifest: keep only always-load entries + refs.
 	cm.Foundation = alwaysLoad
+	// cm.Application is already set to alwaysLoadApp above (or left as-is if empty).
 	cm.Topics = nil
 	cm.Prompts = nil
 	cm.Plans = nil

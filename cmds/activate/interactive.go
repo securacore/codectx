@@ -209,14 +209,14 @@ func (m *activateModel) loadEntries() {
 	// Load manifest if not already loaded.
 	if pkg.manifest == nil && pkg.loadErr == nil {
 		pkgDir := filepath.Join(m.docsDir, "packages", fmt.Sprintf("%s@%s", pkg.name, pkg.author))
-		pkgManifestPath := filepath.Join(pkgDir, "package.yml")
+		pkgManifestPath := filepath.Join(pkgDir, "manifest.yml")
 		loaded, err := manifest.Load(pkgManifestPath)
 		if err != nil {
 			pkg.loadErr = err
 			m.entries = nil
 			return
 		}
-		pkg.manifest = loaded
+		pkg.manifest = manifest.Discover(pkgDir, loaded)
 	}
 
 	if pkg.loadErr != nil {
@@ -234,6 +234,14 @@ func (m *activateModel) loadEntries() {
 			id:      e.ID,
 			label:   fmt.Sprintf("[foundation] %s - %s", e.ID, e.Description),
 			active:  activeIDs["foundation:"+e.ID],
+		})
+	}
+	for _, e := range pkg.manifest.Application {
+		entries = append(entries, entryItem{
+			section: "application",
+			id:      e.ID,
+			label:   fmt.Sprintf("[application] %s - %s", e.ID, e.Description),
+			active:  activeIDs["application:"+e.ID],
 		})
 	}
 	for _, e := range pkg.manifest.Topics {
@@ -272,6 +280,9 @@ func buildActiveIDSet(activation config.Activation, m *manifest.Manifest) map[st
 		for _, e := range m.Foundation {
 			ids["foundation:"+e.ID] = true
 		}
+		for _, e := range m.Application {
+			ids["application:"+e.ID] = true
+		}
 		for _, e := range m.Topics {
 			ids["topics:"+e.ID] = true
 		}
@@ -289,6 +300,9 @@ func buildActiveIDSet(activation config.Activation, m *manifest.Manifest) map[st
 	ids := make(map[string]bool)
 	for _, id := range activation.Map.Foundation {
 		ids["foundation:"+id] = true
+	}
+	for _, id := range activation.Map.Application {
+		ids["application:"+id] = true
 	}
 	for _, id := range activation.Map.Topics {
 		ids["topics:"+id] = true
@@ -310,8 +324,8 @@ func (m *activateModel) applyEntryChanges() {
 		return
 	}
 
-	totalEntries := len(pkg.manifest.Foundation) + len(pkg.manifest.Topics) +
-		len(pkg.manifest.Prompts) + len(pkg.manifest.Plans)
+	totalEntries := len(pkg.manifest.Foundation) + len(pkg.manifest.Application) +
+		len(pkg.manifest.Topics) + len(pkg.manifest.Prompts) + len(pkg.manifest.Plans)
 
 	activeCount := 0
 	for _, e := range m.entries {
@@ -338,6 +352,8 @@ func (m *activateModel) applyEntryChanges() {
 		switch e.section {
 		case "foundation":
 			am.Foundation = append(am.Foundation, e.id)
+		case "application":
+			am.Application = append(am.Application, e.id)
 		case "topics":
 			am.Topics = append(am.Topics, e.id)
 		case "prompts":
@@ -379,6 +395,7 @@ func activationsEqual(a, b config.Activation) bool {
 	}
 	// Both are maps.
 	return slicesEqual(a.Map.Foundation, b.Map.Foundation) &&
+		slicesEqual(a.Map.Application, b.Map.Application) &&
 		slicesEqual(a.Map.Topics, b.Map.Topics) &&
 		slicesEqual(a.Map.Prompts, b.Map.Prompts) &&
 		slicesEqual(a.Map.Plans, b.Map.Plans)
@@ -565,8 +582,8 @@ func (m activateModel) activationStatus(pkg packageItem) string {
 	}
 	count := activationEntryCount(pkg.activation)
 	if pkg.manifest != nil {
-		total := len(pkg.manifest.Foundation) + len(pkg.manifest.Topics) +
-			len(pkg.manifest.Prompts) + len(pkg.manifest.Plans)
+		total := len(pkg.manifest.Foundation) + len(pkg.manifest.Application) +
+			len(pkg.manifest.Topics) + len(pkg.manifest.Prompts) + len(pkg.manifest.Plans)
 		return activeYellowStyle.Render(fmt.Sprintf("%d of %d entries", count, total))
 	}
 	return activeYellowStyle.Render(fmt.Sprintf("%d entries", count))

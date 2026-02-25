@@ -18,7 +18,7 @@ import (
 )
 
 const configFile = "codectx.yml"
-const packageFile = "package.yml"
+const manifestFile = "manifest.yml"
 const gitignoreContent = ".codectx/\n"
 
 var Command = &cli.Command{
@@ -118,14 +118,18 @@ func run(name string, autoCompile *bool) error {
 		return fmt.Errorf("write config: %w", err)
 	}
 
-	// Create docs/package.yml (local package data map).
+	// Create docs/manifest.yml (local package data map).
 	m := &manifest.Manifest{
 		Name:        name,
 		Author:      "",
 		Version:     "0.1.0",
 		Description: fmt.Sprintf("Documentation package for %s", name),
 	}
-	packagePath := filepath.Join(docsDir, packageFile)
+
+	// Sync: discover entries, remove stale, infer relationships from links.
+	m = manifest.Sync(docsDir, m)
+
+	packagePath := filepath.Join(docsDir, manifestFile)
 	if err := manifest.Write(packagePath, m); err != nil {
 		return fmt.Errorf("write package manifest: %w", err)
 	}

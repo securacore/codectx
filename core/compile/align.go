@@ -39,6 +39,15 @@ func filterManifest(m *manifest.Manifest, activation config.Activation) *manifes
 		}
 	}
 
+	if am.Application != nil {
+		ids := toSet(am.Application)
+		for _, e := range m.Application {
+			if ids[e.ID] {
+				filtered.Application = append(filtered.Application, e)
+			}
+		}
+	}
+
 	if am.Topics != nil {
 		ids := toSet(am.Topics)
 		for _, e := range m.Topics {
@@ -72,6 +81,7 @@ func filterManifest(m *manifest.Manifest, activation config.Activation) *manifes
 // mergeManifest appends all entries from src into dst.
 func mergeManifest(dst, src *manifest.Manifest) {
 	dst.Foundation = append(dst.Foundation, src.Foundation...)
+	dst.Application = append(dst.Application, src.Application...)
 	dst.Topics = append(dst.Topics, src.Topics...)
 	dst.Prompts = append(dst.Prompts, src.Prompts...)
 	dst.Plans = append(dst.Plans, src.Plans...)

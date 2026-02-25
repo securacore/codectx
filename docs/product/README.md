@@ -10,7 +10,7 @@ codectx fixes this. It compiles structured documentation packages into a format 
 
 ```
 docs/
-  package.yml          # Data map: what exists, how to load it
+  manifest.yml          # Data map: what exists, how to load it
   foundation/          # Always-loaded context (conventions, principles)
   topics/              # On-demand reference (React, Go, API patterns)
   prompts/             # Executable instructions (commit, review, deploy)
@@ -63,7 +63,7 @@ The core design principle is metadata-first navigation: AI loads a lightweight d
 
 ### Core Concepts
 
-**Data Map.** Every layer of the system has a data map file that serves as a navigation index for AI. Source packages use `package.yml`; the compiled output uses `manifest.yml`. The data map lists every documentation entry, its dependencies, its loading rules, and its file path. AI reads the data map first and loads documentation on demand.
+**Data Map.** Every layer of the system has a data map file that serves as a navigation index for AI. Source packages use `manifest.yml`; the compiled output uses `manifest.yml`. The data map lists every documentation entry, its dependencies, its loading rules, and its file path. AI reads the data map first and loads documentation on demand.
 
 **Content-Addressed Objects.** Documentation files are stored by their content hash (16-character SHA256 prefix). Identical content across packages produces the same hash, giving natural deduplication. Installing multiple packages that share common documentation incurs no storage or token overhead.
 
@@ -76,7 +76,7 @@ The core design principle is metadata-first navigation: AI loads a lightweight d
 | Schema | Validates |
 |---|---|
 | [codectx.schema.json](../schemas/codectx.schema.json) | `codectx.yml` |
-| [package.schema.json](../schemas/package.schema.json) | `package.yml` |
+| [manifest.schema.json](../schemas/manifest.schema.json) | `manifest.yml` |
 | [state.schema.json](../schemas/state.schema.json) | `state.yml` (plan state) |
 | [compiled.schema.json](../schemas/compiled.schema.json) | Compiled `manifest.yml` |
 | [heuristics.schema.json](../schemas/heuristics.schema.json) | `heuristics.yml` |

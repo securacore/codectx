@@ -20,6 +20,10 @@ func testManifest() *manifest.Manifest {
 			{ID: "philosophy", Path: "foundation/philosophy.md", Description: "Core philosophy"},
 			{ID: "conventions", Path: "foundation/conventions.md", Description: "Conventions"},
 		},
+		Application: []manifest.ApplicationEntry{
+			{ID: "architecture", Path: "application/architecture/README.md", Description: "System architecture"},
+			{ID: "packages", Path: "application/packages/README.md", Description: "Package format"},
+		},
 		Topics: []manifest.TopicEntry{
 			{ID: "react", Path: "topics/react/README.md", Description: "React conventions"},
 			{ID: "go", Path: "topics/go/README.md", Description: "Go conventions"},
@@ -44,6 +48,7 @@ func TestFilterManifest_none(t *testing.T) {
 	assert.Equal(t, m.Name, filtered.Name)
 	assert.Equal(t, m.Author, filtered.Author)
 	assert.Empty(t, filtered.Foundation)
+	assert.Empty(t, filtered.Application)
 	assert.Empty(t, filtered.Topics)
 	assert.Empty(t, filtered.Prompts)
 	assert.Empty(t, filtered.Plans)
@@ -117,6 +122,7 @@ func TestFilterManifest_emptyActivation(t *testing.T) {
 	filtered := filterManifest(m, activation)
 
 	assert.Empty(t, filtered.Foundation)
+	assert.Empty(t, filtered.Application)
 	assert.Empty(t, filtered.Topics)
 }
 
@@ -132,6 +138,9 @@ func TestMergeManifest(t *testing.T) {
 		Foundation: []manifest.FoundationEntry{
 			{ID: "remote", Path: "foundation/remote.md", Description: "Remote doc"},
 		},
+		Application: []manifest.ApplicationEntry{
+			{ID: "arch", Path: "application/arch/README.md", Description: "Architecture"},
+		},
 		Topics: []manifest.TopicEntry{
 			{ID: "react", Path: "topics/react/README.md", Description: "React"},
 		},
@@ -142,6 +151,8 @@ func TestMergeManifest(t *testing.T) {
 	require.Len(t, dst.Foundation, 2)
 	assert.Equal(t, "local", dst.Foundation[0].ID)
 	assert.Equal(t, "remote", dst.Foundation[1].ID)
+	require.Len(t, dst.Application, 1)
+	assert.Equal(t, "arch", dst.Application[0].ID)
 	require.Len(t, dst.Topics, 1)
 	assert.Equal(t, "react", dst.Topics[0].ID)
 }
@@ -175,7 +186,26 @@ func TestToSet_empty(t *testing.T) {
 	assert.Len(t, s, 0)
 }
 
-// --- filterManifest granular Prompts/Plans ---
+// --- filterManifest granular Application/Prompts/Plans ---
+
+func TestFilterManifest_granularApplication(t *testing.T) {
+	m := testManifest()
+	activation := config.Activation{
+		Map: &config.ActivationMap{
+			Application: []string{"architecture"},
+		},
+	}
+
+	filtered := filterManifest(m, activation)
+
+	// Only Application section should have entries.
+	assert.Empty(t, filtered.Foundation)
+	require.Len(t, filtered.Application, 1)
+	assert.Equal(t, "architecture", filtered.Application[0].ID)
+	assert.Empty(t, filtered.Topics)
+	assert.Empty(t, filtered.Prompts)
+	assert.Empty(t, filtered.Plans)
+}
 
 func TestFilterManifest_granularPrompts(t *testing.T) {
 	m := testManifest()
@@ -216,10 +246,11 @@ func TestFilterManifest_granularAllSections(t *testing.T) {
 	m := testManifest()
 	activation := config.Activation{
 		Map: &config.ActivationMap{
-			Foundation: []string{"philosophy"},
-			Topics:     []string{"react"},
-			Prompts:    []string{"review"},
-			Plans:      []string{"migration"},
+			Foundation:  []string{"philosophy"},
+			Application: []string{"architecture"},
+			Topics:      []string{"react"},
+			Prompts:     []string{"review"},
+			Plans:       []string{"migration"},
 		},
 	}
 
@@ -227,6 +258,8 @@ func TestFilterManifest_granularAllSections(t *testing.T) {
 
 	require.Len(t, filtered.Foundation, 1)
 	assert.Equal(t, "philosophy", filtered.Foundation[0].ID)
+	require.Len(t, filtered.Application, 1)
+	assert.Equal(t, "architecture", filtered.Application[0].ID)
 	require.Len(t, filtered.Topics, 1)
 	assert.Equal(t, "react", filtered.Topics[0].ID)
 	require.Len(t, filtered.Prompts, 1)

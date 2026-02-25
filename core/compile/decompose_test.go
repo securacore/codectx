@@ -270,6 +270,151 @@ func TestDecompose_nilHeuristics(t *testing.T) {
 	assert.Equal(t, 0, cm.Manifests[0].EstimatedTokens)
 }
 
+func TestDecompose_applicationWithAlwaysLoad(t *testing.T) {
+	dir := t.TempDir()
+
+	cm := &CompiledManifest{
+		Name: "app-always-load",
+		Application: []CompiledApplicationEntry{
+			{ID: "architecture", Object: "objects/aaa.md", Description: "Architecture overview", Load: "always", Source: "local"},
+			{ID: "api-design", Object: "objects/bbb.md", Description: "API design", Source: "local"},
+			{ID: "data-model", Object: "objects/ccc.md", Description: "Data model", Source: "local"},
+		},
+		Topics: []CompiledTopicEntry{
+			{ID: "go", Object: "objects/ddd.md", Description: "Go conventions", Source: "local"},
+		},
+	}
+
+	h := &Heuristics{
+		Sections: HeuristicsSections{
+			Application: &SectionStats{EstimatedTokens: 8000},
+			Topics:      &SectionStats{EstimatedTokens: 3000},
+		},
+	}
+
+	err := decompose(cm, h, dir)
+	require.NoError(t, err)
+
+	// Always-load application entry should stay in root.
+	require.Len(t, cm.Application, 1)
+	assert.Equal(t, "architecture", cm.Application[0].ID)
+	assert.Equal(t, "always", cm.Application[0].Load)
+
+	// Non-always-load entries should be in sub-manifest.
+	appRef := false
+	for _, ref := range cm.Manifests {
+		if ref.Section == "application" {
+			appRef = true
+			assert.Equal(t, "manifests/application.yml", ref.Path)
+			assert.Equal(t, 2, ref.Entries) // api-design + data-model
+			assert.Equal(t, 8000, ref.EstimatedTokens)
+			assert.Equal(t, sectionDescriptions["application"], ref.Description)
+		}
+	}
+	assert.True(t, appRef, "should have application manifest reference")
+
+	// Verify sub-manifest file is loadable with correct entries.
+	sub, err := LoadCompiledManifest(filepath.Join(dir, "manifests", "application.yml"))
+	require.NoError(t, err)
+	require.Len(t, sub.Application, 2)
+	assert.Equal(t, "api-design", sub.Application[0].ID)
+	assert.Equal(t, "data-model", sub.Application[1].ID)
+	assert.Equal(t, "app-always-load - Application", sub.Name)
+	assert.Equal(t, sectionDescriptions["application"], sub.Description)
+}
+
+func TestDecompose_applicationAllAlwaysLoad(t *testing.T) {
+	dir := t.TempDir()
+
+	cm := &CompiledManifest{
+		Name: "all-app-always",
+		Application: []CompiledApplicationEntry{
+			{ID: "arch", Object: "objects/aaa.md", Load: "always", Source: "local"},
+			{ID: "design", Object: "objects/bbb.md", Load: "always", Source: "local"},
+		},
+	}
+
+	h := &Heuristics{
+		Sections: HeuristicsSections{
+			Application: &SectionStats{EstimatedTokens: 2000},
+		},
+	}
+
+	err := decompose(cm, h, dir)
+	require.NoError(t, err)
+
+	// All application entries are always-load: they all stay in root.
+	require.Len(t, cm.Application, 2)
+
+	// No application sub-manifest ref.
+	for _, ref := range cm.Manifests {
+		assert.NotEqual(t, "application", ref.Section, "should not have application ref when all are always-load")
+	}
+
+	// No application sub-manifest file.
+	_, err = os.Stat(filepath.Join(dir, "manifests", "application.yml"))
+	assert.True(t, os.IsNotExist(err))
+}
+
+func TestDecompose_applicationNoAlwaysLoad(t *testing.T) {
+	dir := t.TempDir()
+
+	cm := &CompiledManifest{
+		Name: "no-app-always",
+		Application: []CompiledApplicationEntry{
+			{ID: "arch", Object: "objects/aaa.md", Source: "local"},
+			{ID: "design", Object: "objects/bbb.md", Source: "local"},
+		},
+	}
+
+	h := &Heuristics{
+		Sections: HeuristicsSections{
+			Application: &SectionStats{EstimatedTokens: 4000},
+		},
+	}
+
+	err := decompose(cm, h, dir)
+	require.NoError(t, err)
+
+	// No always-load entries: application should be empty in root.
+	assert.Empty(t, cm.Application)
+
+	// Application ref should exist with all entries.
+	require.Len(t, cm.Manifests, 1)
+	assert.Equal(t, "application", cm.Manifests[0].Section)
+	assert.Equal(t, 2, cm.Manifests[0].Entries)
+}
+
+func TestDecompose_applicationNilHeuristics(t *testing.T) {
+	dir := t.TempDir()
+
+	cm := &CompiledManifest{
+		Name: "app-nil-h",
+		Application: []CompiledApplicationEntry{
+			{ID: "arch", Object: "objects/aaa.md", Load: "always", Source: "local"},
+			{ID: "design", Object: "objects/bbb.md", Source: "local"},
+		},
+	}
+
+	err := decompose(cm, nil, dir)
+	require.NoError(t, err)
+
+	// Always-load stays in root.
+	require.Len(t, cm.Application, 1)
+	assert.Equal(t, "arch", cm.Application[0].ID)
+
+	// Ref should have zero tokens (nil heuristics).
+	appRef := false
+	for _, ref := range cm.Manifests {
+		if ref.Section == "application" {
+			appRef = true
+			assert.Equal(t, 0, ref.EstimatedTokens)
+			assert.Equal(t, 1, ref.Entries)
+		}
+	}
+	assert.True(t, appRef)
+}
+
 func TestDecompose_subManifestContent(t *testing.T) {
 	dir := t.TempDir()
 

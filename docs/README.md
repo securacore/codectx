@@ -35,7 +35,7 @@ At the start of every session, load [metadata.yml](metadata.yml) and all foundat
 | Schema                                                    | Purpose                              |
 | --------------------------------------------------------- | ------------------------------------ |
 | [codectx.schema.json](schemas/codectx.schema.json)       | Validates `codectx.yml`              |
-| [package.schema.json](schemas/package.schema.json)        | Validates `package.yml`              |
+| [manifest.schema.json](schemas/manifest.schema.json)        | Validates `manifest.yml`              |
 | [state.schema.json](schemas/state.schema.json)            | Validates `state.yml` (plan state)   |
 
 ## Topics

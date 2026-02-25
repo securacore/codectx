@@ -29,11 +29,18 @@ var Command = &cli.Command{
 	},
 }
 
+// searchFn is the function type for searching packages.
+type searchFn func(query, author string) ([]resolve.SearchResult, error)
+
 func run(query, author string) error {
+	return runWith(query, author, resolve.Search)
+}
+
+func runWith(query, author string, search searchFn) error {
 	var results []resolve.SearchResult
 	err := ui.SpinErr(fmt.Sprintf("Searching for packages matching %q...", query), func() error {
 		var searchErr error
-		results, searchErr = resolve.Search(query, author)
+		results, searchErr = search(query, author)
 		return searchErr
 	})
 	if err != nil {

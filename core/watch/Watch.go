@@ -12,16 +12,26 @@ import (
 
 	"github.com/securacore/codectx/core/compile"
 	"github.com/securacore/codectx/core/config"
+	"github.com/securacore/codectx/core/manifest"
 )
 
 const defaultDebounce = 300 * time.Millisecond
 const defaultPollInterval = 30 * time.Second
 
-// Result reports what happened after a watch-triggered compile.
+// Result reports what happened after a watch-triggered sync and compile.
 type Result struct {
 	Compiled  *compile.Result // nil if config load failed
+	Sync      *SyncResult     // nil if sync was not attempted
 	Error     error           // non-nil on compile or config error
 	Timestamp time.Time
+}
+
+// SyncResult reports sync activity from a watch cycle.
+type SyncResult struct {
+	Entries       int // total entries after sync
+	Discovered    int // net new entries (added - removed, when positive)
+	Removed       int // net entries removed (removed - added, when positive)
+	Relationships int // total depends_on relationships
 }
 
 // Option configures a Watcher.
@@ -187,7 +197,10 @@ func (w *Watcher) Run(ctx context.Context) error {
 	}
 }
 
-// compileAndSend loads config, runs compile, and sends the result.
+// compileAndSend syncs the local manifest, runs compile, and sends the result.
+// Sync runs before compile to discover new entries, remove stale entries, and
+// infer relationships from links. The sync result is included so consumers
+// (like the watch CLI) can report sync activity.
 func (w *Watcher) compileAndSend() {
 	cfg, err := config.Load(w.configFile)
 	if err != nil {
@@ -198,12 +211,77 @@ func (w *Watcher) compileAndSend() {
 		return
 	}
 
+	// Sync local manifest before compile.
+	syncResult := w.syncLocal(cfg)
+
 	compiled, err := compile.Compile(cfg)
 	w.results <- Result{
 		Compiled:  compiled,
+		Sync:      syncResult,
 		Error:     err,
 		Timestamp: time.Now(),
 	}
+}
+
+// syncLocal runs manifest.Sync on the local docs directory, writes back
+// the result, and returns sync stats. Returns nil if the manifest cannot
+// be loaded (e.g., first run before init).
+func (w *Watcher) syncLocal(cfg *config.Config) *SyncResult {
+	docsDir := cfg.DocsDir()
+	manifestPath := filepath.Join(docsDir, "manifest.yml")
+
+	existing, err := manifest.Load(manifestPath)
+	if err != nil {
+		return nil
+	}
+
+	beforeTotal := countManifestEntries(existing)
+	synced := manifest.Sync(docsDir, existing)
+	afterTotal := countManifestEntries(synced)
+	rels := countRelationships(synced)
+
+	// Write back (conditional — skips if content unchanged).
+	_ = manifest.Write(manifestPath, synced)
+
+	sr := &SyncResult{
+		Entries:       afterTotal,
+		Relationships: rels,
+	}
+
+	delta := afterTotal - beforeTotal
+	if delta > 0 {
+		sr.Discovered = delta
+	} else if delta < 0 {
+		sr.Removed = -delta
+	}
+
+	return sr
+}
+
+// countManifestEntries returns the total number of entries across all sections.
+func countManifestEntries(m *manifest.Manifest) int {
+	return len(m.Foundation) + len(m.Application) + len(m.Topics) + len(m.Prompts) + len(m.Plans)
+}
+
+// countRelationships returns the total number of depends_on entries across all sections.
+func countRelationships(m *manifest.Manifest) int {
+	n := 0
+	for _, e := range m.Foundation {
+		n += len(e.DependsOn)
+	}
+	for _, e := range m.Application {
+		n += len(e.DependsOn)
+	}
+	for _, e := range m.Topics {
+		n += len(e.DependsOn)
+	}
+	for _, e := range m.Prompts {
+		n += len(e.DependsOn)
+	}
+	for _, e := range m.Plans {
+		n += len(e.DependsOn)
+	}
+	return n
 }
 
 // addDirRecursive walks root and adds all directories to the watcher,

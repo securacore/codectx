@@ -16,6 +16,9 @@ func TestCollectFilePaths_allSections(t *testing.T) {
 		Foundation: []manifest.FoundationEntry{
 			{ID: "a", Path: "foundation/a.md"},
 		},
+		Application: []manifest.ApplicationEntry{
+			{ID: "arch", Path: "application/arch/README.md", Spec: "application/arch/spec/README.md", Files: []string{"application/arch/decisions.md"}},
+		},
 		Topics: []manifest.TopicEntry{
 			{ID: "b", Path: "topics/b/README.md", Spec: "topics/b/spec/README.md", Files: []string{"topics/b/extra.md"}},
 		},
@@ -31,6 +34,9 @@ func TestCollectFilePaths_allSections(t *testing.T) {
 
 	expected := []string{
 		"foundation/a.md",
+		"application/arch/README.md",
+		"application/arch/spec/README.md",
+		"application/arch/decisions.md",
 		"topics/b/README.md",
 		"topics/b/spec/README.md",
 		"topics/b/extra.md",
@@ -51,6 +57,18 @@ func TestCollectFilePaths_topicWithoutSpec(t *testing.T) {
 	paths := collectFilePaths(m)
 
 	assert.Equal(t, []string{"topics/b/README.md"}, paths)
+}
+
+func TestCollectFilePaths_applicationWithoutSpec(t *testing.T) {
+	m := &manifest.Manifest{
+		Application: []manifest.ApplicationEntry{
+			{ID: "arch", Path: "application/arch/README.md"},
+		},
+	}
+
+	paths := collectFilePaths(m)
+
+	assert.Equal(t, []string{"application/arch/README.md"}, paths)
 }
 
 func TestCollectFilePaths_planWithoutState(t *testing.T) {
@@ -196,10 +214,13 @@ func TestCopyManifestFiles_allSections(t *testing.T) {
 	dstRoot := t.TempDir()
 
 	// Create files for all sections.
-	for _, dir := range []string{"foundation", "topics/go", "topics/go/spec", "prompts/lint", "plans/migrate"} {
+	for _, dir := range []string{"foundation", "application/arch", "application/arch/spec", "topics/go", "topics/go/spec", "prompts/lint", "plans/migrate"} {
 		require.NoError(t, os.MkdirAll(filepath.Join(srcRoot, dir), 0o755))
 	}
 	require.NoError(t, os.WriteFile(filepath.Join(srcRoot, "foundation", "a.md"), []byte("f"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(srcRoot, "application", "arch", "README.md"), []byte("app"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(srcRoot, "application", "arch", "spec", "README.md"), []byte("appspec"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(srcRoot, "application", "arch", "decisions.md"), []byte("dec"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(srcRoot, "topics", "go", "README.md"), []byte("t"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(srcRoot, "topics", "go", "spec", "README.md"), []byte("s"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(srcRoot, "topics", "go", "extra.md"), []byte("e"), 0o644))
@@ -210,6 +231,9 @@ func TestCopyManifestFiles_allSections(t *testing.T) {
 	m := &manifest.Manifest{
 		Foundation: []manifest.FoundationEntry{
 			{ID: "a", Path: "foundation/a.md"},
+		},
+		Application: []manifest.ApplicationEntry{
+			{ID: "arch", Path: "application/arch/README.md", Spec: "application/arch/spec/README.md", Files: []string{"application/arch/decisions.md"}},
 		},
 		Topics: []manifest.TopicEntry{
 			{ID: "go", Path: "topics/go/README.md", Spec: "topics/go/spec/README.md", Files: []string{"topics/go/extra.md"}},
@@ -224,7 +248,7 @@ func TestCopyManifestFiles_allSections(t *testing.T) {
 
 	copied, err := copyManifestFiles(m, srcRoot, dstRoot)
 	require.NoError(t, err)
-	assert.Equal(t, 7, copied)
+	assert.Equal(t, 10, copied)
 }
 
 func TestCopyManifestFiles_errorDuringCopy(t *testing.T) {

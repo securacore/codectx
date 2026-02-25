@@ -36,14 +36,14 @@ func setupProject(t *testing.T) string {
 	}
 	require.NoError(t, config.Write(filepath.Join(dir, configFile), cfg))
 
-	// Write docs/package.yml.
+	// Write docs/manifest.yml.
 	m := &manifest.Manifest{
 		Name:        "test-project",
 		Author:      "tester",
 		Version:     "1.0.0",
 		Description: "Test project for compile command",
 	}
-	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), m))
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
 
 	return dir
 }
@@ -85,7 +85,7 @@ func TestRun_withFoundationEntry(t *testing.T) {
 			{ID: "philosophy", Path: "foundation/philosophy.md", Description: "Core philosophy"},
 		},
 	}
-	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), m))
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
 
 	err := run()
 	require.NoError(t, err)
@@ -149,7 +149,7 @@ func TestRun_missingPackageManifest(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
 	require.NoError(t, os.Chdir(dir))
 
-	// Write a valid codectx.yml but no docs/package.yml.
+	// Write a valid codectx.yml but no docs/manifest.yml.
 	cfg := &config.Config{
 		Name:     "test-project",
 		Packages: []config.PackageDep{},
@@ -189,7 +189,7 @@ func TestRun_withDedupAndConflict(t *testing.T) {
 			{ID: "shared", Path: "foundation/shared.md", Description: "Shared doc"},
 		},
 	}
-	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), localManifest))
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), localManifest))
 
 	// Create an installed package with overlapping entries.
 	pkgDir := filepath.Join(docsDir, "packages", "testpkg@testorg")
@@ -220,7 +220,7 @@ func TestRun_withDedupAndConflict(t *testing.T) {
 
 	localManifest.Foundation = append(localManifest.Foundation,
 		manifest.FoundationEntry{ID: "conflicting", Path: "foundation/conflicting.md", Description: "Conflicting doc"})
-	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), localManifest))
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), localManifest))
 
 	pkgManifest := &manifest.Manifest{
 		Name:    "testpkg",
@@ -231,7 +231,7 @@ func TestRun_withDedupAndConflict(t *testing.T) {
 			{ID: "conflicting", Path: "foundation/conflicting.md", Description: "Conflicting doc"},
 		},
 	}
-	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "package.yml"), pkgManifest))
+	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "manifest.yml"), pkgManifest))
 
 	// Update codectx.yml to reference the package with active: all.
 	cfg := &config.Config{
@@ -287,7 +287,7 @@ func TestRun_customOutputDir(t *testing.T) {
 		Name:    "test-project",
 		Version: "1.0.0",
 	}
-	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), m))
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
 
 	err = run()
 	require.NoError(t, err)

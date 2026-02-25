@@ -20,6 +20,8 @@ func setupDedupDirs(t *testing.T) (string, string) {
 	pkgB := filepath.Join(dir, "pkgB")
 	require.NoError(t, os.MkdirAll(filepath.Join(pkgA, "foundation"), 0o755))
 	require.NoError(t, os.MkdirAll(filepath.Join(pkgB, "foundation"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(pkgA, "application"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(pkgB, "application"), 0o755))
 	require.NoError(t, os.MkdirAll(filepath.Join(pkgA, "topics"), 0o755))
 	require.NoError(t, os.MkdirAll(filepath.Join(pkgB, "topics"), 0o755))
 
@@ -212,16 +214,18 @@ func TestMergeManifestDedup_allSections(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(pkgB, "prompts"), 0o755))
 	require.NoError(t, os.MkdirAll(filepath.Join(pkgB, "plans"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(pkgB, "foundation/f.md"), []byte("f"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(pkgB, "application/a.md"), []byte("a"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(pkgB, "topics/t.md"), []byte("t"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(pkgB, "prompts/p.md"), []byte("p"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(pkgB, "plans/pl.md"), []byte("pl"), 0o644))
 
 	dst := &manifest.Manifest{}
 	src := &manifest.Manifest{
-		Foundation: []manifest.FoundationEntry{{ID: "f", Path: "foundation/f.md"}},
-		Topics:     []manifest.TopicEntry{{ID: "t", Path: "topics/t.md"}},
-		Prompts:    []manifest.PromptEntry{{ID: "p", Path: "prompts/p.md"}},
-		Plans:      []manifest.PlanEntry{{ID: "pl", Path: "plans/pl.md"}},
+		Foundation:  []manifest.FoundationEntry{{ID: "f", Path: "foundation/f.md"}},
+		Application: []manifest.ApplicationEntry{{ID: "a", Path: "application/a.md"}},
+		Topics:      []manifest.TopicEntry{{ID: "t", Path: "topics/t.md"}},
+		Prompts:     []manifest.PromptEntry{{ID: "p", Path: "prompts/p.md"}},
+		Plans:       []manifest.PlanEntry{{ID: "pl", Path: "plans/pl.md"}},
 	}
 	seen := make(map[string]seenEntry)
 
@@ -229,12 +233,14 @@ func TestMergeManifestDedup_allSections(t *testing.T) {
 
 	assert.Empty(t, events)
 	assert.Len(t, dst.Foundation, 1)
+	assert.Len(t, dst.Application, 1)
 	assert.Len(t, dst.Topics, 1)
 	assert.Len(t, dst.Prompts, 1)
 	assert.Len(t, dst.Plans, 1)
 
 	// Verify seen map was populated.
 	assert.Contains(t, seen, "foundation:f")
+	assert.Contains(t, seen, "application:a")
 	assert.Contains(t, seen, "topics:t")
 	assert.Contains(t, seen, "prompts:p")
 	assert.Contains(t, seen, "plans:pl")
@@ -271,6 +277,9 @@ func TestCollectActiveIDs(t *testing.T) {
 		Foundation: []manifest.FoundationEntry{
 			{ID: "a"}, {ID: "b"},
 		},
+		Application: []manifest.ApplicationEntry{
+			{ID: "arch"},
+		},
 		Topics: []manifest.TopicEntry{
 			{ID: "c"},
 		},
@@ -286,6 +295,7 @@ func TestCollectActiveIDs(t *testing.T) {
 
 	assert.True(t, ids["foundation:a"])
 	assert.True(t, ids["foundation:b"])
+	assert.True(t, ids["application:arch"])
 	assert.True(t, ids["topics:c"])
 	assert.True(t, ids["prompts:d"])
 	assert.True(t, ids["plans:e"])
@@ -581,4 +591,65 @@ func TestMergeManifestDedup_planDedup(t *testing.T) {
 
 	// dst should not have the duplicate appended.
 	require.Len(t, dst.Plans, 1)
+}
+
+func TestMergeManifestDedup_applicationConflict(t *testing.T) {
+	pkgA, pkgB := setupDedupDirs(t)
+
+	require.NoError(t, os.WriteFile(filepath.Join(pkgA, "application/arch.md"), []byte("v1"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(pkgB, "application/arch.md"), []byte("v2"), 0o644))
+
+	dst := &manifest.Manifest{
+		Application: []manifest.ApplicationEntry{
+			{ID: "arch", Path: "application/arch.md", Description: "Architecture A"},
+		},
+	}
+	src := &manifest.Manifest{
+		Application: []manifest.ApplicationEntry{
+			{ID: "arch", Path: "application/arch.md", Description: "Architecture B"},
+		},
+	}
+	seen := map[string]seenEntry{
+		"application:arch": {pkg: "local", hash: fileHash(filepath.Join(pkgA, "application/arch.md"))},
+	}
+
+	events := mergeManifestDedup(dst, src, pkgA, pkgB, "pkgB@org", seen)
+	require.Len(t, events, 1)
+	assert.Equal(t, "conflict", events[0].Reason)
+	assert.Equal(t, "application", events[0].Section)
+	assert.Equal(t, "arch", events[0].ID)
+
+	// dst should not have the conflicting entry appended.
+	require.Len(t, dst.Application, 1)
+	assert.Equal(t, "Architecture A", dst.Application[0].Description)
+}
+
+func TestMergeManifestDedup_applicationDedup(t *testing.T) {
+	pkgA, pkgB := setupDedupDirs(t)
+
+	sameContent := []byte("shared architecture")
+	require.NoError(t, os.WriteFile(filepath.Join(pkgA, "application/arch.md"), sameContent, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(pkgB, "application/arch.md"), sameContent, 0o644))
+
+	dst := &manifest.Manifest{
+		Application: []manifest.ApplicationEntry{
+			{ID: "arch", Path: "application/arch.md"},
+		},
+	}
+	src := &manifest.Manifest{
+		Application: []manifest.ApplicationEntry{
+			{ID: "arch", Path: "application/arch.md"},
+		},
+	}
+	seen := map[string]seenEntry{
+		"application:arch": {pkg: "local", hash: fileHash(filepath.Join(pkgA, "application/arch.md"))},
+	}
+
+	events := mergeManifestDedup(dst, src, pkgA, pkgB, "pkgB@org", seen)
+	require.Len(t, events, 1)
+	assert.Equal(t, "duplicate", events[0].Reason)
+	assert.Equal(t, "application", events[0].Section)
+
+	// dst should not have the duplicate appended.
+	require.Len(t, dst.Application, 1)
 }

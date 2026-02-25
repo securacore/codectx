@@ -39,7 +39,7 @@ func setupAutoCompileProject(t *testing.T, autoCompile *bool) string {
 		Version:     "1.0.0",
 		Description: "Test project",
 	}
-	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), m))
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
 
 	// Create output directory and set preferences.
 	outputDir := filepath.Join(dir, ".codectx")
@@ -94,6 +94,26 @@ func TestMaybeAutoCompile_autoCompileTrue_compilesSuccessfully(t *testing.T) {
 	outputDir := cfg.OutputDir()
 	_, err = os.Stat(outputDir)
 	assert.NoError(t, err)
+}
+
+func TestMaybeAutoCompile_compileError(t *testing.T) {
+	val := true
+	setupAutoCompileProject(t, &val)
+
+	cfg, err := config.Load("codectx.yml")
+	require.NoError(t, err)
+
+	// Corrupt the local manifest so compile.Compile fails.
+	docsDir := cfg.DocsDir()
+	require.NoError(t, os.WriteFile(
+		filepath.Join(docsDir, "manifest.yml"),
+		[]byte("{{{{invalid yaml"),
+		0o644,
+	))
+
+	err = MaybeAutoCompile(cfg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "compile:")
 }
 
 func TestMaybeAutoCompile_preferencesLoadError(t *testing.T) {

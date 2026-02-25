@@ -14,6 +14,7 @@ import (
 	"github.com/securacore/codectx/cmds/link"
 	"github.com/securacore/codectx/cmds/search"
 	"github.com/securacore/codectx/cmds/self"
+	"github.com/securacore/codectx/cmds/sync"
 	"github.com/securacore/codectx/cmds/version"
 	"github.com/securacore/codectx/cmds/watch"
 	"github.com/securacore/codectx/core/update"
@@ -35,6 +36,7 @@ func main() {
 			link.Command,
 			search.Command,
 			self.Command,
+			sync.Command,
 			version.Command,
 			watch.Command,
 		},

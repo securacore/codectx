@@ -12,7 +12,7 @@ import (
 )
 
 const lockFile = "codectx.lock"
-const packageFile = "package.yml"
+const manifestFile = "manifest.yml"
 
 // Compile builds the compiled documentation set from all active sources.
 // It loads manifests, merges entries with deduplication, stores files as
@@ -35,10 +35,18 @@ func Compile(cfg *config.Config) (*Result, error) {
 	}
 
 	// Load local package manifest.
-	localManifestPath := filepath.Join(docsDir, packageFile)
+	localManifestPath := filepath.Join(docsDir, manifestFile)
 	localManifest, err := manifest.Load(localManifestPath)
 	if err != nil {
 		return nil, fmt.Errorf("load local manifest: %w", err)
+	}
+
+	// Sync: discover new entries, remove stale, infer relationships from links.
+	localManifest = manifest.Sync(docsDir, localManifest)
+
+	// Write the synced manifest back so the source stays current.
+	if err := manifest.Write(localManifestPath, localManifest); err != nil {
+		return nil, fmt.Errorf("write synced local manifest: %w", err)
 	}
 
 	// Clean output directory, preserving user preferences.
@@ -90,12 +98,15 @@ func Compile(cfg *config.Config) (*Result, error) {
 
 		// Load installed package manifest.
 		pkgDir := filepath.Join(docsDir, "packages", fmt.Sprintf("%s@%s", pkg.Name, pkg.Author))
-		pkgManifestPath := filepath.Join(pkgDir, packageFile)
+		pkgManifestPath := filepath.Join(pkgDir, manifestFile)
 
 		pkgManifest, err := manifest.Load(pkgManifestPath)
 		if err != nil {
 			return nil, fmt.Errorf("load package %s@%s manifest: %w", pkg.Name, pkg.Author, err)
 		}
+
+		// Discover entries from disk that aren't declared in the manifest.
+		pkgManifest = manifest.Discover(pkgDir, pkgManifest)
 
 		// Filter entries by activation state.
 		filtered := filterManifest(pkgManifest, pkg.Active)
@@ -246,6 +257,20 @@ func storeObjects(
 	for _, e := range unified.Foundation {
 		if err := storeFile("foundation", e.ID, e.Path); err != nil {
 			return nil, stored, err
+		}
+	}
+
+	for _, e := range unified.Application {
+		if err := storeFile("application", e.ID, e.Path); err != nil {
+			return nil, stored, err
+		}
+		if err := storeFile("application", e.ID, e.Spec); err != nil {
+			return nil, stored, err
+		}
+		for _, f := range e.Files {
+			if err := storeFile("application", e.ID, f); err != nil {
+				return nil, stored, err
+			}
 		}
 	}
 

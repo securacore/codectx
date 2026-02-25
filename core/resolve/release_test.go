@@ -166,7 +166,7 @@ func buildTarGz(t *testing.T, files map[string]string) *bytes.Buffer {
 
 func TestExtractTarGz_success(t *testing.T) {
 	tarball := buildTarGz(t, map[string]string{
-		"package.yml":            "name: test\n",
+		"manifest.yml":           "name: test\n",
 		"topics/react/README.md": "# React\n",
 	})
 
@@ -176,7 +176,7 @@ func TestExtractTarGz_success(t *testing.T) {
 	err := extractTarGz(tarball, destDir)
 	require.NoError(t, err)
 
-	content, err := os.ReadFile(filepath.Join(destDir, "package.yml"))
+	content, err := os.ReadFile(filepath.Join(destDir, "manifest.yml"))
 	require.NoError(t, err)
 	assert.Equal(t, "name: test\n", string(content))
 
@@ -259,7 +259,7 @@ func TestExtractTarGz_dotEntry(t *testing.T) {
 	content := "name: test\n"
 	require.NoError(t, tw.WriteHeader(&tar.Header{
 		Typeflag: tar.TypeReg,
-		Name:     "./package.yml",
+		Name:     "./manifest.yml",
 		Size:     int64(len(content)),
 		Mode:     0o644,
 	}))
@@ -274,7 +274,7 @@ func TestExtractTarGz_dotEntry(t *testing.T) {
 
 	require.NoError(t, extractTarGz(&buf, destDir))
 
-	data, err := os.ReadFile(filepath.Join(destDir, "package.yml"))
+	data, err := os.ReadFile(filepath.Join(destDir, "manifest.yml"))
 	require.NoError(t, err)
 	assert.Equal(t, "name: test\n", string(data))
 }
@@ -299,7 +299,7 @@ func TestExtractTarGz_skipsSymlinks(t *testing.T) {
 	content := "name: test\n"
 	require.NoError(t, tw.WriteHeader(&tar.Header{
 		Typeflag: tar.TypeReg,
-		Name:     "package.yml",
+		Name:     "manifest.yml",
 		Size:     int64(len(content)),
 		Mode:     0o644,
 	}))
@@ -310,7 +310,7 @@ func TestExtractTarGz_skipsSymlinks(t *testing.T) {
 	require.NoError(t, tw.WriteHeader(&tar.Header{
 		Typeflag: tar.TypeSymlink,
 		Name:     "link.yml",
-		Linkname: "package.yml",
+		Linkname: "manifest.yml",
 	}))
 
 	require.NoError(t, tw.Close())
@@ -322,7 +322,7 @@ func TestExtractTarGz_skipsSymlinks(t *testing.T) {
 	require.NoError(t, extractTarGz(&buf, destDir))
 
 	// Regular file should exist.
-	_, err = os.Stat(filepath.Join(destDir, "package.yml"))
+	_, err = os.Stat(filepath.Join(destDir, "manifest.yml"))
 	assert.NoError(t, err)
 
 	// Symlink should not exist.
@@ -334,7 +334,7 @@ func TestExtractTarGz_skipsSymlinks(t *testing.T) {
 
 func TestDownloadAndExtract_success(t *testing.T) {
 	tarball := buildTarGz(t, map[string]string{
-		"package.yml": "name: test\nversion: 1.0.0\n",
+		"manifest.yml": "name: test\nversion: 1.0.0\n",
 	})
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -350,7 +350,7 @@ func TestDownloadAndExtract_success(t *testing.T) {
 	err := downloadAndExtract(ts.URL, destDir)
 	require.NoError(t, err)
 
-	_, err = os.Stat(filepath.Join(destDir, "package.yml"))
+	_, err = os.Stat(filepath.Join(destDir, "manifest.yml"))
 	assert.NoError(t, err)
 }
 

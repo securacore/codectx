@@ -22,7 +22,7 @@ author: org
 version: "1.0.0"
 description: "Test package"
 `
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "package.yml"), []byte(content), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "manifest.yml"), []byte(content), 0o644))
 
 	issues := checkCompatibility(dir)
 	assert.Empty(t, issues)
@@ -33,7 +33,7 @@ func TestCheckCompatibility_invalidPackageYml(t *testing.T) {
 	// Missing required fields.
 	content := `name: test
 `
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "package.yml"), []byte(content), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "manifest.yml"), []byte(content), 0o644))
 
 	issues := checkCompatibility(dir)
 	assert.NotEmpty(t, issues)
@@ -43,7 +43,7 @@ func TestCheckCompatibility_invalidPackageYml(t *testing.T) {
 func TestCheckCompatibility_invalidPackageYmlSchema(t *testing.T) {
 	dir := t.TempDir()
 	// Valid YAML but missing required fields — triggers schema validation failure.
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "package.yml"), []byte("foo: bar\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "manifest.yml"), []byte("foo: bar\n"), 0o644))
 
 	issues := checkCompatibility(dir)
 	assert.NotEmpty(t, issues)
@@ -114,7 +114,7 @@ func TestCheckCompatibility_schemaMissingField(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "schemas"), 0o755))
 	// Valid JSON but missing $schema field.
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "schemas", "package.schema.json"), []byte(`{"title": "nope"}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "schemas", "manifest.schema.json"), []byte(`{"title": "nope"}`), 0o644))
 
 	issues := checkCompatibility(dir)
 	assert.NotEmpty(t, issues)
@@ -131,12 +131,12 @@ func TestNameAtAuthor_regex(t *testing.T) {
 	assert.False(t, nameAtAuthor.MatchString(""))
 }
 
-// --- Malformed YAML in package.yml ---
+// --- Malformed YAML in manifest.yml ---
 
 func TestCheckCompatibility_malformedYaml(t *testing.T) {
 	dir := t.TempDir()
 	// Binary-like content that fails YAML parsing.
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "package.yml"), []byte("{{{{not valid"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "manifest.yml"), []byte("{{{{not valid"), 0o644))
 
 	issues := checkCompatibility(dir)
 	assert.NotEmpty(t, issues)
@@ -181,8 +181,8 @@ func TestCheckCompatibility_invalidJsonInSchemaFile(t *testing.T) {
 func TestCheckCompatibility_multipleIssues(t *testing.T) {
 	dir := t.TempDir()
 
-	// Bad package.yml.
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "package.yml"), []byte("{{bad yaml"), 0o644))
+	// Bad manifest.yml.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "manifest.yml"), []byte("{{bad yaml"), 0o644))
 
 	// Bad packages/ dir.
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "packages", "no-at-sign"), 0o755))

@@ -28,6 +28,9 @@ func TestGenerateReadme_allSections(t *testing.T) {
 			{ID: "a", Path: "foundation/a.md", Description: "A"},
 			{ID: "b", Path: "foundation/b.md", Description: "B"},
 		},
+		Application: []manifest.ApplicationEntry{
+			{ID: "arch", Path: "application/arch/README.md", Description: "Architecture"},
+		},
 		Topics: []manifest.TopicEntry{
 			{ID: "c", Path: "topics/c/README.md", Description: "C"},
 		},
@@ -45,6 +48,7 @@ func TestGenerateReadme_allSections(t *testing.T) {
 	assert.Contains(t, result, "## Loading Protocol")
 	assert.Contains(t, result, "## Sections")
 	assert.Contains(t, result, "**Foundation**: 2 documents")
+	assert.Contains(t, result, "**Application**: 1 entry")
 	assert.Contains(t, result, "**Topics**: 1 entry")
 	assert.Contains(t, result, "**Prompts**: 1 entry")
 	assert.Contains(t, result, "**Plans**: 1 entry")
@@ -63,6 +67,7 @@ func TestGenerateReadme_partialSections(t *testing.T) {
 
 	assert.Contains(t, result, "## Sections")
 	assert.Contains(t, result, "**Foundation**: 1 document")
+	assert.NotContains(t, result, "**Application**")
 	assert.NotContains(t, result, "**Topics**")
 	assert.NotContains(t, result, "**Prompts**")
 	assert.NotContains(t, result, "**Plans**")
@@ -158,6 +163,25 @@ func TestGenerateReadme_withHeuristicsMultipleAlwaysLoad(t *testing.T) {
 
 	result := generateReadme(m, h)
 	assert.Contains(t, result, "2 are auto-loaded")
+}
+
+func TestGenerateReadme_applicationOnly(t *testing.T) {
+	m := &manifest.Manifest{
+		Name: "app-only",
+		Application: []manifest.ApplicationEntry{
+			{ID: "arch", Path: "application/arch/README.md", Description: "Architecture"},
+		},
+	}
+
+	result := generateReadme(m, nil)
+
+	assert.Contains(t, result, "## Sections")
+	assert.Contains(t, result, "**Application**: 1 entry")
+	assert.Contains(t, result, "Product architecture and design documentation")
+	assert.NotContains(t, result, "**Foundation**")
+	assert.NotContains(t, result, "**Topics**")
+	assert.NotContains(t, result, "**Prompts**")
+	assert.NotContains(t, result, "**Plans**")
 }
 
 // --- pluralize ---

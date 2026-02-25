@@ -11,9 +11,12 @@ import (
 )
 
 const (
-	githubSearchURL = "https://api.github.com/search/repositories"
-	repoPrefix      = "codectx-"
+	repoPrefix = "codectx-"
 )
+
+// searchBaseURL is the base URL for the GitHub search API.
+// Tests override this to point at an httptest server.
+var searchBaseURL = "https://api.github.com/search/repositories"
 
 // SearchResult holds a single search result from the GitHub API.
 type SearchResult struct {
@@ -52,7 +55,7 @@ func Search(query, author string) ([]SearchResult, error) {
 	}
 
 	reqURL := fmt.Sprintf("%s?q=%s&sort=stars&order=desc&per_page=25",
-		githubSearchURL, url.QueryEscape(q))
+		searchBaseURL, url.QueryEscape(q))
 
 	return doSearch(reqURL)
 }

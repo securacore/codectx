@@ -63,6 +63,11 @@ func run(ctx context.Context) error {
 func printResult(r corewatch.Result) {
 	ts := r.Timestamp.Format(time.TimeOnly)
 
+	// Print sync activity when entries were discovered or removed.
+	if s := r.Sync; s != nil && (s.Discovered > 0 || s.Removed > 0) {
+		printSyncResult(s, ts)
+	}
+
 	if r.Error != nil {
 		ui.Fail(fmt.Sprintf("%s [%s]", r.Error, ts))
 		return
@@ -92,6 +97,23 @@ func printResult(r corewatch.Result) {
 	if r.Compiled.Dedup.HasConflicts() {
 		ui.Warn(fmt.Sprintf("%d conflict(s)", len(r.Compiled.Dedup.Conflicts)))
 	}
+}
+
+func printSyncResult(s *corewatch.SyncResult, ts string) {
+	parts := []string{
+		fmt.Sprintf("%d entries", s.Entries),
+	}
+	if s.Discovered > 0 {
+		parts = append(parts, fmt.Sprintf("+%d discovered", s.Discovered))
+	}
+	if s.Removed > 0 {
+		parts = append(parts, fmt.Sprintf("-%d removed", s.Removed))
+	}
+	if s.Relationships > 0 {
+		parts = append(parts, fmt.Sprintf("%d relationships", s.Relationships))
+	}
+
+	ui.Done(fmt.Sprintf("Synced (%s) [%s]", joinParts(parts), ts))
 }
 
 func joinParts(parts []string) string {

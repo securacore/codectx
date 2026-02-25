@@ -71,6 +71,22 @@ func TestLoad_emptyFile(t *testing.T) {
 	assert.Empty(t, l.Packages)
 }
 
+func TestLoad_permissionDenied(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("cannot test permission denied as root")
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "codectx.lock")
+	require.NoError(t, os.WriteFile(path, []byte("compiled_at: now"), 0o000))
+	t.Cleanup(func() { _ = os.Chmod(path, 0o644) })
+
+	l, err := Load(path)
+	assert.Error(t, err)
+	assert.Nil(t, l)
+	assert.Contains(t, err.Error(), "read lock")
+}
+
 func TestLoad_roundTrip(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "codectx.lock")

@@ -11,6 +11,7 @@ import (
 
 	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/manifest"
+	"github.com/securacore/codectx/core/resolve"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
@@ -71,11 +72,19 @@ func TestParseActivateFlag_multipleGranular(t *testing.T) {
 	assert.Equal(t, []string{"migration"}, a.Map.Plans)
 }
 
+func TestParseActivateFlag_application(t *testing.T) {
+	a, err := parseActivateFlag("application:architecture")
+	require.NoError(t, err)
+	require.NotNil(t, a.Map)
+	assert.Equal(t, []string{"architecture"}, a.Map.Application)
+}
+
 func TestParseActivateFlag_allSections(t *testing.T) {
-	a, err := parseActivateFlag("foundation:a,topics:b,prompts:c,plans:d")
+	a, err := parseActivateFlag("foundation:a,application:arch,topics:b,prompts:c,plans:d")
 	require.NoError(t, err)
 	require.NotNil(t, a.Map)
 	assert.Equal(t, []string{"a"}, a.Map.Foundation)
+	assert.Equal(t, []string{"arch"}, a.Map.Application)
 	assert.Equal(t, []string{"b"}, a.Map.Topics)
 	assert.Equal(t, []string{"c"}, a.Map.Prompts)
 	assert.Equal(t, []string{"d"}, a.Map.Plans)
@@ -101,6 +110,142 @@ func TestParseActivateFlag_errors(t *testing.T) {
 	}
 }
 
+// --- buildCombinedEntries ---
+
+func TestBuildCombinedEntries_singleTarget(t *testing.T) {
+	targets := []*addTarget{
+		{
+			resolved: &resolve.ResolvedPackage{Name: "pkg", Author: "org"},
+			manifest: &manifest.Manifest{
+				Foundation:  []manifest.FoundationEntry{{ID: "f1", Description: "F1"}},
+				Application: []manifest.ApplicationEntry{{ID: "a1", Description: "A1"}},
+				Topics:      []manifest.TopicEntry{{ID: "t1", Description: "T1"}},
+				Prompts:     []manifest.PromptEntry{{ID: "p1", Description: "P1"}},
+				Plans:       []manifest.PlanEntry{{ID: "pl1", Description: "PL1"}},
+			},
+		},
+	}
+
+	entries := buildCombinedEntries(targets)
+	assert.Len(t, entries, 5)
+
+	assert.Equal(t, "foundation", entries[0].section)
+	assert.Equal(t, "f1", entries[0].id)
+	assert.Contains(t, entries[0].label, "[pkg@org / foundation]")
+
+	assert.Equal(t, "application", entries[1].section)
+	assert.Equal(t, "a1", entries[1].id)
+
+	assert.Equal(t, "topics", entries[2].section)
+	assert.Equal(t, "t1", entries[2].id)
+
+	assert.Equal(t, "prompts", entries[3].section)
+	assert.Equal(t, "p1", entries[3].id)
+
+	assert.Equal(t, "plans", entries[4].section)
+	assert.Equal(t, "pl1", entries[4].id)
+}
+
+func TestBuildCombinedEntries_multipleTargets(t *testing.T) {
+	targets := []*addTarget{
+		{
+			resolved: &resolve.ResolvedPackage{Name: "alpha", Author: "org"},
+			manifest: &manifest.Manifest{
+				Foundation: []manifest.FoundationEntry{{ID: "f1", Description: "Alpha F1"}},
+			},
+		},
+		{
+			resolved: &resolve.ResolvedPackage{Name: "beta", Author: "org"},
+			manifest: &manifest.Manifest{
+				Topics: []manifest.TopicEntry{{ID: "t1", Description: "Beta T1"}},
+			},
+		},
+	}
+
+	entries := buildCombinedEntries(targets)
+	assert.Len(t, entries, 2)
+	assert.Contains(t, entries[0].label, "alpha@org")
+	assert.Contains(t, entries[1].label, "beta@org")
+}
+
+func TestBuildCombinedEntries_emptyManifest(t *testing.T) {
+	targets := []*addTarget{
+		{
+			resolved: &resolve.ResolvedPackage{Name: "empty", Author: "org"},
+			manifest: &manifest.Manifest{},
+		},
+	}
+
+	entries := buildCombinedEntries(targets)
+	assert.Empty(t, entries)
+}
+
+func TestBuildCombinedEntries_noTargets(t *testing.T) {
+	entries := buildCombinedEntries(nil)
+	assert.Empty(t, entries)
+}
+
+// --- resolveActivation ---
+
+func TestResolveActivation_allSelected(t *testing.T) {
+	entries := []activationEntry{
+		{section: "foundation", id: "f1"},
+		{section: "topics", id: "t1"},
+	}
+	selected := []int{0, 1}
+
+	a := resolveActivation(entries, selected)
+	assert.True(t, a.IsAll())
+}
+
+func TestResolveActivation_noneSelected(t *testing.T) {
+	entries := []activationEntry{
+		{section: "foundation", id: "f1"},
+	}
+	selected := []int{}
+
+	a := resolveActivation(entries, selected)
+	assert.True(t, a.IsNone())
+}
+
+func TestResolveActivation_granular(t *testing.T) {
+	entries := []activationEntry{
+		{section: "foundation", id: "f1"},
+		{section: "foundation", id: "f2"},
+		{section: "topics", id: "t1"},
+	}
+	// Select only f1 and t1.
+	selected := []int{0, 2}
+
+	a := resolveActivation(entries, selected)
+	assert.True(t, a.IsGranular())
+	require.NotNil(t, a.Map)
+	assert.Equal(t, []string{"f1"}, a.Map.Foundation)
+	assert.Equal(t, []string{"t1"}, a.Map.Topics)
+}
+
+func TestResolveActivation_allFiveSections(t *testing.T) {
+	entries := []activationEntry{
+		{section: "foundation", id: "f1"},
+		{section: "application", id: "a1"},
+		{section: "topics", id: "t1"},
+		{section: "prompts", id: "p1"},
+		{section: "plans", id: "pl1"},
+		{section: "topics", id: "t2"},
+	}
+	// Select a subset across all 5 sections.
+	selected := []int{0, 1, 2, 3, 4}
+
+	a := resolveActivation(entries, selected)
+	assert.True(t, a.IsGranular()) // 5 out of 6 → granular
+	require.NotNil(t, a.Map)
+	assert.Equal(t, []string{"f1"}, a.Map.Foundation)
+	assert.Equal(t, []string{"a1"}, a.Map.Application)
+	assert.Equal(t, []string{"t1"}, a.Map.Topics)
+	assert.Equal(t, []string{"p1"}, a.Map.Prompts)
+	assert.Equal(t, []string{"pl1"}, a.Map.Plans)
+}
+
 // --- detectCollisions ---
 
 func setupCollisionTest(t *testing.T) (string, *config.Config) {
@@ -108,8 +253,14 @@ func setupCollisionTest(t *testing.T) (string, *config.Config) {
 	dir := t.TempDir()
 	docsDir := filepath.Join(dir, "docs")
 
-	// Create local manifest with a foundation entry.
+	// Create directories and actual files so Sync stale removal doesn't drop them.
 	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "application"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "topics", "react"), 0o755))
+
+	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "foundation", "philosophy.md"), []byte("# Philosophy\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "application", "architecture.md"), []byte("# Architecture\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "topics", "react", "README.md"), []byte("# React\n"), 0o644))
 
 	localManifest := &manifest.Manifest{
 		Name:    "test-project",
@@ -118,11 +269,14 @@ func setupCollisionTest(t *testing.T) (string, *config.Config) {
 		Foundation: []manifest.FoundationEntry{
 			{ID: "philosophy", Path: "foundation/philosophy.md", Description: "Philosophy"},
 		},
+		Application: []manifest.ApplicationEntry{
+			{ID: "architecture", Path: "application/architecture.md", Description: "System architecture"},
+		},
 		Topics: []manifest.TopicEntry{
 			{ID: "react", Path: "topics/react/README.md", Description: "React"},
 		},
 	}
-	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), localManifest))
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), localManifest))
 
 	cfg := &config.Config{
 		Name: "test-project",
@@ -179,6 +333,22 @@ func TestDetectCollisions_topicCollision(t *testing.T) {
 	assert.Equal(t, "react", collisions[0].id)
 }
 
+func TestDetectCollisions_applicationCollision(t *testing.T) {
+	_, cfg := setupCollisionTest(t)
+
+	newManifest := &manifest.Manifest{
+		Application: []manifest.ApplicationEntry{
+			{ID: "architecture", Path: "application/architecture.md"},
+		},
+	}
+
+	collisions := detectCollisions(cfg, newManifest, config.Activation{Mode: "all"})
+	require.Len(t, collisions, 1)
+	assert.Equal(t, "application", collisions[0].section)
+	assert.Equal(t, "architecture", collisions[0].id)
+	assert.Equal(t, "local", collisions[0].pkg)
+}
+
 func TestDetectCollisions_granularActivationNoCollision(t *testing.T) {
 	_, cfg := setupCollisionTest(t)
 
@@ -216,7 +386,7 @@ func TestDetectCollisions_withExistingPackage(t *testing.T) {
 			{ID: "go", Path: "topics/go/README.md", Description: "Go conventions"},
 		},
 	}
-	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "package.yml"), pkgManifest))
+	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "manifest.yml"), pkgManifest))
 
 	cfg.Packages = append(cfg.Packages, config.PackageDep{
 		Name:   "go",
@@ -238,6 +408,62 @@ func TestDetectCollisions_withExistingPackage(t *testing.T) {
 	assert.Equal(t, "go@org", collisions[0].pkg)
 
 	_ = dir // keep for clarity
+}
+
+func TestDetectCollisions_granularActivationOnInstalledPackage(t *testing.T) {
+	_, cfg := setupCollisionTest(t)
+	docsDir := cfg.DocsDir()
+
+	// Install a package with multiple topics but only activate one.
+	pkgDir := filepath.Join(docsDir, "packages", "multi@org")
+	require.NoError(t, os.MkdirAll(filepath.Join(pkgDir, "topics", "go"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(pkgDir, "topics", "python"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(pkgDir, "topics", "go", "README.md"), []byte("# Go\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(pkgDir, "topics", "python", "README.md"), []byte("# Python\n"), 0o644))
+
+	pkgManifest := &manifest.Manifest{
+		Name: "multi", Author: "org",
+		Topics: []manifest.TopicEntry{
+			{ID: "go", Path: "topics/go/README.md", Description: "Go"},
+			{ID: "python", Path: "topics/python/README.md", Description: "Python"},
+		},
+	}
+	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "manifest.yml"), pkgManifest))
+
+	// Only activate "go", not "python".
+	cfg.Packages = append(cfg.Packages, config.PackageDep{
+		Name:   "multi",
+		Author: "org",
+		Active: config.Activation{Map: &config.ActivationMap{
+			Topics: []string{"go"},
+		}},
+	})
+
+	// New package has "go" (collides) and "python" (should NOT collide because
+	// the installed package only has "go" activated).
+	newManifest := &manifest.Manifest{
+		Topics: []manifest.TopicEntry{
+			{ID: "go", Path: "topics/go/README.md"},
+			{ID: "python", Path: "topics/python/README.md"},
+		},
+	}
+
+	collisions := detectCollisions(cfg, newManifest, config.Activation{Mode: "all"})
+
+	// Only "go" should collide (from multi@org). "python" should not because it's
+	// not activated in the installed package.
+	goCollision := false
+	pythonCollision := false
+	for _, c := range collisions {
+		if c.id == "go" && c.pkg == "multi@org" {
+			goCollision = true
+		}
+		if c.id == "python" && c.pkg == "multi@org" {
+			pythonCollision = true
+		}
+	}
+	assert.True(t, goCollision, "should detect collision for activated 'go' topic")
+	assert.False(t, pythonCollision, "should not detect collision for non-activated 'python' topic")
 }
 
 // --- filterManifestForIDs ---
@@ -278,6 +504,26 @@ func TestFilterManifestForIDs_granular(t *testing.T) {
 	assert.Equal(t, "a", filtered.Foundation[0].ID)
 	require.Len(t, filtered.Topics, 1)
 	assert.Equal(t, "d", filtered.Topics[0].ID)
+}
+
+func TestFilterManifestForIDs_application(t *testing.T) {
+	m := &manifest.Manifest{
+		Application: []manifest.ApplicationEntry{
+			{ID: "architecture"}, {ID: "design"},
+		},
+		Topics: []manifest.TopicEntry{
+			{ID: "react"},
+		},
+	}
+	activation := config.Activation{
+		Map: &config.ActivationMap{
+			Application: []string{"architecture"},
+		},
+	}
+	filtered := filterManifestForIDs(m, activation)
+	require.Len(t, filtered.Application, 1)
+	assert.Equal(t, "architecture", filtered.Application[0].ID)
+	assert.Empty(t, filtered.Topics)
 }
 
 // --- splitKey ---
@@ -330,7 +576,7 @@ func TestDetectCollisions_noLocalManifest(t *testing.T) {
 	dir := t.TempDir()
 	docsDir := filepath.Join(dir, "docs")
 	require.NoError(t, os.MkdirAll(docsDir, 0o755))
-	// No package.yml in docsDir.
+	// No manifest.yml in docsDir.
 
 	cfg := &config.Config{
 		Name: "test-project",
@@ -366,7 +612,7 @@ func TestDetectCollisions_inactivePackageSkipped(t *testing.T) {
 			{ID: "shared-topic", Path: "topics/shared/README.md"},
 		},
 	}
-	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "package.yml"), pkgManifest))
+	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "manifest.yml"), pkgManifest))
 
 	cfg := &config.Config{
 		Name: "test-project",
@@ -547,15 +793,18 @@ func TestPrintActivation_granular(t *testing.T) {
 	out := captureStdout(t, func() {
 		printActivation(config.Activation{
 			Map: &config.ActivationMap{
-				Foundation: []string{"philosophy"},
-				Topics:     []string{"react", "go"},
-				Prompts:    []string{"review"},
-				Plans:      []string{"migration"},
+				Foundation:  []string{"philosophy"},
+				Application: []string{"architecture"},
+				Topics:      []string{"react", "go"},
+				Prompts:     []string{"review"},
+				Plans:       []string{"migration"},
 			},
 		})
 	})
 	assert.Contains(t, out, "foundation")
 	assert.Contains(t, out, "philosophy")
+	assert.Contains(t, out, "application")
+	assert.Contains(t, out, "architecture")
 	assert.Contains(t, out, "topics")
 	assert.Contains(t, out, "react, go")
 	assert.Contains(t, out, "prompts")
@@ -590,7 +839,7 @@ func TestDetectCollisions_corruptInstalledPackageManifest(t *testing.T) {
 	pkgDir := filepath.Join(docsDir, "packages", "broken@org")
 	require.NoError(t, os.MkdirAll(pkgDir, 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(pkgDir, "package.yml"),
+		filepath.Join(pkgDir, "manifest.yml"),
 		[]byte("{{{{not valid yaml"),
 		0o644,
 	))
@@ -685,14 +934,14 @@ func setupAddProject(t *testing.T) string {
 	}
 	require.NoError(t, config.Write(filepath.Join(dir, configFile), cfg))
 
-	// Write local package.yml.
+	// Write local manifest.yml.
 	m := &manifest.Manifest{
 		Name:        "test-project",
 		Author:      "tester",
 		Version:     "1.0.0",
 		Description: "Test project",
 	}
-	require.NoError(t, manifest.Write(filepath.Join(docsDir, "package.yml"), m))
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
 
 	// Set auto_compile=false to avoid interactive prompt.
 	outputDir := filepath.Join(dir, ".codectx")
@@ -706,7 +955,7 @@ func setupAddProject(t *testing.T) string {
 	return dir
 }
 
-// setupBareRepo creates a bare git repo with a tag and package.yml.
+// setupBareRepo creates a bare git repo with a tag and manifest.yml.
 // Returns the path to the bare repo.
 func setupBareRepo(t *testing.T, name, author, ver string, tags []string) string {
 	t.Helper()
@@ -720,13 +969,13 @@ func setupBareRepo(t *testing.T, name, author, ver string, tags []string) string
 	wt, err := repo.Worktree()
 	require.NoError(t, err)
 
-	// Create package.yml.
+	// Create manifest.yml.
 	content := fmt.Sprintf(
 		"name: %s\nauthor: %s\nversion: %q\ndescription: Test package\n",
 		name, author, ver,
 	)
-	require.NoError(t, os.WriteFile(filepath.Join(workDir, "package.yml"), []byte(content), 0o644))
-	_, err = wt.Add("package.yml")
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "manifest.yml"), []byte(content), 0o644))
+	_, err = wt.Add("manifest.yml")
 	require.NoError(t, err)
 
 	require.NoError(t, os.WriteFile(filepath.Join(workDir, "README.md"), []byte("# Test\n"), 0o644))
@@ -765,7 +1014,7 @@ func TestRun_addPackageSuccess(t *testing.T) {
 	assert.Equal(t, bareDir, cfg.Packages[0].Source)
 
 	// Verify package was fetched to the expected directory.
-	_, err = os.Stat(filepath.Join("docs", "packages", "test-pkg@test-author", "package.yml"))
+	_, err = os.Stat(filepath.Join("docs", "packages", "test-pkg@test-author", "manifest.yml"))
 	assert.NoError(t, err)
 }
 
@@ -986,4 +1235,64 @@ func TestDetectCollisions_multipleCollisions(t *testing.T) {
 
 	collisions := detectCollisions(cfg, newManifest, config.Activation{Mode: "all"})
 	assert.Len(t, collisions, 2)
+}
+
+// --- Sync integration tests ---
+
+func TestRun_addPackageSyncsLocalManifest(t *testing.T) {
+	dir := setupAddProject(t)
+	bareDir := setupBareRepo(t, "sync-pkg", "sync-author", "1.0.0", []string{"v1.0.0"})
+	docsDir := filepath.Join(dir, "docs")
+
+	// Create a foundation file on disk that is NOT in the manifest.
+	// After add, the post-add Sync should discover it.
+	require.NoError(t, os.WriteFile(
+		filepath.Join(docsDir, "foundation", "discovered.md"),
+		[]byte("# Discovered\n"), 0o644))
+
+	err := Run([]string{"sync-pkg@sync-author"}, bareDir, "all")
+	require.NoError(t, err)
+
+	// Read back the local manifest — it should contain the discovered entry.
+	reloaded, err := manifest.Load(filepath.Join(docsDir, "manifest.yml"))
+	require.NoError(t, err)
+	require.Len(t, reloaded.Foundation, 1, "post-add Sync should discover the foundation file")
+	assert.Equal(t, "discovered", reloaded.Foundation[0].ID)
+}
+
+func TestDetectCollisions_staleLocalEntryNotCollision(t *testing.T) {
+	dir := t.TempDir()
+	docsDir := filepath.Join(dir, "docs")
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation"), 0o755))
+
+	// Write a manifest that declares a foundation entry, but DO NOT create the file.
+	// Sync stale removal should drop it, so it won't collide.
+	localManifest := &manifest.Manifest{
+		Name:    "test-project",
+		Author:  "tester",
+		Version: "1.0.0",
+		Foundation: []manifest.FoundationEntry{
+			{ID: "stale", Path: "foundation/stale.md", Description: "File was deleted"},
+		},
+	}
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), localManifest))
+
+	cfg := &config.Config{
+		Name: "test-project",
+		Config: &config.BuildConfig{
+			DocsDir: docsDir,
+		},
+		Packages: []config.PackageDep{},
+	}
+
+	// New package has the same ID — should NOT collide because the local
+	// entry is stale (file doesn't exist) and Sync removes it.
+	newManifest := &manifest.Manifest{
+		Foundation: []manifest.FoundationEntry{
+			{ID: "stale", Path: "foundation/stale.md"},
+		},
+	}
+
+	collisions := detectCollisions(cfg, newManifest, config.Activation{Mode: "all"})
+	assert.Empty(t, collisions, "stale local entry (missing file) should not cause collision")
 }

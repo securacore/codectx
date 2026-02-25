@@ -39,3 +39,18 @@ type PlanEntry struct {
 	DependsOn   []string `yaml:"depends_on,omitempty"`
 	RequiredBy  []string `yaml:"required_by,omitempty"`
 }
+
+// ApplicationEntry represents application-level documentation in the data map.
+// Application entries describe product architecture, design decisions, and
+// system-level documentation. They support the same structure as topics
+// (spec, files) plus a load field for context-loading control.
+type ApplicationEntry struct {
+	ID          string   `yaml:"id"`
+	Path        string   `yaml:"path"`
+	Description string   `yaml:"description"`
+	Spec        string   `yaml:"spec,omitempty"`
+	Load        string   `yaml:"load,omitempty"`
+	Files       []string `yaml:"files,omitempty"`
+	DependsOn   []string `yaml:"depends_on,omitempty"`
+	RequiredBy  []string `yaml:"required_by,omitempty"`
+}

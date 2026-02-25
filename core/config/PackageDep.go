@@ -23,10 +23,11 @@ type Activation struct {
 
 // ActivationMap provides granular activation by section.
 type ActivationMap struct {
-	Foundation []string `yaml:"foundation,omitempty"`
-	Topics     []string `yaml:"topics,omitempty"`
-	Prompts    []string `yaml:"prompts,omitempty"`
-	Plans      []string `yaml:"plans,omitempty"`
+	Foundation  []string `yaml:"foundation,omitempty"`
+	Application []string `yaml:"application,omitempty"`
+	Topics      []string `yaml:"topics,omitempty"`
+	Prompts     []string `yaml:"prompts,omitempty"`
+	Plans       []string `yaml:"plans,omitempty"`
 }
 
 // UnmarshalYAML implements custom YAML unmarshaling for Activation.

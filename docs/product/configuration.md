@@ -53,7 +53,7 @@ Activation is always explicit. When `active` is omitted, the default is `none`.
 
 ### Interactive Activation
 
-When a package is added with `codectx add`, the CLI reads the package's `package.yml`, presents its contents, and prompts the user to choose what to activate. The user can activate all entries, select specific entries, or activate none.
+When a package is added with `codectx add`, the CLI reads the package's `manifest.yml`, presents its contents, and prompts the user to choose what to activate. The user can activate all entries, select specific entries, or activate none.
 
 ## Conflict Handling
 
@@ -61,7 +61,7 @@ Packages are namespaced by `name@author`, so installed packages never create fil
 
 During `codectx add`:
 
-1. The CLI reads the new package's `package.yml` to inspect its contents
+1. The CLI reads the new package's `manifest.yml` to inspect its contents
 2. If activating an entry would create a domain overlap with an already-active entry from another package, the CLI warns the user
 3. The user is prompted to resolve the conflict interactively
 
@@ -82,11 +82,11 @@ project-root/
   codectx.lock                      # Resolved state from compile
 
   docs/                             # Documentation source
-    package.yml                     # Local package data map
+    manifest.yml                     # Local package data map
     schemas/                        # Validation schemas
     packages/                       # Installed packages
       [name]@[author]/
-        package.yml
+        manifest.yml
         ...
     foundation/                     # Local foundation docs
     topics/                         # Local topic docs

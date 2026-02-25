@@ -39,10 +39,11 @@ type HeuristicsTotals struct {
 
 // HeuristicsSections holds per-section stats.
 type HeuristicsSections struct {
-	Foundation *SectionStats `yaml:"foundation,omitempty"`
-	Topics     *SectionStats `yaml:"topics,omitempty"`
-	Prompts    *SectionStats `yaml:"prompts,omitempty"`
-	Plans      *SectionStats `yaml:"plans,omitempty"`
+	Foundation  *SectionStats `yaml:"foundation,omitempty"`
+	Application *SectionStats `yaml:"application,omitempty"`
+	Topics      *SectionStats `yaml:"topics,omitempty"`
+	Prompts     *SectionStats `yaml:"prompts,omitempty"`
+	Plans       *SectionStats `yaml:"plans,omitempty"`
 }
 
 // SectionStats holds stats for a single section.
@@ -103,7 +104,7 @@ func generateHeuristics(
 	pkgBytes := make(map[string]int)
 
 	// Per-section accumulators.
-	var foundationStats, topicStats, promptStats, planStats SectionStats
+	var foundationStats, applicationStats, topicStats, promptStats, planStats SectionStats
 
 	// Track total entries and always-load count.
 	totalEntries := 0
@@ -131,6 +132,30 @@ func generateHeuristics(
 	// Foundation entries.
 	for _, e := range unified.Foundation {
 		addEntry("foundation", e.ID, e.Path, &foundationStats, e.Load == "always")
+	}
+
+	// Application entries (include spec and files in size).
+	for _, e := range unified.Application {
+		addEntry("application", e.ID, e.Path, &applicationStats, e.Load == "always")
+
+		// Add spec size.
+		if e.Spec != "" {
+			if hash, ok := pathToHash[e.Spec]; ok {
+				specSize := readObjectSize(hash)
+				applicationStats.SizeBytes += specSize
+				pkg := provenance["application:"+e.ID]
+				pkgBytes[pkg] += specSize
+			}
+		}
+		// Add extra files size.
+		for _, f := range e.Files {
+			if hash, ok := pathToHash[f]; ok {
+				fileSize := readObjectSize(hash)
+				applicationStats.SizeBytes += fileSize
+				pkg := provenance["application:"+e.ID]
+				pkgBytes[pkg] += fileSize
+			}
+		}
 	}
 
 	// Topic entries (include spec and files in size).
@@ -170,6 +195,7 @@ func generateHeuristics(
 
 	// Compute token estimates for sections.
 	foundationStats.EstimatedTokens = estimateTokens(foundationStats.SizeBytes)
+	applicationStats.EstimatedTokens = estimateTokens(applicationStats.SizeBytes)
 	topicStats.EstimatedTokens = estimateTokens(topicStats.SizeBytes)
 	promptStats.EstimatedTokens = estimateTokens(promptStats.SizeBytes)
 	planStats.EstimatedTokens = estimateTokens(planStats.SizeBytes)
@@ -177,6 +203,9 @@ func generateHeuristics(
 	// Populate sections (only non-empty).
 	if foundationStats.Entries > 0 {
 		h.Sections.Foundation = &foundationStats
+	}
+	if applicationStats.Entries > 0 {
+		h.Sections.Application = &applicationStats
 	}
 	if topicStats.Entries > 0 {
 		h.Sections.Topics = &topicStats
@@ -189,8 +218,8 @@ func generateHeuristics(
 	}
 
 	// Compute totals.
-	totalBytes := foundationStats.SizeBytes + topicStats.SizeBytes +
-		promptStats.SizeBytes + planStats.SizeBytes
+	totalBytes := foundationStats.SizeBytes + applicationStats.SizeBytes +
+		topicStats.SizeBytes + promptStats.SizeBytes + planStats.SizeBytes
 	h.Totals = HeuristicsTotals{
 		Entries:         totalEntries,
 		Objects:         len(objectSizes),

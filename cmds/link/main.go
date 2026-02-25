@@ -66,22 +66,8 @@ func run() error {
 		return nil
 	}
 
-	// Check for existing files and prompt for confirmation.
-	selectedTools := make([]corelink.Tool, len(selectedIdxs))
-	for i, idx := range selectedIdxs {
-		selectedTools[i] = tools[idx]
-	}
-
-	var collisions []string
-	for _, t := range selectedTools {
-		path := t.File
-		if t.SubDir != "" {
-			path = filepath.Join(t.SubDir, t.File)
-		}
-		if _, err := os.Stat(path); err == nil {
-			collisions = append(collisions, path)
-		}
-	}
+	selectedTools := selectTools(tools, selectedIdxs)
+	collisions := detectExistingFiles(selectedTools)
 
 	if len(collisions) > 0 {
 		var confirm bool
@@ -113,6 +99,37 @@ func run() error {
 		return fmt.Errorf("link: %w", err)
 	}
 
+	printLinkResults(results)
+	return nil
+}
+
+// selectTools maps selected indices to the Tool slice.
+func selectTools(tools []corelink.Tool, indices []int) []corelink.Tool {
+	selected := make([]corelink.Tool, len(indices))
+	for i, idx := range indices {
+		selected[i] = tools[idx]
+	}
+	return selected
+}
+
+// detectExistingFiles returns file paths from the tools list that already
+// exist on disk. These are collision candidates that may need backup.
+func detectExistingFiles(tools []corelink.Tool) []string {
+	var collisions []string
+	for _, t := range tools {
+		path := t.File
+		if t.SubDir != "" {
+			path = filepath.Join(t.SubDir, t.File)
+		}
+		if _, err := os.Stat(path); err == nil {
+			collisions = append(collisions, path)
+		}
+	}
+	return collisions
+}
+
+// printLinkResults prints the outcome of a link operation.
+func printLinkResults(results []corelink.LinkResult) {
 	ui.Done("Linked")
 	for _, r := range results {
 		if r.BackedUp != "" {
@@ -121,6 +138,4 @@ func run() error {
 			ui.Item(r.Path)
 		}
 	}
-
-	return nil
 }
