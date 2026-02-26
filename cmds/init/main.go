@@ -9,6 +9,7 @@ import (
 
 	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/config"
+	"github.com/securacore/codectx/core/defaults"
 	"github.com/securacore/codectx/core/manifest"
 	"github.com/securacore/codectx/core/preferences"
 	"github.com/securacore/codectx/core/schema"
@@ -110,6 +111,12 @@ func run(name string, autoCompile *bool) error {
 		return fmt.Errorf("write schemas: %w", err)
 	}
 
+	// Write embedded default foundation documents to docs/foundation/.
+	foundationDir := filepath.Join(docsDir, "foundation")
+	if err := defaults.WriteAll(foundationDir); err != nil {
+		return fmt.Errorf("write defaults: %w", err)
+	}
+
 	// Create codectx.yml.
 	cfg := &config.Config{
 		Name:     name,
@@ -120,11 +127,14 @@ func run(name string, autoCompile *bool) error {
 	}
 
 	// Create docs/manifest.yml (local package data map).
+	// Pre-populate Foundation with default entries so Sync's merge-missing
+	// preserves their load values (which Discover never auto-sets).
 	m := &manifest.Manifest{
 		Name:        name,
 		Author:      "",
 		Version:     "0.1.0",
 		Description: fmt.Sprintf("Documentation package for %s", name),
+		Foundation:  defaults.Entries(),
 	}
 
 	// Sync: discover entries, remove stale, infer relationships from links.
