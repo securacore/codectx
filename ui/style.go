@@ -50,3 +50,9 @@ const (
 func IsTTY() bool {
 	return isatty.IsTerminal(os.Stdout.Fd())
 }
+
+// Writer returns the standard output writer used by the CLI.
+// This is os.Stdout (same destination as all ui output functions).
+func Writer() *os.File {
+	return os.Stdout
+}

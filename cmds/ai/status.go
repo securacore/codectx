@@ -33,7 +33,6 @@ func runStatus() error {
 	}
 
 	// Show current configuration.
-	ui.Blank()
 	ui.Header("AI integration:")
 
 	if prefs.AI == nil {
@@ -71,7 +70,6 @@ func runStatus() error {
 			ui.Fail(fmt.Sprintf("%s (not found)", r.Provider.Name))
 		}
 	}
-	ui.Blank()
 
 	return nil
 }

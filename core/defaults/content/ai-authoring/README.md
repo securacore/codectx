@@ -4,9 +4,17 @@ How to write documentation and prompts for cross-model AI consumption. This cove
 
 **Core principle: write for the floor, not the ceiling.** A capable model always handles well-structured simple input. A less capable model fails on clever or ambiguous input. Clarity is never wasted on a smart model, but it is always missing for a dumb one.
 
-## Baseline Model Assumption
+## Baseline Model Class
 
-Documentation and prompts target GPT-4o-class models as the baseline for reliable execution. Content must work for models at and below this capability tier without inhibiting frontier models. When in doubt, favor explicitness over brevity.
+The target model class for this project is configured in `.codectx/preferences.yml` under the `ai.class` key. Check that file to determine the baseline. If `ai.class` is not set, default to `gpt-4o-class` behavior.
+
+Adapt documentation style to the configured class:
+
+- **`gpt-4o-class`** — Mid-tier instruction-following models. Write with maximum explicitness. One instruction per sentence. Enumerate all exceptions. Avoid implicit reasoning chains. This is the most conservative baseline.
+- **`claude-sonnet-class`** — Strong reasoning models with extended context. Moderate explicitness is sufficient. Compound instructions are acceptable when logically grouped. Implicit context recovery is reliable for adjacent content.
+- **`o1-class`** — Frontier reasoning models. Dense, precise language is preferred over redundant explicitness. Multi-step reasoning chains work without decomposition. Focus on correctness and completeness over hand-holding.
+
+Regardless of class, all documentation must be structurally sound: clear headings, defined terms, explicit defaults, and concrete examples. The class setting adjusts linguistic density, not structural rigor.
 
 ## Instructional Language
 

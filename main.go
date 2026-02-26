@@ -9,6 +9,7 @@ import (
 	"github.com/securacore/codectx/cmds/activate"
 	"github.com/securacore/codectx/cmds/add"
 	cmdsai "github.com/securacore/codectx/cmds/ai"
+	"github.com/securacore/codectx/cmds/cmdx"
 	"github.com/securacore/codectx/cmds/compile"
 	initialize "github.com/securacore/codectx/cmds/init"
 	"github.com/securacore/codectx/cmds/install"
@@ -16,6 +17,7 @@ import (
 	new "github.com/securacore/codectx/cmds/new"
 	"github.com/securacore/codectx/cmds/search"
 	"github.com/securacore/codectx/cmds/self"
+	"github.com/securacore/codectx/cmds/set"
 	"github.com/securacore/codectx/cmds/sync"
 	"github.com/securacore/codectx/cmds/version"
 	"github.com/securacore/codectx/cmds/watch"
@@ -33,6 +35,7 @@ func main() {
 			activate.Command,
 			add.Command,
 			cmdsai.Command,
+			cmdx.Command,
 			compile.Command,
 			initialize.Command,
 			install.Command,
@@ -40,6 +43,7 @@ func main() {
 			new.Command,
 			search.Command,
 			self.Command,
+			set.Command,
 			sync.Command,
 			version.Command,
 			watch.Command,
@@ -52,10 +56,14 @@ func main() {
 		updateCh <- update.Check(version.Version)
 	}()
 
+	// Breathing room: blank line before and after all command output.
+	fmt.Println()
 	if err := app.Run(context.Background(), os.Args); err != nil {
 		ui.Fail(err.Error())
+		fmt.Println()
 		os.Exit(1)
 	}
+	fmt.Println()
 
 	// Collect update result with a short timeout.
 	if ui.IsTTY() {

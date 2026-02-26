@@ -68,11 +68,11 @@ func setupFingerprintProject(t *testing.T) (string, *config.Config) {
 func TestComputeFingerprint_deterministic(t *testing.T) {
 	_, cfg := setupFingerprintProject(t)
 
-	fp1, err := computeFingerprint(cfg)
+	fp1, err := computeFingerprint(cfg, false)
 	require.NoError(t, err)
 	assert.NotEmpty(t, fp1)
 
-	fp2, err := computeFingerprint(cfg)
+	fp2, err := computeFingerprint(cfg, false)
 	require.NoError(t, err)
 
 	assert.Equal(t, fp1, fp2, "same inputs should produce same fingerprint")
@@ -81,7 +81,7 @@ func TestComputeFingerprint_deterministic(t *testing.T) {
 func TestComputeFingerprint_changesWhenFileChanges(t *testing.T) {
 	dir, cfg := setupFingerprintProject(t)
 
-	fp1, err := computeFingerprint(cfg)
+	fp1, err := computeFingerprint(cfg, false)
 	require.NoError(t, err)
 
 	// Modify the foundation file.
@@ -91,7 +91,7 @@ func TestComputeFingerprint_changesWhenFileChanges(t *testing.T) {
 		0o644,
 	))
 
-	fp2, err := computeFingerprint(cfg)
+	fp2, err := computeFingerprint(cfg, false)
 	require.NoError(t, err)
 
 	assert.NotEqual(t, fp1, fp2, "different content should produce different fingerprint")
@@ -100,14 +100,14 @@ func TestComputeFingerprint_changesWhenFileChanges(t *testing.T) {
 func TestComputeFingerprint_changesWhenConfigChanges(t *testing.T) {
 	_, cfg := setupFingerprintProject(t)
 
-	fp1, err := computeFingerprint(cfg)
+	fp1, err := computeFingerprint(cfg, false)
 	require.NoError(t, err)
 
 	// Modify the config file.
 	cfg.Name = "changed-name"
 	require.NoError(t, config.Write("codectx.yml", cfg))
 
-	fp2, err := computeFingerprint(cfg)
+	fp2, err := computeFingerprint(cfg, false)
 	require.NoError(t, err)
 
 	assert.NotEqual(t, fp1, fp2, "config change should produce different fingerprint")
@@ -116,7 +116,7 @@ func TestComputeFingerprint_changesWhenConfigChanges(t *testing.T) {
 func TestComputeFingerprint_changesWhenManifestChanges(t *testing.T) {
 	dir, cfg := setupFingerprintProject(t)
 
-	fp1, err := computeFingerprint(cfg)
+	fp1, err := computeFingerprint(cfg, false)
 	require.NoError(t, err)
 
 	// Add another entry to the manifest.
@@ -139,10 +139,22 @@ func TestComputeFingerprint_changesWhenManifestChanges(t *testing.T) {
 	}
 	require.NoError(t, manifest.Write(filepath.Join(dir, "docs", "manifest.yml"), m))
 
-	fp2, err := computeFingerprint(cfg)
+	fp2, err := computeFingerprint(cfg, false)
 	require.NoError(t, err)
 
 	assert.NotEqual(t, fp1, fp2, "manifest change should produce different fingerprint")
+}
+
+func TestComputeFingerprint_changesWithCompression(t *testing.T) {
+	_, cfg := setupFingerprintProject(t)
+
+	fp1, err := computeFingerprint(cfg, false)
+	require.NoError(t, err)
+
+	fp2, err := computeFingerprint(cfg, true)
+	require.NoError(t, err)
+
+	assert.NotEqual(t, fp1, fp2, "toggling compression should produce different fingerprint")
 }
 
 func TestSaveAndLoadFingerprint(t *testing.T) {

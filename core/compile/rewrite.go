@@ -10,16 +10,21 @@ import (
 // rewriteLinks rewrites relative markdown links in content to use content-addressed
 // object filenames. sourceRelPath is the docs-relative path of the source file
 // (e.g., "topics/react/README.md"). pathToHash maps docs-relative file paths to
-// their 16-char content hashes.
+// their 16-char content hashes. The optional ext parameter specifies the object
+// file extension (defaults to ".md"; pass ".cmdx" for compressed output).
 //
 // For each markdown link [text](target.md):
 //   - HTTP/HTTPS links are left untouched.
-//   - Links resolvable in pathToHash are rewritten to "{hash}.md".
+//   - Links resolvable in pathToHash are rewritten to "{hash}{ext}".
 //   - Links not in pathToHash use the "unresolved:" URI scheme: "unresolved:{target}".
 //   - Fragment suffixes (#section) are preserved on rewritten links.
 //
 // The source file content is never modified; a new byte slice is returned.
-func rewriteLinks(content []byte, sourceRelPath string, pathToHash map[string]string) []byte {
+func rewriteLinks(content []byte, sourceRelPath string, pathToHash map[string]string, ext ...string) []byte {
+	objExt := ".md"
+	if len(ext) > 0 && ext[0] != "" {
+		objExt = ext[0]
+	}
 	matches := manifest.LinkPattern.FindAllSubmatchIndex(content, -1)
 	if len(matches) == 0 {
 		return content
@@ -53,7 +58,7 @@ func rewriteLinks(content []byte, sourceRelPath string, pathToHash map[string]st
 		if resolved != "" {
 			if hash, ok := pathToHash[resolved]; ok {
 				// Target exists in the compiled object set.
-				newTarget = hash + ".md" + fragment
+				newTarget = hash + objExt + fragment
 			} else {
 				// Target is not in the compiled set.
 				newTarget = "unresolved:" + target

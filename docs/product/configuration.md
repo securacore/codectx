@@ -2,6 +2,8 @@
 
 `codectx.yml` at the repository root is the single source of truth for your project's documentation setup. It declares package dependencies, what's activated, and where things live. It's validated by [codectx.schema.json](../schemas/codectx.schema.json).
 
+User-local settings like compression, AI provider, and model class are stored separately in `.codectx/preferences.yml` (gitignored). See [Preference Management](set-command.md).
+
 ## Settings
 
 | Field | Default | Description |
@@ -10,6 +12,20 @@
 | `config.docs_dir` | `docs` | Where your source documentation lives |
 | `config.output_dir` | `.codectx` | Where compiled output is written |
 | `packages` | `[]` | List of installed package dependencies |
+
+## User Preferences
+
+User preferences are stored in `.codectx/preferences.yml`, managed by `codectx set`:
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `compression` | bool | `true` (new projects) | Encode compiled objects to CMDX format |
+| `auto_compile` | bool | `true` (new projects) | Recompile automatically after changes |
+| `ai.provider` | string | unset | AI provider (`claude`, `opencode`, `ollama`) |
+| `ai.model` | string | unset | AI model name (Ollama only) |
+| `ai.class` | string | `gpt-4o-class` (new projects) | Documentation compatibility target |
+
+Preferences are personal and not shared. The `.codectx/` directory is gitignored. See [Preference Management](set-command.md) for detailed documentation.
 
 ## Package Dependencies
 
@@ -119,7 +135,8 @@ project-root/
     manifest.yml                    # Compiled data map (what AI reads)
     README.md                       # Generated loading protocol
     heuristics.yml                  # Size and token stats
-    objects/                        # Content-addressed files with rewritten links
+    preferences.yml                 # User preferences (personal, preserved)
+    objects/                        # Content-addressed files (.md or .cmdx)
     ...
 
   CLAUDE.md                         # AI entry point (created by codectx link)
@@ -132,5 +149,7 @@ Whether you check `docs/packages/` into Git is your choice. The lock file ensure
 
 - [Package Format](packages.md) -- package structure and manifest format
 - [Compilation](compilation.md) -- how configuration drives the compile process
+- [Compression](compression.md) -- CMDX compression and the `compression` preference
+- [Preference Management](set-command.md) -- `codectx set` and user preferences
 - [AI Integration](ai-integration.md) -- how compiled output connects to AI tools
 - [Design Decisions](spec/README.md) -- reasoning behind configuration choices

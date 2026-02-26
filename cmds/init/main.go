@@ -165,32 +165,15 @@ func run(name string, autoCompile *bool, isPackage bool) error {
 		return fmt.Errorf("create output directory %s: %w", outputDir, err)
 	}
 
-	// Prompt for auto-compile preference (skip if value provided).
+	// Default boolean preferences for new projects.
 	if autoCompile == nil {
-		var confirmStr string
-		form := huh.NewForm(
-			huh.NewGroup(
-				huh.NewSelect[string]().
-					Title("Auto-compile after adding packages?").
-					Description("Automatically recompile documentation when packages are added or changed").
-					Options(
-						huh.NewOption("Yes", "yes"),
-						huh.NewOption("No", "no"),
-					).
-					Value(&confirmStr),
-			),
-		).WithTheme(ui.Theme())
-
-		if err := form.Run(); err != nil {
-			return fmt.Errorf("prompt: %w", err)
-		}
-		autoCompile = preferences.BoolPtr(confirmStr == "yes")
+		autoCompile = preferences.BoolPtr(true)
 	}
+	compression := preferences.BoolPtr(true)
 
-	// Detect AI tools and prompt for integration (skip if non-interactive).
+	// Detect AI tools and prompt for integration (interactive only).
 	var aiCfg *preferences.AIConfig
-	if autoCompile == nil {
-		// Interactive mode: run AI detection and prompt.
+	if ui.IsTTY() {
 		var aiErr error
 		aiCfg, aiErr = shared.PromptAISetup()
 		if aiErr != nil {
@@ -198,7 +181,14 @@ func run(name string, autoCompile *bool, isPackage bool) error {
 		}
 	}
 
+	// Ensure AI config exists so we can set the default model class.
+	if aiCfg == nil {
+		aiCfg = &preferences.AIConfig{}
+	}
+	aiCfg.Class = "gpt-4o-class"
+
 	prefs := &preferences.Preferences{
+		Compression: compression,
 		AutoCompile: autoCompile,
 		AI:          aiCfg,
 	}
@@ -220,8 +210,36 @@ func run(name string, autoCompile *bool, isPackage bool) error {
 	for _, dir := range dirs {
 		ui.Item(dir + "/")
 	}
+	ui.Blank()
+	ui.Header("Preferences:")
+	ui.KV("compression", formatBool(prefs.Compression), 16)
+	ui.KV("auto_compile", formatBool(prefs.AutoCompile), 16)
+	if prefs.AI != nil {
+		if prefs.AI.Provider != "" {
+			ui.KV("ai.provider", prefs.AI.Provider, 16)
+			if prefs.AI.Model != "" {
+				ui.KV("ai.model", prefs.AI.Model, 16)
+			}
+		}
+		if prefs.AI.Class != "" {
+			ui.KV("ai.class", prefs.AI.Class, 16)
+		}
+	}
+	ui.Blank()
+	ui.Item("Adjust preferences: codectx set")
 
 	return nil
+}
+
+// formatBool formats a *bool preference for display.
+func formatBool(b *bool) string {
+	if b == nil {
+		return "(unset)"
+	}
+	if *b {
+		return "true"
+	}
+	return "false"
 }
 
 // ensureGit initializes a git repository and writes a .gitignore

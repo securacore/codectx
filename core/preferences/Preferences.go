@@ -22,11 +22,17 @@ type AIConfig struct {
 	// Model is the model name, relevant only for providers that require
 	// explicit model selection (e.g., Ollama). Empty for others.
 	Model string `yaml:"model,omitempty"`
+
+	// Class is the documentation compatibility target (e.g., "gpt-4o-class").
+	// It defines the minimum model capability tier that compiled documentation
+	// is written for — NOT the model being used. Empty means unset.
+	Class string `yaml:"class,omitempty"`
 }
 
 // Preferences holds user-specific settings for the project.
 // Pointer fields distinguish "unset" from "false".
 type Preferences struct {
+	Compression *bool     `yaml:"compression,omitempty"`
 	AutoCompile *bool     `yaml:"auto_compile,omitempty"`
 	AI          *AIConfig `yaml:"ai,omitempty"`
 }

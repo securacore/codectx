@@ -1,0 +1,84 @@
+@CMDX v1
+@DICT{
+  $0=https://api.example.com/v2
+  $1=Parameters:
+  $2=unique identifier
+  $3=of the user
+  $4=a JSON object containing
+  $5=Rate Limits
+}
+@H1 User Management API
+
+@P Base URL: @C{$0}
+
+@P All requests require an @B{Authorization} header with a valid Bearer token. See @LINK{Authentication Guide>$0/docs/auth} for details.
+
+@H2 Endpoints
+
+@ENDPOINT{GET /users/{id}}
+
+@P Retrieves a user by their $2.
+
+@P @B{$1}
+
+@PARAMS{
+  id:string:R~The $2 $3
+}
+
+@P @B{Response:}
+
+@P Returns $4 the user data:
+
+@KV{
+  id:string~The $2 $3
+  name:string~Display name
+  email:string~Primary email address
+  role:string~One of: admin, user, viewer
+  created_at:string~ISO 8601 timestamp
+}
+
+@ENDPOINT{POST /users}
+
+@P Creates a new user account.
+
+@P @B{$1}
+
+@PARAMS{
+  name:string:R~Display name
+  email:string:R~Primary email address
+  role:string:O~One of: admin, user, viewer. Default: user
+}
+
+@P @B{Response:}
+
+@P Returns $4 the created user.
+
+@ENDPOINT{DELETE /users/{id}}
+
+@P Deletes a user by their $2.
+
+@P @B{$1}
+
+@PARAMS{
+  id:string:R~The $2 $3
+}
+
+@P @B{Response:}
+
+@P Returns $4 a confirmation message.
+
+@NOTE{This action is irreversible. All user data will be permanently deleted.}
+
+@H2 $5
+
+@P All endpoints are subject to rate limiting. See @LINK{$5>$0/docs/rate-limits} for current limits.
+
+@H2 Errors
+
+@P All errors return $4:
+
+@KV{
+  code:string~Machine-readable error code
+  message:string~Human-readable error description
+  request_id:string~Unique identifier for the request
+}

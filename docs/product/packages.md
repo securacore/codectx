@@ -102,4 +102,5 @@ AI reads `plan.yml` first to triage whether to load the full plan. This avoids l
 
 - [Configuration](configuration.md) -- how packages are declared and activated in `codectx.yml`
 - [Compilation](compilation.md) -- how packages are compiled into the output format
+- [Compression](compression.md) -- how compiled objects are optionally compressed
 - [Design Decisions](spec/README.md) -- reasoning behind package format choices

@@ -69,13 +69,19 @@ func estimateTokens(bytes int) int {
 
 // generateHeuristics builds heuristics metadata from the unified manifest
 // and stored objects. It reads object sizes from the object store to
-// compute byte counts and token estimates.
+// compute byte counts and token estimates. The ext parameter is the file
+// extension used by the object store (e.g., ".md" or ".cmdx").
 func generateHeuristics(
 	unified *manifest.Manifest,
 	pathToHash map[string]string,
 	provenance map[string]string,
 	objectsDir string,
+	ext ...string,
 ) *Heuristics {
+	objExt := ".md"
+	if len(ext) > 0 && ext[0] != "" {
+		objExt = ext[0]
+	}
 	h := &Heuristics{
 		CompiledAt: time.Now().UTC().Format(time.RFC3339),
 	}
@@ -89,7 +95,7 @@ func generateHeuristics(
 		if size, ok := objectSizes[hash]; ok {
 			return size
 		}
-		path := filepath.Join(objectsDir, hash+".md")
+		path := filepath.Join(objectsDir, hash+objExt)
 		info, err := os.Stat(path)
 		if err != nil {
 			return 0

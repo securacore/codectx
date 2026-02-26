@@ -9,6 +9,7 @@ import (
 	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/lock"
 	"github.com/securacore/codectx/core/manifest"
+	"github.com/securacore/codectx/core/preferences"
 )
 
 const lockFile = "codectx.lock"
@@ -18,21 +19,38 @@ const manifestFile = "manifest.yml"
 // It loads manifests, merges entries with deduplication, stores files as
 // content-addressed objects, builds a compiled manifest with provenance
 // tracking, prunes orphaned objects, and generates a lock file.
-func Compile(cfg *config.Config) (*Result, error) {
+func Compile(cfg *config.Config, onProgress ...func(ProgressEvent)) (*Result, error) {
 	docsDir := cfg.DocsDir()
 	outputDir := cfg.OutputDir()
 
+	progress := func(ev ProgressEvent) {
+		for _, fn := range onProgress {
+			fn(ev)
+		}
+	}
+
+	// Load user preferences for compression setting.
+	prefs, err := preferences.Load(outputDir)
+	if err != nil {
+		// Non-fatal: default to no compression.
+		prefs = &preferences.Preferences{}
+	}
+	compressed := prefs.Compression != nil && *prefs.Compression
+
 	// Check if inputs have changed since last compile.
-	fingerprint, fpErr := computeFingerprint(cfg)
+	fingerprint, fpErr := computeFingerprint(cfg, compressed)
 	if fpErr == nil && fingerprint != "" {
 		stored := loadFingerprint(outputDir)
 		if stored == fingerprint {
 			return &Result{
-				OutputDir: outputDir,
-				UpToDate:  true,
+				OutputDir:  outputDir,
+				UpToDate:   true,
+				Compressed: compressed,
 			}, nil
 		}
 	}
+
+	progress(ProgressEvent{Stage: "prepare", Message: "Loading manifests"})
 
 	// Load local package manifest.
 	localManifestPath := filepath.Join(docsDir, manifestFile)
@@ -57,8 +75,14 @@ func Compile(cfg *config.Config) (*Result, error) {
 		return nil, fmt.Errorf("create output directory %s: %w", outputDir, err)
 	}
 
-	// Initialize object store.
-	store := NewObjectStore(filepath.Join(outputDir, "objects"))
+	// Initialize object store (with optional CMDX compression).
+	objectsDir := filepath.Join(outputDir, "objects")
+	var store *ObjectStore
+	if compressed {
+		store = NewCompressedObjectStore(objectsDir)
+	} else {
+		store = NewObjectStore(objectsDir)
+	}
 
 	// Build the unified manifest starting from local package metadata.
 	unified := &manifest.Manifest{
@@ -74,6 +98,8 @@ func Compile(cfg *config.Config) (*Result, error) {
 
 	// Track source directories for provenance-aware object storage.
 	srcDirs := map[string]string{"local": docsDir}
+
+	progress(ProgressEvent{Stage: "merge", Message: "Merging entries"})
 
 	// Merge local package entries.
 	mergeManifestDedup(unified, localManifest, docsDir, docsDir, "local", seen)
@@ -141,6 +167,8 @@ func Compile(cfg *config.Config) (*Result, error) {
 		provenance[key] = s.pkg
 	}
 
+	progress(ProgressEvent{Stage: "store", Message: "Storing objects"})
+
 	// Store all winning entry files as content-addressed objects.
 	pathToHash, objectsStored, err := storeObjects(store, unified, srcDirs, provenance)
 	if err != nil {
@@ -152,12 +180,13 @@ func Compile(cfg *config.Config) (*Result, error) {
 		return nil, fmt.Errorf("copy state files: %w", err)
 	}
 
+	progress(ProgressEvent{Stage: "finalize", Message: "Building compiled manifest"})
+
 	// Convert to compiled manifest with object references.
-	cm := toCompiledManifest(unified, pathToHash, provenance)
+	cm := toCompiledManifest(unified, pathToHash, provenance, store.ext())
 
 	// Generate heuristics sidecar (needed for decomposition thresholds and README).
-	objectsDir := filepath.Join(outputDir, "objects")
-	h := generateHeuristics(unified, pathToHash, provenance, objectsDir)
+	h := generateHeuristics(unified, pathToHash, provenance, objectsDir, store.ext())
 
 	// Decompose if thresholds are exceeded.
 	if shouldDecompose(h) {
@@ -179,7 +208,7 @@ func Compile(cfg *config.Config) (*Result, error) {
 	}
 
 	// Generate and write compiled README.md.
-	readmeContent := generateReadme(unified, h)
+	readmeContent := generateReadme(unified, h, compressed)
 	readmePath := filepath.Join(outputDir, "README.md")
 	if err := os.WriteFile(readmePath, []byte(readmeContent), 0o644); err != nil {
 		return nil, fmt.Errorf("write compiled README.md: %w", err)
@@ -202,12 +231,18 @@ func Compile(cfg *config.Config) (*Result, error) {
 		_ = saveFingerprint(outputDir, fingerprint)
 	}
 
+	// Build per-file entry listing for display.
+	entries := buildResultEntries(unified, pathToHash, objectsDir, store.ext())
+
 	return &Result{
 		OutputDir:     outputDir,
 		ObjectsStored: objectsStored,
 		ObjectsPruned: objectsPruned,
 		Packages:      packagesProcessed,
 		Dedup:         report,
+		Compressed:    compressed,
+		Heuristics:    h,
+		Entries:       entries,
 	}, nil
 }
 
@@ -324,7 +359,7 @@ func storeObjects(
 	// Pass 2: Rewrite links and store objects.
 	stored := 0
 	for _, cf := range cached {
-		rewritten := rewriteLinks(cf.data, cf.relPath, pathToHash)
+		rewritten := rewriteLinks(cf.data, cf.relPath, pathToHash, store.ext())
 		if err := store.StoreAs(cf.hash, rewritten); err != nil {
 			return nil, stored, err
 		}
@@ -363,6 +398,53 @@ func copyStateFiles(
 		}
 	}
 	return nil
+}
+
+// buildResultEntries constructs a per-file listing from the unified manifest
+// for display in compile output. Each entry maps to its stored object file.
+func buildResultEntries(
+	unified *manifest.Manifest,
+	pathToHash map[string]string,
+	objectsDir string,
+	ext string,
+) []ResultEntry {
+	var entries []ResultEntry
+
+	addEntry := func(section, id, relPath string) {
+		hash := pathToHash[relPath]
+		if hash == "" {
+			return
+		}
+		objPath := ObjectPathExt(hash, ext)
+		size := 0
+		if info, err := os.Stat(filepath.Join(objectsDir, hash+ext)); err == nil {
+			size = int(info.Size())
+		}
+		entries = append(entries, ResultEntry{
+			Section: section,
+			ID:      id,
+			Object:  objPath,
+			Size:    size,
+		})
+	}
+
+	for _, e := range unified.Foundation {
+		addEntry("foundation", e.ID, e.Path)
+	}
+	for _, e := range unified.Application {
+		addEntry("application", e.ID, e.Path)
+	}
+	for _, e := range unified.Topics {
+		addEntry("topics", e.ID, e.Path)
+	}
+	for _, e := range unified.Prompts {
+		addEntry("prompts", e.ID, e.Path)
+	}
+	for _, e := range unified.Plans {
+		addEntry("plans", e.ID, e.Path)
+	}
+
+	return entries
 }
 
 // collectActiveHashes extracts the set of hashes currently referenced

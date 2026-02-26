@@ -155,6 +155,86 @@ func TestBoolPtr(t *testing.T) {
 	assert.False(t, *falsePtr)
 }
 
+// --- Compression tests ---
+
+func TestLoad_missingFile_compressionNil(t *testing.T) {
+	dir := t.TempDir()
+	p, err := Load(dir)
+	require.NoError(t, err)
+	assert.Nil(t, p.Compression)
+}
+
+func TestLoad_compressionTrue(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "preferences.yml"),
+		[]byte("compression: true\n"),
+		0o644,
+	))
+	p, err := Load(dir)
+	require.NoError(t, err)
+	require.NotNil(t, p.Compression)
+	assert.True(t, *p.Compression)
+}
+
+func TestLoad_compressionFalse(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "preferences.yml"),
+		[]byte("compression: false\n"),
+		0o644,
+	))
+	p, err := Load(dir)
+	require.NoError(t, err)
+	require.NotNil(t, p.Compression)
+	assert.False(t, *p.Compression)
+}
+
+func TestWriteAndLoad_compression_roundTrip(t *testing.T) {
+	dir := t.TempDir()
+	original := &Preferences{Compression: BoolPtr(true)}
+	require.NoError(t, Write(dir, original))
+
+	loaded, err := Load(dir)
+	require.NoError(t, err)
+	require.NotNil(t, loaded.Compression)
+	assert.True(t, *loaded.Compression)
+}
+
+func TestWriteAndLoad_allFields(t *testing.T) {
+	dir := t.TempDir()
+	original := &Preferences{
+		Compression: BoolPtr(true),
+		AutoCompile: BoolPtr(false),
+		AI:          &AIConfig{Provider: "claude", Model: ""},
+	}
+	require.NoError(t, Write(dir, original))
+
+	loaded, err := Load(dir)
+	require.NoError(t, err)
+	require.NotNil(t, loaded.Compression)
+	assert.True(t, *loaded.Compression)
+	require.NotNil(t, loaded.AutoCompile)
+	assert.False(t, *loaded.AutoCompile)
+	require.NotNil(t, loaded.AI)
+	assert.Equal(t, "claude", loaded.AI.Provider)
+}
+
+func TestLoad_compressionFromFullYAML(t *testing.T) {
+	dir := t.TempDir()
+	yaml := "compression: true\nauto_compile: true\nai:\n  provider: claude\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "preferences.yml"), []byte(yaml), 0o644))
+
+	p, err := Load(dir)
+	require.NoError(t, err)
+	require.NotNil(t, p.Compression)
+	assert.True(t, *p.Compression)
+	require.NotNil(t, p.AutoCompile)
+	assert.True(t, *p.AutoCompile)
+	require.NotNil(t, p.AI)
+	assert.Equal(t, "claude", p.AI.Provider)
+}
+
 // --- AIConfig tests ---
 
 func TestLoad_missingFile_aiNil(t *testing.T) {
@@ -264,6 +344,73 @@ func TestLoad_aiConfig_partialYAML_providerOnly(t *testing.T) {
 	require.NotNil(t, p.AI)
 	assert.Equal(t, "claude", p.AI.Provider)
 	assert.Empty(t, p.AI.Model)
+}
+
+// --- AIConfig.Class tests ---
+
+func TestWriteAndLoad_aiConfig_withClass(t *testing.T) {
+	dir := t.TempDir()
+	original := &Preferences{
+		AI: &AIConfig{Provider: "claude", Class: "gpt-4o-class"},
+	}
+
+	err := Write(dir, original)
+	require.NoError(t, err)
+
+	loaded, err := Load(dir)
+	require.NoError(t, err)
+	require.NotNil(t, loaded.AI)
+	assert.Equal(t, "claude", loaded.AI.Provider)
+	assert.Equal(t, "gpt-4o-class", loaded.AI.Class)
+}
+
+func TestWriteAndLoad_aiConfig_classOnly(t *testing.T) {
+	dir := t.TempDir()
+	original := &Preferences{
+		AI: &AIConfig{Class: "o1-class"},
+	}
+
+	err := Write(dir, original)
+	require.NoError(t, err)
+
+	loaded, err := Load(dir)
+	require.NoError(t, err)
+	require.NotNil(t, loaded.AI)
+	assert.Empty(t, loaded.AI.Provider)
+	assert.Equal(t, "o1-class", loaded.AI.Class)
+}
+
+func TestLoad_aiConfig_classFromYAML(t *testing.T) {
+	dir := t.TempDir()
+	yaml := "ai:\n  provider: claude\n  class: claude-sonnet-class\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "preferences.yml"), []byte(yaml), 0o644))
+
+	p, err := Load(dir)
+	require.NoError(t, err)
+	require.NotNil(t, p.AI)
+	assert.Equal(t, "claude", p.AI.Provider)
+	assert.Equal(t, "claude-sonnet-class", p.AI.Class)
+}
+
+func TestWriteAndLoad_allFieldsIncludingClass(t *testing.T) {
+	dir := t.TempDir()
+	original := &Preferences{
+		Compression: BoolPtr(true),
+		AutoCompile: BoolPtr(false),
+		AI:          &AIConfig{Provider: "claude", Model: "sonnet", Class: "gpt-4o-class"},
+	}
+	require.NoError(t, Write(dir, original))
+
+	loaded, err := Load(dir)
+	require.NoError(t, err)
+	require.NotNil(t, loaded.Compression)
+	assert.True(t, *loaded.Compression)
+	require.NotNil(t, loaded.AutoCompile)
+	assert.False(t, *loaded.AutoCompile)
+	require.NotNil(t, loaded.AI)
+	assert.Equal(t, "claude", loaded.AI.Provider)
+	assert.Equal(t, "sonnet", loaded.AI.Model)
+	assert.Equal(t, "gpt-4o-class", loaded.AI.Class)
 }
 
 func TestWriteAndLoad_existingPrefs_addAI(t *testing.T) {

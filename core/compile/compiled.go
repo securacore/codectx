@@ -101,11 +101,22 @@ type CompiledPlanEntry struct {
 // toCompiledManifest converts a unified source manifest into a compiled manifest.
 // pathToHash maps source file paths to their 16-char content hashes.
 // provenance maps "section:id" keys to source labels ("local" or "name@author").
+// ext is the object file extension (e.g., ".md" or ".cmdx").
 func toCompiledManifest(
 	unified *manifest.Manifest,
 	pathToHash map[string]string,
 	provenance map[string]string,
+	ext ...string,
 ) *CompiledManifest {
+	objExt := ".md"
+	if len(ext) > 0 && ext[0] != "" {
+		objExt = ext[0]
+	}
+
+	objPath := func(hash string) string {
+		return ObjectPathExt(hash, objExt)
+	}
+
 	cm := &CompiledManifest{
 		Name:        unified.Name,
 		Description: unified.Description,
@@ -114,7 +125,7 @@ func toCompiledManifest(
 	for _, e := range unified.Foundation {
 		ce := CompiledFoundationEntry{
 			ID:          e.ID,
-			Object:      ObjectPath(pathToHash[e.Path]),
+			Object:      objPath(pathToHash[e.Path]),
 			Description: e.Description,
 			Load:        e.Load,
 			Source:      provenance["foundation:"+e.ID],
@@ -123,12 +134,12 @@ func toCompiledManifest(
 		}
 		if e.Spec != "" {
 			if h, ok := pathToHash[e.Spec]; ok {
-				ce.Spec = ObjectPath(h)
+				ce.Spec = objPath(h)
 			}
 		}
 		for _, f := range e.Files {
 			if h, ok := pathToHash[f]; ok {
-				ce.Files = append(ce.Files, ObjectPath(h))
+				ce.Files = append(ce.Files, objPath(h))
 			}
 		}
 		cm.Foundation = append(cm.Foundation, ce)
@@ -137,7 +148,7 @@ func toCompiledManifest(
 	for _, e := range unified.Application {
 		ce := CompiledApplicationEntry{
 			ID:          e.ID,
-			Object:      ObjectPath(pathToHash[e.Path]),
+			Object:      objPath(pathToHash[e.Path]),
 			Description: e.Description,
 			Load:        e.Load,
 			Source:      provenance["application:"+e.ID],
@@ -146,12 +157,12 @@ func toCompiledManifest(
 		}
 		if e.Spec != "" {
 			if h, ok := pathToHash[e.Spec]; ok {
-				ce.Spec = ObjectPath(h)
+				ce.Spec = objPath(h)
 			}
 		}
 		for _, f := range e.Files {
 			if h, ok := pathToHash[f]; ok {
-				ce.Files = append(ce.Files, ObjectPath(h))
+				ce.Files = append(ce.Files, objPath(h))
 			}
 		}
 		cm.Application = append(cm.Application, ce)
@@ -160,7 +171,7 @@ func toCompiledManifest(
 	for _, e := range unified.Topics {
 		ce := CompiledTopicEntry{
 			ID:          e.ID,
-			Object:      ObjectPath(pathToHash[e.Path]),
+			Object:      objPath(pathToHash[e.Path]),
 			Description: e.Description,
 			Source:      provenance["topics:"+e.ID],
 			DependsOn:   e.DependsOn,
@@ -168,12 +179,12 @@ func toCompiledManifest(
 		}
 		if e.Spec != "" {
 			if h, ok := pathToHash[e.Spec]; ok {
-				ce.Spec = ObjectPath(h)
+				ce.Spec = objPath(h)
 			}
 		}
 		for _, f := range e.Files {
 			if h, ok := pathToHash[f]; ok {
-				ce.Files = append(ce.Files, ObjectPath(h))
+				ce.Files = append(ce.Files, objPath(h))
 			}
 		}
 		cm.Topics = append(cm.Topics, ce)
@@ -182,7 +193,7 @@ func toCompiledManifest(
 	for _, e := range unified.Prompts {
 		ce := CompiledPromptEntry{
 			ID:          e.ID,
-			Object:      ObjectPath(pathToHash[e.Path]),
+			Object:      objPath(pathToHash[e.Path]),
 			Description: e.Description,
 			Source:      provenance["prompts:"+e.ID],
 			DependsOn:   e.DependsOn,
@@ -194,7 +205,7 @@ func toCompiledManifest(
 	for _, e := range unified.Plans {
 		ce := CompiledPlanEntry{
 			ID:          e.ID,
-			Object:      ObjectPath(pathToHash[e.Path]),
+			Object:      objPath(pathToHash[e.Path]),
 			Description: e.Description,
 			Source:      provenance["plans:"+e.ID],
 			DependsOn:   e.DependsOn,

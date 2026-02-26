@@ -425,13 +425,15 @@ func TestRun_nonInteractive_aiConfigNil(t *testing.T) {
 
 	projectDir := filepath.Join(dir, "ai-skip-test")
 
-	// Verify preferences were written without AI config.
+	// Verify preferences were written with default AI class but no provider.
 	prefs, err := preferences.Load(filepath.Join(projectDir, ".codectx"))
 	require.NoError(t, err)
 	require.NotNil(t, prefs.AutoCompile)
 	assert.True(t, *prefs.AutoCompile)
-	// AI should be nil because the interactive prompt was skipped.
-	assert.Nil(t, prefs.AI)
+	// AI config exists because the default model class is always set.
+	require.NotNil(t, prefs.AI)
+	assert.Empty(t, prefs.AI.Provider, "provider should be empty when prompt is skipped")
+	assert.Equal(t, "gpt-4o-class", prefs.AI.Class, "default model class should be set")
 }
 
 func TestRun_writesDefaultFoundationFiles(t *testing.T) {
@@ -654,4 +656,52 @@ func TestRun_withName_preferencesAutoCompileTrue(t *testing.T) {
 	// Verify the preferences file exists on disk.
 	_, err = os.Stat(filepath.Join(projectDir, ".codectx", "preferences.yml"))
 	assert.NoError(t, err)
+}
+
+func TestRun_defaultsCompressionTrue(t *testing.T) {
+	dir := t.TempDir()
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(dir))
+
+	err = run("compress-test", preferences.BoolPtr(true), false)
+	require.NoError(t, err)
+
+	projectDir := filepath.Join(dir, "compress-test")
+
+	// Verify preferences include compression: true by default.
+	prefs, err := preferences.Load(filepath.Join(projectDir, ".codectx"))
+	require.NoError(t, err)
+	require.NotNil(t, prefs.Compression)
+	assert.True(t, *prefs.Compression)
+}
+
+func TestRun_nilAutoCompile_defaultsToTrue(t *testing.T) {
+	dir := t.TempDir()
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(dir))
+
+	// Pass nil for autoCompile — should default to true (no prompt).
+	err = run("default-test", nil, false)
+	require.NoError(t, err)
+
+	projectDir := filepath.Join(dir, "default-test")
+
+	prefs, err := preferences.Load(filepath.Join(projectDir, ".codectx"))
+	require.NoError(t, err)
+	require.NotNil(t, prefs.AutoCompile)
+	assert.True(t, *prefs.AutoCompile)
+	require.NotNil(t, prefs.Compression)
+	assert.True(t, *prefs.Compression)
+}
+
+func TestFormatBool(t *testing.T) {
+	assert.Equal(t, "true", formatBool(preferences.BoolPtr(true)))
+	assert.Equal(t, "false", formatBool(preferences.BoolPtr(false)))
+	assert.Equal(t, "(unset)", formatBool(nil))
 }

@@ -16,8 +16,8 @@ const fingerprintFile = ".fingerprint"
 
 // computeFingerprint hashes all compilation inputs into a single
 // deterministic fingerprint. Any change to config, manifests, source
-// files, or activation state produces a different fingerprint.
-func computeFingerprint(cfg *config.Config) (string, error) {
+// files, activation state, or compression setting produces a different fingerprint.
+func computeFingerprint(cfg *config.Config, compressed bool) (string, error) {
 	h := sha256.New()
 
 	// Hash the config file content.
@@ -26,6 +26,13 @@ func computeFingerprint(cfg *config.Config) (string, error) {
 		return "", fmt.Errorf("read config for fingerprint: %w", err)
 	}
 	h.Write(configData)
+
+	// Include compression setting so toggling triggers recompilation.
+	if compressed {
+		h.Write([]byte("compression:true"))
+	} else {
+		h.Write([]byte("compression:false"))
+	}
 
 	docsDir := cfg.DocsDir()
 

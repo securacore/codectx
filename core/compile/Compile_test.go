@@ -1486,3 +1486,163 @@ func TestStoreObjects_emptyRelPathSkipped(t *testing.T) {
 	assert.Equal(t, 0, stored)
 	assert.Empty(t, pathToHash)
 }
+
+// --- Compressed compilation integration tests ---
+
+// setupCompressedProject creates a project with compression enabled in preferences.
+func setupCompressedProject(t *testing.T) (string, *config.Config) {
+	t.Helper()
+	dir, cfg := setupTestProject(t)
+
+	// Write preferences with compression enabled.
+	outputDir := cfg.OutputDir()
+	require.NoError(t, os.MkdirAll(outputDir, 0o755))
+	prefsYAML := []byte("compression: true\n")
+	require.NoError(t, os.WriteFile(filepath.Join(outputDir, "preferences.yml"), prefsYAML, 0o644))
+
+	return dir, cfg
+}
+
+func TestCompile_withCompression_storesCmdxFiles(t *testing.T) {
+	_, cfg := setupCompressedProject(t)
+	docsDir := cfg.DocsDir()
+
+	// Add a foundation document.
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "philosophy"), 0o755))
+	foundationPath := filepath.Join(docsDir, "foundation", "philosophy", "README.md")
+	require.NoError(t, os.WriteFile(foundationPath, []byte("# Philosophy\n\nCore philosophy document.\n"), 0o644))
+
+	m := &manifest.Manifest{
+		Name:        "test-project",
+		Author:      "tester",
+		Version:     "1.0.0",
+		Description: "Test project",
+		Foundation: []manifest.FoundationEntry{
+			{ID: "philosophy", Path: "foundation/philosophy/README.md", Description: "Core philosophy", Load: "always"},
+		},
+	}
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
+
+	result, err := Compile(cfg)
+	require.NoError(t, err)
+
+	// Result should report compression was used.
+	assert.True(t, result.Compressed, "Result.Compressed should be true")
+	assert.Equal(t, 1, result.ObjectsStored)
+
+	// Verify .cmdx file exists in objects/.
+	objectsDir := filepath.Join(result.OutputDir, "objects")
+	entries, err := os.ReadDir(objectsDir)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.True(t, filepath.Ext(entries[0].Name()) == ".cmdx",
+		"object file should have .cmdx extension, got: %s", entries[0].Name())
+
+	// Verify the stored content is CMDX-encoded.
+	data, err := os.ReadFile(filepath.Join(objectsDir, entries[0].Name()))
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "@CMDX v1", "stored content should be CMDX-encoded")
+
+	// Verify compiled manifest references .cmdx paths.
+	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
+	require.NoError(t, err)
+	require.NotEmpty(t, cm.Foundation)
+	assert.Contains(t, cm.Foundation[0].Object, ".cmdx",
+		"compiled manifest entry should reference .cmdx object")
+}
+
+func TestCompile_withCompression_heuristicsReflectCompressedSizes(t *testing.T) {
+	_, cfg := setupCompressedProject(t)
+	docsDir := cfg.DocsDir()
+
+	// Add a foundation document.
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "conventions"), 0o755))
+	content := "# Conventions\n\nThis document describes the coding conventions for the project.\n"
+	require.NoError(t, os.WriteFile(
+		filepath.Join(docsDir, "foundation", "conventions", "README.md"),
+		[]byte(content), 0o644,
+	))
+
+	m := &manifest.Manifest{
+		Name:    "test-project",
+		Version: "1.0.0",
+		Foundation: []manifest.FoundationEntry{
+			{ID: "conventions", Path: "foundation/conventions/README.md", Description: "Coding conventions", Load: "always"},
+		},
+	}
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
+
+	result, err := Compile(cfg)
+	require.NoError(t, err)
+	require.NotNil(t, result.Heuristics)
+	assert.True(t, result.Compressed)
+
+	// Heuristics should report non-zero totals.
+	assert.Equal(t, 1, result.Heuristics.Totals.Entries)
+	assert.Equal(t, 1, result.Heuristics.Totals.Objects)
+	assert.Greater(t, result.Heuristics.Totals.SizeBytes, 0, "total bytes should be > 0")
+	assert.Greater(t, result.Heuristics.Totals.EstimatedTokens, 0, "estimated tokens should be > 0")
+}
+
+func TestCompile_withCompression_resultEntries(t *testing.T) {
+	_, cfg := setupCompressedProject(t)
+	docsDir := cfg.DocsDir()
+
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "philosophy"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(docsDir, "foundation", "philosophy", "README.md"),
+		[]byte("# Philosophy\n\nA core document.\n"), 0o644,
+	))
+
+	m := &manifest.Manifest{
+		Name:    "test-project",
+		Version: "1.0.0",
+		Foundation: []manifest.FoundationEntry{
+			{ID: "philosophy", Path: "foundation/philosophy/README.md", Description: "Philosophy", Load: "always"},
+		},
+	}
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
+
+	result, err := Compile(cfg)
+	require.NoError(t, err)
+	require.Len(t, result.Entries, 1)
+
+	entry := result.Entries[0]
+	assert.Equal(t, "foundation", entry.Section)
+	assert.Equal(t, "philosophy", entry.ID)
+	assert.Contains(t, entry.Object, ".cmdx", "ResultEntry.Object should reference .cmdx")
+	assert.Greater(t, entry.Size, 0, "ResultEntry.Size should be > 0")
+}
+
+func TestCompile_withoutCompression_storesMdFiles(t *testing.T) {
+	// Verify that without compression preference, .md files are stored.
+	_, cfg := setupTestProject(t)
+	docsDir := cfg.DocsDir()
+
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "philosophy"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(docsDir, "foundation", "philosophy", "README.md"),
+		[]byte("# Philosophy\n"), 0o644,
+	))
+
+	m := &manifest.Manifest{
+		Name:    "test-project",
+		Version: "1.0.0",
+		Foundation: []manifest.FoundationEntry{
+			{ID: "philosophy", Path: "foundation/philosophy/README.md", Description: "Philosophy", Load: "always"},
+		},
+	}
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
+
+	result, err := Compile(cfg)
+	require.NoError(t, err)
+
+	assert.False(t, result.Compressed, "Result.Compressed should be false without preference")
+
+	objectsDir := filepath.Join(result.OutputDir, "objects")
+	entries, err := os.ReadDir(objectsDir)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.True(t, filepath.Ext(entries[0].Name()) == ".md",
+		"object file should have .md extension, got: %s", entries[0].Name())
+}

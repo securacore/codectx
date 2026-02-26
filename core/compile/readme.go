@@ -10,13 +10,20 @@ import (
 // generateReadme builds the compiled README.md content dynamically
 // from the unified manifest and heuristics data. Only sections with
 // entries are included. When heuristics are available, token estimates
-// and size information are included.
-func generateReadme(m *manifest.Manifest, h *Heuristics) string {
+// and size information are included. The compressed flag adds a format
+// note about CMDX encoding.
+func generateReadme(m *manifest.Manifest, h *Heuristics, compressed ...bool) string {
+	isCmdx := len(compressed) > 0 && compressed[0]
+
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "# %s\n\n", m.Name)
 	b.WriteString("> Documentation managed by codectx.\n\n")
 	b.WriteString("Load [manifest.yml](manifest.yml) and all foundation documents marked `load: always` at the start of every session.\n\n")
+
+	if isCmdx {
+		b.WriteString("> **Format**: Objects use CMDX compression (`.cmdx`). CMDX is a compact binary encoding of markdown optimized for AI context loading. Decode with `codectx cmdx decode` or load directly — content is semantically equivalent to the source markdown.\n\n")
+	}
 
 	b.WriteString("## Loading Protocol\n\n")
 	b.WriteString("1. Load this file (done).\n")

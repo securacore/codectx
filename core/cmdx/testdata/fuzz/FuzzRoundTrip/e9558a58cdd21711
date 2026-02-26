@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("Name|Type|Required|Description\n-|-|-|-\n0||0")
