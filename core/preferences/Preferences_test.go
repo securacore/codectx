@@ -154,3 +154,138 @@ func TestBoolPtr(t *testing.T) {
 	require.NotNil(t, falsePtr)
 	assert.False(t, *falsePtr)
 }
+
+// --- AIConfig tests ---
+
+func TestLoad_missingFile_aiNil(t *testing.T) {
+	dir := t.TempDir()
+	p, err := Load(dir)
+	require.NoError(t, err)
+	assert.Nil(t, p.AI)
+}
+
+func TestLoad_emptyFile_aiNil(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "preferences.yml"), []byte("{}"), 0o644))
+
+	p, err := Load(dir)
+	require.NoError(t, err)
+	assert.Nil(t, p.AI)
+}
+
+func TestWriteAndLoad_aiConfig_roundTrip(t *testing.T) {
+	dir := t.TempDir()
+	original := &Preferences{
+		AutoCompile: BoolPtr(true),
+		AI:          &AIConfig{Provider: "claude"},
+	}
+
+	err := Write(dir, original)
+	require.NoError(t, err)
+
+	loaded, err := Load(dir)
+	require.NoError(t, err)
+	require.NotNil(t, loaded.AI)
+	assert.Equal(t, "claude", loaded.AI.Provider)
+	assert.Empty(t, loaded.AI.Model)
+}
+
+func TestWriteAndLoad_aiConfig_withModel(t *testing.T) {
+	dir := t.TempDir()
+	original := &Preferences{
+		AutoCompile: BoolPtr(false),
+		AI:          &AIConfig{Provider: "ollama", Model: "llama3.2:latest"},
+	}
+
+	err := Write(dir, original)
+	require.NoError(t, err)
+
+	loaded, err := Load(dir)
+	require.NoError(t, err)
+	require.NotNil(t, loaded.AI)
+	assert.Equal(t, "ollama", loaded.AI.Provider)
+	assert.Equal(t, "llama3.2:latest", loaded.AI.Model)
+}
+
+func TestWriteAndLoad_aiConfig_nilAI(t *testing.T) {
+	dir := t.TempDir()
+	original := &Preferences{
+		AutoCompile: BoolPtr(true),
+		AI:          nil,
+	}
+
+	err := Write(dir, original)
+	require.NoError(t, err)
+
+	loaded, err := Load(dir)
+	require.NoError(t, err)
+	assert.Nil(t, loaded.AI)
+}
+
+func TestWriteAndLoad_aiConfig_providerOnly(t *testing.T) {
+	dir := t.TempDir()
+	original := &Preferences{
+		AI: &AIConfig{Provider: "opencode"},
+	}
+
+	err := Write(dir, original)
+	require.NoError(t, err)
+
+	loaded, err := Load(dir)
+	require.NoError(t, err)
+	require.NotNil(t, loaded.AI)
+	assert.Equal(t, "opencode", loaded.AI.Provider)
+	assert.Empty(t, loaded.AI.Model)
+	// AutoCompile should remain nil when not set.
+	assert.Nil(t, loaded.AutoCompile)
+}
+
+func TestLoad_aiConfig_fromYAML(t *testing.T) {
+	dir := t.TempDir()
+	yaml := "auto_compile: true\nai:\n  provider: ollama\n  model: codellama:7b\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "preferences.yml"), []byte(yaml), 0o644))
+
+	p, err := Load(dir)
+	require.NoError(t, err)
+	require.NotNil(t, p.AutoCompile)
+	assert.True(t, *p.AutoCompile)
+	require.NotNil(t, p.AI)
+	assert.Equal(t, "ollama", p.AI.Provider)
+	assert.Equal(t, "codellama:7b", p.AI.Model)
+}
+
+func TestLoad_aiConfig_partialYAML_providerOnly(t *testing.T) {
+	dir := t.TempDir()
+	yaml := "ai:\n  provider: claude\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "preferences.yml"), []byte(yaml), 0o644))
+
+	p, err := Load(dir)
+	require.NoError(t, err)
+	require.NotNil(t, p.AI)
+	assert.Equal(t, "claude", p.AI.Provider)
+	assert.Empty(t, p.AI.Model)
+}
+
+func TestWriteAndLoad_existingPrefs_addAI(t *testing.T) {
+	dir := t.TempDir()
+
+	// Write preferences without AI config.
+	original := &Preferences{AutoCompile: BoolPtr(true)}
+	require.NoError(t, Write(dir, original))
+
+	// Load, add AI config, re-write.
+	loaded, err := Load(dir)
+	require.NoError(t, err)
+	assert.Nil(t, loaded.AI)
+
+	loaded.AI = &AIConfig{Provider: "claude"}
+	require.NoError(t, Write(dir, loaded))
+
+	// Reload and verify both fields are preserved.
+	reloaded, err := Load(dir)
+	require.NoError(t, err)
+	require.NotNil(t, reloaded.AutoCompile)
+	assert.True(t, *reloaded.AutoCompile)
+	require.NotNil(t, reloaded.AI)
+	assert.Equal(t, "claude", reloaded.AI.Provider)
+}

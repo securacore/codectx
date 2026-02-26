@@ -401,6 +401,29 @@ func TestRun_initInfersRelationships(t *testing.T) {
 	assert.Contains(t, byID["beta"].RequiredBy, "alpha")
 }
 
+func TestRun_nonInteractive_aiConfigNil(t *testing.T) {
+	dir := t.TempDir()
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(dir))
+
+	// Non-interactive mode: autoCompile is non-nil, so AI prompt is skipped.
+	err = run("ai-skip-test", preferences.BoolPtr(true))
+	require.NoError(t, err)
+
+	projectDir := filepath.Join(dir, "ai-skip-test")
+
+	// Verify preferences were written without AI config.
+	prefs, err := preferences.Load(filepath.Join(projectDir, ".codectx"))
+	require.NoError(t, err)
+	require.NotNil(t, prefs.AutoCompile)
+	assert.True(t, *prefs.AutoCompile)
+	// AI should be nil because the interactive prompt was skipped.
+	assert.Nil(t, prefs.AI)
+}
+
 func TestRun_withName_preferencesAutoCompileTrue(t *testing.T) {
 	dir := t.TempDir()
 

@@ -13,10 +13,22 @@ import (
 
 const fileName = "preferences.yml"
 
+// AIConfig holds user-selected AI integration settings.
+// A nil *AIConfig in Preferences means AI has not been configured.
+type AIConfig struct {
+	// Provider is the selected AI provider ID (e.g., "claude", "opencode", "ollama").
+	Provider string `yaml:"provider,omitempty"`
+
+	// Model is the model name, relevant only for providers that require
+	// explicit model selection (e.g., Ollama). Empty for others.
+	Model string `yaml:"model,omitempty"`
+}
+
 // Preferences holds user-specific settings for the project.
 // Pointer fields distinguish "unset" from "false".
 type Preferences struct {
-	AutoCompile *bool `yaml:"auto_compile,omitempty"`
+	AutoCompile *bool     `yaml:"auto_compile,omitempty"`
+	AI          *AIConfig `yaml:"ai,omitempty"`
 }
 
 // Load reads preferences from the output directory.

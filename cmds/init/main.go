@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/manifest"
 	"github.com/securacore/codectx/core/preferences"
@@ -162,8 +163,20 @@ func run(name string, autoCompile *bool) error {
 		autoCompile = preferences.BoolPtr(confirmStr == "yes")
 	}
 
+	// Detect AI tools and prompt for integration (skip if non-interactive).
+	var aiCfg *preferences.AIConfig
+	if autoCompile == nil {
+		// Interactive mode: run AI detection and prompt.
+		var aiErr error
+		aiCfg, aiErr = shared.PromptAISetup()
+		if aiErr != nil {
+			return aiErr
+		}
+	}
+
 	prefs := &preferences.Preferences{
 		AutoCompile: autoCompile,
+		AI:          aiCfg,
 	}
 	if err := preferences.Write(outputDir, prefs); err != nil {
 		return fmt.Errorf("write preferences: %w", err)

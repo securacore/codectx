@@ -8,6 +8,7 @@ import (
 
 	"github.com/securacore/codectx/cmds/activate"
 	"github.com/securacore/codectx/cmds/add"
+	cmdsai "github.com/securacore/codectx/cmds/ai"
 	"github.com/securacore/codectx/cmds/compile"
 	initialize "github.com/securacore/codectx/cmds/init"
 	"github.com/securacore/codectx/cmds/install"
@@ -31,6 +32,7 @@ func main() {
 		Commands: []*cli.Command{
 			activate.Command,
 			add.Command,
+			cmdsai.Command,
 			compile.Command,
 			initialize.Command,
 			install.Command,
