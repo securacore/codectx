@@ -93,4 +93,4 @@ For installed packages: the package repository may or may not ship a `manifest.y
 | [manifest.schema.json](../schemas/manifest.schema.json) | Source `manifest.yml` (in `docs/` and packages) |
 | [compiled.schema.json](../schemas/compiled.schema.json) | Compiled `.codectx/manifest.yml` |
 | [heuristics.schema.json](../schemas/heuristics.schema.json) | `heuristics.yml` |
-| [state.schema.json](../schemas/state.schema.json) | `state.yml` (plan state) |
+| [plan.schema.json](../schemas/plan.schema.json) | `plan.yml` (plan state) |

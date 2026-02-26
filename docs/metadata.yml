@@ -20,7 +20,7 @@ version: "1.0"
 
 foundation:
   - id: philosophy
-    path: foundation/philosophy.md
+    path: foundation/philosophy/README.md
     load: always
     description: Guiding principles for decision-making
     depends_on: []
@@ -37,7 +37,7 @@ foundation:
       - product
 
   - id: markdown
-    path: foundation/markdown.md
+    path: foundation/markdown/README.md
     load: documentation
     description: Markdown formatting conventions
     depends_on: []
@@ -47,7 +47,7 @@ foundation:
       - documentation
 
   - id: documentation
-    path: foundation/documentation.md
+    path: foundation/documentation/README.md
     load: documentation
     description: Documentation management and strategy
     depends_on:
@@ -60,7 +60,8 @@ foundation:
       - metadata
 
   - id: specs
-    path: foundation/specs.md
+    path: foundation/specs/README.md
+    spec: foundation/specs/spec/README.md
     load: documentation
     description: Specification template and process
     depends_on:
@@ -78,7 +79,7 @@ foundation:
       - product
 
   - id: ai-authoring
-    path: foundation/ai-authoring.md
+    path: foundation/ai-authoring/README.md
     load: documentation
     description: Cross-model AI authoring conventions
     depends_on:
@@ -88,7 +89,7 @@ foundation:
       - review-standards
 
   - id: review-standards
-    path: foundation/review-standards.md
+    path: foundation/review-standards/README.md
     load: documentation
     description: Post-update documentation review checklist
     depends_on:
@@ -100,7 +101,7 @@ foundation:
       - docs-audit
 
   - id: metadata
-    path: foundation/metadata.md
+    path: foundation/metadata/README.md
     load: documentation
     description: Metadata manifest conventions and maintenance
     depends_on:

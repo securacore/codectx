@@ -254,12 +254,12 @@ func setupCollisionTest(t *testing.T) (string, *config.Config) {
 	docsDir := filepath.Join(dir, "docs")
 
 	// Create directories and actual files so Sync stale removal doesn't drop them.
-	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation"), 0o755))
-	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "application"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "philosophy"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "application", "architecture"), 0o755))
 	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "topics", "react"), 0o755))
 
-	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "foundation", "philosophy.md"), []byte("# Philosophy\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "application", "architecture.md"), []byte("# Architecture\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "foundation", "philosophy", "README.md"), []byte("# Philosophy\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "application", "architecture", "README.md"), []byte("# Architecture\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "topics", "react", "README.md"), []byte("# React\n"), 0o644))
 
 	localManifest := &manifest.Manifest{
@@ -267,10 +267,10 @@ func setupCollisionTest(t *testing.T) (string, *config.Config) {
 		Author:  "tester",
 		Version: "1.0.0",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "philosophy", Path: "foundation/philosophy.md", Description: "Philosophy"},
+			{ID: "philosophy", Path: "foundation/philosophy/README.md", Description: "Philosophy"},
 		},
 		Application: []manifest.ApplicationEntry{
-			{ID: "architecture", Path: "application/architecture.md", Description: "System architecture"},
+			{ID: "architecture", Path: "application/architecture/README.md", Description: "System architecture"},
 		},
 		Topics: []manifest.TopicEntry{
 			{ID: "react", Path: "topics/react/README.md", Description: "React"},
@@ -294,7 +294,7 @@ func TestDetectCollisions_noCollisions(t *testing.T) {
 
 	newManifest := &manifest.Manifest{
 		Foundation: []manifest.FoundationEntry{
-			{ID: "conventions", Path: "foundation/conventions.md"},
+			{ID: "conventions", Path: "foundation/conventions/README.md"},
 		},
 	}
 
@@ -307,7 +307,7 @@ func TestDetectCollisions_foundationCollision(t *testing.T) {
 
 	newManifest := &manifest.Manifest{
 		Foundation: []manifest.FoundationEntry{
-			{ID: "philosophy", Path: "foundation/philosophy.md"},
+			{ID: "philosophy", Path: "foundation/philosophy/README.md"},
 		},
 	}
 
@@ -338,7 +338,7 @@ func TestDetectCollisions_applicationCollision(t *testing.T) {
 
 	newManifest := &manifest.Manifest{
 		Application: []manifest.ApplicationEntry{
-			{ID: "architecture", Path: "application/architecture.md"},
+			{ID: "architecture", Path: "application/architecture/README.md"},
 		},
 	}
 
@@ -356,8 +356,8 @@ func TestDetectCollisions_granularActivationNoCollision(t *testing.T) {
 	// but we only activate the non-colliding one.
 	newManifest := &manifest.Manifest{
 		Foundation: []manifest.FoundationEntry{
-			{ID: "philosophy", Path: "foundation/philosophy.md"},
-			{ID: "unique", Path: "foundation/unique.md"},
+			{ID: "philosophy", Path: "foundation/philosophy/README.md"},
+			{ID: "unique", Path: "foundation/unique/README.md"},
 		},
 	}
 
@@ -588,7 +588,7 @@ func TestDetectCollisions_noLocalManifest(t *testing.T) {
 
 	newManifest := &manifest.Manifest{
 		Foundation: []manifest.FoundationEntry{
-			{ID: "unique-entry", Path: "foundation/unique.md"},
+			{ID: "unique-entry", Path: "foundation/unique/README.md"},
 		},
 	}
 
@@ -645,7 +645,7 @@ func TestDetectCollisions_noneActivation(t *testing.T) {
 	// New manifest has entries that would collide, but activation is "none".
 	newManifest := &manifest.Manifest{
 		Foundation: []manifest.FoundationEntry{
-			{ID: "philosophy", Path: "foundation/philosophy.md"},
+			{ID: "philosophy", Path: "foundation/philosophy/README.md"},
 		},
 		Topics: []manifest.TopicEntry{
 			{ID: "react", Path: "topics/react/README.md"},
@@ -1226,7 +1226,7 @@ func TestDetectCollisions_multipleCollisions(t *testing.T) {
 	// New manifest collides on both.
 	newManifest := &manifest.Manifest{
 		Foundation: []manifest.FoundationEntry{
-			{ID: "philosophy", Path: "foundation/philosophy.md"},
+			{ID: "philosophy", Path: "foundation/philosophy/README.md"},
 		},
 		Topics: []manifest.TopicEntry{
 			{ID: "react", Path: "topics/react/README.md"},
@@ -1246,8 +1246,9 @@ func TestRun_addPackageSyncsLocalManifest(t *testing.T) {
 
 	// Create a foundation file on disk that is NOT in the manifest.
 	// After add, the post-add Sync should discover it.
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "discovered"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(docsDir, "foundation", "discovered.md"),
+		filepath.Join(docsDir, "foundation", "discovered", "README.md"),
 		[]byte("# Discovered\n"), 0o644))
 
 	err := Run([]string{"sync-pkg@sync-author"}, bareDir, "all")
@@ -1272,7 +1273,7 @@ func TestDetectCollisions_staleLocalEntryNotCollision(t *testing.T) {
 		Author:  "tester",
 		Version: "1.0.0",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "stale", Path: "foundation/stale.md", Description: "File was deleted"},
+			{ID: "stale", Path: "foundation/stale/README.md", Description: "File was deleted"},
 		},
 	}
 	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), localManifest))
@@ -1289,7 +1290,7 @@ func TestDetectCollisions_staleLocalEntryNotCollision(t *testing.T) {
 	// entry is stale (file doesn't exist) and Sync removes it.
 	newManifest := &manifest.Manifest{
 		Foundation: []manifest.FoundationEntry{
-			{ID: "stale", Path: "foundation/stale.md"},
+			{ID: "stale", Path: "foundation/stale/README.md"},
 		},
 	}
 

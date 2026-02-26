@@ -69,10 +69,10 @@ func TestRewriteLinks_crossTopic(t *testing.T) {
 
 func TestRewriteLinks_crossSection(t *testing.T) {
 	pathToHash := map[string]string{
-		"topics/react/spec/README.md": "cccc777788889999",
-		"foundation/philosophy.md":    "eeee333344445555",
+		"topics/react/spec/README.md":     "cccc777788889999",
+		"foundation/philosophy/README.md": "eeee333344445555",
 	}
-	content := []byte("See [philosophy](../../../foundation/philosophy.md).\n")
+	content := []byte("See [philosophy](../../../foundation/philosophy/README.md).\n")
 	result := rewriteLinks(content, "topics/react/spec/README.md", pathToHash)
 
 	assert.Equal(t,
@@ -107,13 +107,13 @@ func TestRewriteLinks_unresolvedTarget(t *testing.T) {
 
 func TestRewriteLinks_unresolvedEscapesRoot(t *testing.T) {
 	pathToHash := map[string]string{
-		"foundation/a.md": "aaaa111122223333",
+		"foundation/a/README.md": "aaaa111122223333",
 	}
-	content := []byte("See [outside](../../outside.md).\n")
-	result := rewriteLinks(content, "foundation/a.md", pathToHash)
+	content := []byte("See [outside](../../../outside.md).\n")
+	result := rewriteLinks(content, "foundation/a/README.md", pathToHash)
 
 	assert.Equal(t,
-		"See [outside](unresolved:../../outside.md).\n",
+		"See [outside](unresolved:../../../outside.md).\n",
 		string(result))
 }
 
@@ -132,30 +132,30 @@ func TestRewriteLinks_unresolvedPreservesFragment(t *testing.T) {
 
 func TestRewriteLinks_httpLinksUntouched(t *testing.T) {
 	pathToHash := map[string]string{
-		"foundation/a.md": "aaaa111122223333",
+		"foundation/a/README.md": "aaaa111122223333",
 	}
 	content := []byte("See [docs](https://example.com/docs.md).\n")
-	result := rewriteLinks(content, "foundation/a.md", pathToHash)
+	result := rewriteLinks(content, "foundation/a/README.md", pathToHash)
 
 	assert.Equal(t, string(content), string(result))
 }
 
 func TestRewriteLinks_httpLinkUntouched(t *testing.T) {
 	pathToHash := map[string]string{
-		"foundation/a.md": "aaaa111122223333",
+		"foundation/a/README.md": "aaaa111122223333",
 	}
 	content := []byte("See [docs](http://example.com/docs.md).\n")
-	result := rewriteLinks(content, "foundation/a.md", pathToHash)
+	result := rewriteLinks(content, "foundation/a/README.md", pathToHash)
 
 	assert.Equal(t, string(content), string(result))
 }
 
 func TestRewriteLinks_noLinks(t *testing.T) {
 	pathToHash := map[string]string{
-		"foundation/a.md": "aaaa111122223333",
+		"foundation/a/README.md": "aaaa111122223333",
 	}
 	content := []byte("# Philosophy\n\nNo links here.\n")
-	result := rewriteLinks(content, "foundation/a.md", pathToHash)
+	result := rewriteLinks(content, "foundation/a/README.md", pathToHash)
 
 	assert.Equal(t, string(content), string(result))
 }
@@ -199,11 +199,11 @@ See [TypeScript](unresolved:../typescript/README.md) for types.
 
 func TestRewriteLinks_nonMdLinksIgnored(t *testing.T) {
 	pathToHash := map[string]string{
-		"foundation/a.md": "aaaa111122223333",
+		"foundation/a/README.md": "aaaa111122223333",
 	}
 	// Non-.md links are not matched by the regex, so they pass through.
 	content := []byte("See [schema](schema.json) and [config](codectx.yml).\n")
-	result := rewriteLinks(content, "foundation/a.md", pathToHash)
+	result := rewriteLinks(content, "foundation/a/README.md", pathToHash)
 
 	assert.Equal(t, string(content), string(result))
 }
@@ -451,15 +451,16 @@ func TestCompile_crossSectionLinkRewriting(t *testing.T) {
 	// Foundation doc and a topic spec that links to it.
 	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "topics", "react", "spec"), 0o755))
 	philContent := []byte("# Philosophy\n")
-	specContent := []byte("# Spec\nSee [philosophy](../../../foundation/philosophy.md).\n")
-	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "foundation", "philosophy.md"), philContent, 0o644))
+	specContent := []byte("# Spec\nSee [philosophy](../../../foundation/philosophy/README.md).\n")
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "philosophy"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "foundation", "philosophy", "README.md"), philContent, 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "topics", "react", "spec", "README.md"), specContent, 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "topics", "react", "README.md"), []byte("# React\n"), 0o644))
 
 	m := &manifest.Manifest{
 		Name: "test-project", Version: "1.0.0",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "philosophy", Path: "foundation/philosophy.md"},
+			{ID: "philosophy", Path: "foundation/philosophy/README.md"},
 		},
 		Topics: []manifest.TopicEntry{
 			{ID: "react", Path: "topics/react/README.md", Spec: "topics/react/spec/README.md"},
@@ -477,7 +478,7 @@ func TestCompile_crossSectionLinkRewriting(t *testing.T) {
 	specData, err := os.ReadFile(filepath.Join(result.OutputDir, "objects", specHash+".md"))
 	require.NoError(t, err)
 	assert.Contains(t, string(specData), philHash+".md")
-	assert.NotContains(t, string(specData), "foundation/philosophy.md)")
+	assert.NotContains(t, string(specData), "foundation/philosophy/README.md)")
 }
 
 func TestCompile_noLinksContentUnchanged(t *testing.T) {
@@ -486,12 +487,13 @@ func TestCompile_noLinksContentUnchanged(t *testing.T) {
 
 	// A file with no markdown links.
 	content := []byte("# Philosophy\n\nGuiding principles for decision-making.\n")
-	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "foundation", "philosophy.md"), content, 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "philosophy"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "foundation", "philosophy", "README.md"), content, 0o644))
 
 	m := &manifest.Manifest{
 		Name: "test-project", Version: "1.0.0",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "philosophy", Path: "foundation/philosophy.md"},
+			{ID: "philosophy", Path: "foundation/philosophy/README.md"},
 		},
 	}
 	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
@@ -510,12 +512,13 @@ func TestCompile_httpLinksPreserved(t *testing.T) {
 	docsDir := cfg.DocsDir()
 
 	content := []byte("# Docs\nSee [spec](https://example.com/spec.md) for details.\n")
-	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "foundation", "docs.md"), content, 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "docs"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "foundation", "docs", "README.md"), content, 0o644))
 
 	m := &manifest.Manifest{
 		Name: "test-project", Version: "1.0.0",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "docs", Path: "foundation/docs.md"},
+			{ID: "docs", Path: "foundation/docs/README.md"},
 		},
 	}
 	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
@@ -673,15 +676,16 @@ func TestCompile_rewritesPromptEntryLinks(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "prompts"), 0o755))
 
 	philContent := []byte("# Philosophy\nCore principles.\n")
-	promptContent := []byte("# Code Review\nFollow [philosophy](../foundation/philosophy.md) when reviewing.\n")
+	promptContent := []byte("# Code Review\nFollow [philosophy](../foundation/philosophy/README.md) when reviewing.\n")
 
-	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "foundation", "philosophy.md"), philContent, 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "philosophy"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "foundation", "philosophy", "README.md"), philContent, 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "prompts", "code-review.md"), promptContent, 0o644))
 
 	m := &manifest.Manifest{
 		Name: "test-project", Version: "1.0.0",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "philosophy", Path: "foundation/philosophy.md", Description: "Core philosophy"},
+			{ID: "philosophy", Path: "foundation/philosophy/README.md", Description: "Core philosophy"},
 		},
 		Prompts: []manifest.PromptEntry{
 			{ID: "code-review", Path: "prompts/code-review.md", Description: "Code review prompt"},
@@ -700,7 +704,7 @@ func TestCompile_rewritesPromptEntryLinks(t *testing.T) {
 	promptData, err := os.ReadFile(filepath.Join(result.OutputDir, "objects", promptHash+".md"))
 	require.NoError(t, err)
 	assert.Contains(t, string(promptData), philHash+".md")
-	assert.NotContains(t, string(promptData), "../foundation/philosophy.md)")
+	assert.NotContains(t, string(promptData), "../foundation/philosophy/README.md)")
 
 	// Verify compiled manifest has prompt entry.
 	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
@@ -765,13 +769,14 @@ func TestCompile_crossSectionLinksAllEntryTypes(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "topics", "react"), 0o755))
 	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "plans", "v2"), 0o755))
 
-	foundationContent := []byte("# Foundation\nSee [architecture](../application/arch/README.md).\n")
+	foundationContent := []byte("# Foundation\nSee [architecture](../../application/arch/README.md).\n")
 	appContent := []byte("# Architecture\nSee [react](../../topics/react/README.md).\n")
-	topicContent := []byte("# React\nSee [foundation](../../foundation/principles.md).\n")
+	topicContent := []byte("# React\nSee [foundation](../../foundation/principles/README.md).\n")
 	promptContent := []byte("# Review\nFollow [react](../topics/react/README.md) conventions.\n")
 	planContent := []byte("# Plan v2\nBased on [architecture](../../application/arch/README.md).\n")
 
-	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "foundation", "principles.md"), foundationContent, 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "principles"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "foundation", "principles", "README.md"), foundationContent, 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "application", "arch", "README.md"), appContent, 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "topics", "react", "README.md"), topicContent, 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "prompts", "review.md"), promptContent, 0o644))
@@ -780,7 +785,7 @@ func TestCompile_crossSectionLinksAllEntryTypes(t *testing.T) {
 	m := &manifest.Manifest{
 		Name: "test-project", Version: "1.0.0",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "principles", Path: "foundation/principles.md", Description: "Principles"},
+			{ID: "principles", Path: "foundation/principles/README.md", Description: "Principles"},
 		},
 		Application: []manifest.ApplicationEntry{
 			{ID: "arch", Path: "application/arch/README.md", Description: "Architecture"},

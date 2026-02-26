@@ -31,8 +31,9 @@ func setupFingerprintProject(t *testing.T) (string, *config.Config) {
 	}
 
 	// Write a foundation file.
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "philosophy"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(docsDir, "foundation", "philosophy.md"),
+		filepath.Join(docsDir, "foundation", "philosophy", "README.md"),
 		[]byte("# Philosophy\n\nCore principles.\n"),
 		0o644,
 	))
@@ -44,7 +45,7 @@ func setupFingerprintProject(t *testing.T) (string, *config.Config) {
 		Version:     "1.0.0",
 		Description: "Fingerprint test",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "philosophy", Path: "foundation/philosophy.md", Description: "Core philosophy", Load: "always"},
+			{ID: "philosophy", Path: "foundation/philosophy/README.md", Description: "Core philosophy", Load: "always"},
 		},
 	}
 	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
@@ -85,7 +86,7 @@ func TestComputeFingerprint_changesWhenFileChanges(t *testing.T) {
 
 	// Modify the foundation file.
 	require.NoError(t, os.WriteFile(
-		filepath.Join(dir, "docs", "foundation", "philosophy.md"),
+		filepath.Join(dir, "docs", "foundation", "philosophy", "README.md"),
 		[]byte("# Philosophy\n\nUpdated principles.\n"),
 		0o644,
 	))
@@ -119,8 +120,9 @@ func TestComputeFingerprint_changesWhenManifestChanges(t *testing.T) {
 	require.NoError(t, err)
 
 	// Add another entry to the manifest.
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "docs", "foundation", "conventions"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(dir, "docs", "foundation", "conventions.md"),
+		filepath.Join(dir, "docs", "foundation", "conventions", "README.md"),
 		[]byte("# Conventions\n"),
 		0o644,
 	))
@@ -131,8 +133,8 @@ func TestComputeFingerprint_changesWhenManifestChanges(t *testing.T) {
 		Version:     "1.0.0",
 		Description: "Fingerprint test",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "philosophy", Path: "foundation/philosophy.md", Description: "Core philosophy", Load: "always"},
-			{ID: "conventions", Path: "foundation/conventions.md", Description: "Conventions"},
+			{ID: "philosophy", Path: "foundation/philosophy/README.md", Description: "Core philosophy", Load: "always"},
+			{ID: "conventions", Path: "foundation/conventions/README.md", Description: "Conventions"},
 		},
 	}
 	require.NoError(t, manifest.Write(filepath.Join(dir, "docs", "manifest.yml"), m))
@@ -185,7 +187,7 @@ func TestCompile_incrementalRebuildsAfterChange(t *testing.T) {
 
 	// Modify a source file.
 	require.NoError(t, os.WriteFile(
-		filepath.Join(dir, "docs", "foundation", "philosophy.md"),
+		filepath.Join(dir, "docs", "foundation", "philosophy", "README.md"),
 		[]byte("# Philosophy\n\nNew content.\n"),
 		0o644,
 	))
@@ -348,11 +350,11 @@ func TestHashManifestFiles_promptsSection(t *testing.T) {
 func TestHashManifestFiles_plansWithState(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "plan.md"), []byte("plan content"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "state.yml"), []byte("state: active"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "plan.yml"), []byte("state: active"), 0o644))
 
 	withState := &manifest.Manifest{
 		Plans: []manifest.PlanEntry{
-			{ID: "pl1", Path: "plan.md", State: "state.yml"},
+			{ID: "pl1", Path: "plan.md", PlanState: "plan.yml"},
 		},
 	}
 	withoutState := &manifest.Manifest{

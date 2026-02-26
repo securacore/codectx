@@ -14,10 +14,10 @@ import (
 // section, regardless of whether the section already has some entries.
 //
 // The four standard directories are:
-//   - foundation/*.md      → FoundationEntry (ID from filename without extension)
+//   - foundation/*/README.md → FoundationEntry (ID from directory name, Files from sibling .md files)
 //   - topics/*/README.md   → TopicEntry (ID from directory name, Files from sibling .md files)
 //   - prompts/*/README.md  → PromptEntry (ID from directory name)
-//   - plans/*/README.md    → PlanEntry (ID from directory name, State from state.yml if present)
+//   - plans/*/README.md    → PlanEntry (ID from directory name, PlanState from plan.yml if present)
 //
 // Description is extracted from the first markdown heading (# ...) in each
 // entry's primary file. If no heading is found, the ID is used as a fallback.
@@ -63,7 +63,7 @@ func Discover(pkgDir string, existing *Manifest) *Manifest {
 	return result
 }
 
-// discoverFoundation scans foundation/ for .md files not already declared.
+// discoverFoundation scans foundation/ for subdirectories containing README.md.
 func discoverFoundation(pkgDir string, existing map[string]bool, result *Manifest) {
 	dir := filepath.Join(pkgDir, "foundation")
 	entries, err := os.ReadDir(dir)
@@ -77,24 +77,66 @@ func discoverFoundation(pkgDir string, existing map[string]bool, result *Manifes
 	})
 
 	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+		if !e.IsDir() {
 			continue
 		}
 
-		id := strings.TrimSuffix(e.Name(), ".md")
+		id := e.Name()
 		if existing[id] {
 			continue
 		}
 
-		relPath := filepath.Join("foundation", e.Name())
-		desc := extractDescription(filepath.Join(pkgDir, relPath), id)
+		readmePath := filepath.Join("foundation", id, "README.md")
+		absReadme := filepath.Join(pkgDir, readmePath)
+		if _, err := os.Stat(absReadme); err != nil {
+			continue // no README.md, skip
+		}
 
-		result.Foundation = append(result.Foundation, FoundationEntry{
+		desc := extractDescription(absReadme, id)
+
+		entry := FoundationEntry{
 			ID:          id,
-			Path:        relPath,
+			Path:        readmePath,
 			Description: desc,
-		})
+		}
+
+		// Discover sub-files (other .md files in the foundation directory).
+		entry.Files = discoverFoundationFiles(pkgDir, id)
+
+		// Check for spec directory.
+		specPath := filepath.Join("foundation", id, "spec", "README.md")
+		if _, err := os.Stat(filepath.Join(pkgDir, specPath)); err == nil {
+			entry.Spec = specPath
+		}
+
+		result.Foundation = append(result.Foundation, entry)
 	}
+}
+
+// discoverFoundationFiles finds additional .md files in a foundation directory
+// (excluding README.md) and returns their paths relative to the package root.
+func discoverFoundationFiles(pkgDir, foundationID string) []string {
+	dir := filepath.Join(pkgDir, "foundation", foundationID)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].Name() < entries[j].Name()
+	})
+
+	var files []string
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+			continue
+		}
+		if strings.EqualFold(e.Name(), "README.md") {
+			continue
+		}
+		files = append(files, filepath.Join("foundation", foundationID, e.Name()))
+	}
+	return files
 }
 
 // discoverApplication scans application/ for subdirectories containing README.md.
@@ -323,10 +365,10 @@ func discoverPlans(pkgDir string, existing map[string]bool, result *Manifest) {
 			Description: desc,
 		}
 
-		// Check for state.yml.
-		statePath := filepath.Join("plans", id, "state.yml")
-		if _, err := os.Stat(filepath.Join(pkgDir, statePath)); err == nil {
-			entry.State = statePath
+		// Check for plan.yml.
+		planStatePath := filepath.Join("plans", id, "plan.yml")
+		if _, err := os.Stat(filepath.Join(pkgDir, planStatePath)); err == nil {
+			entry.PlanState = planStatePath
 		}
 
 		result.Plans = append(result.Plans, entry)

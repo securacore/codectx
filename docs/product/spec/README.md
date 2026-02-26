@@ -26,7 +26,7 @@ Every architectural decision must be recorded so AI agents and engineers can imp
 
 - **Interactive activation during `codectx add`.** When a package is added, the CLI reads its `manifest.yml`, presents its contents, and prompts the user to choose what to activate. The user can activate all, select specific entries, or activate none. This ensures activation is always explicit and the user understands what they are adding to their compiled output. Alternative considered: activate everything by default (rejected; risks unintended conflicts and bloated compiled output). Alternative considered: activate nothing by default, require manual config editing (rejected; poor developer experience).
 
-- **`plans/` with `state.yml` for status tracking.** Plans are implementation documents (feature plans, system blueprints) that can be large. The `state.yml` file provides a lightweight status summary that AI can read without loading the full plan. This enables efficient triage: "which plans are in progress?" costs a few hundred tokens instead of loading every plan document. Alternative considered: status in `manifest.yml` (rejected; mixes navigation metadata with mutable state). Alternative considered: no state tracking (rejected; AI has no way to assess plan relevance without loading every plan).
+- **`plans/` with `plan.yml` for status tracking.** Plans are implementation documents (feature plans, system blueprints) that can be large. The `plan.yml` file provides a lightweight status summary that AI can read without loading the full plan. This enables efficient triage: "which plans are in progress?" costs a few hundred tokens instead of loading every plan document. Alternative considered: status in `manifest.yml` (rejected; mixes navigation metadata with mutable state). Alternative considered: no state tracking (rejected; AI has no way to assess plan relevance without loading every plan).
 
 - **`codectx link` as a separate command.** Creating AI tool entry point files (CLAUDE.md, AGENTS.md) is a distinct operation from compiling documentation. It involves backing up existing files and creating new ones with a specific format. Separating it from compile means the user controls when entry points are updated and can run compile without modifying entry point files. Alternative considered: part of `codectx compile` (rejected; compile should be safe to run repeatedly without side effects on files outside its output directory). Alternative considered: part of `codectx init` (rejected; init runs once, but entry points may need updating when the output directory changes).
 
@@ -42,11 +42,11 @@ Every architectural decision must be recorded so AI agents and engineers can imp
 
 ## Dependencies
 
-- [docs/foundation/philosophy.md](../../foundation/philosophy.md): guiding principles ("Configuration is Truth," "Leverage Before Building," "Abstractions Must Earn Their Place")
-- [docs/foundation/specs.md](../../foundation/specs.md): spec template this document follows
+- [docs/foundation/philosophy](../../foundation/philosophy/README.md): guiding principles ("Configuration is Truth," "Leverage Before Building," "Abstractions Must Earn Their Place")
+- [docs/foundation/specs](../../foundation/specs/README.md): spec template this document follows
 - [docs/schemas/codectx.schema.json](../../schemas/codectx.schema.json): formal definition of codectx.yml
 - [docs/schemas/manifest.schema.json](../../schemas/manifest.schema.json): formal definition of manifest.yml
-- [docs/schemas/state.schema.json](../../schemas/state.schema.json): formal definition of state.yml
+- [docs/schemas/plan.schema.json](../../schemas/plan.schema.json): formal definition of plan.yml
 
 ## Structure
 

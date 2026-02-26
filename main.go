@@ -12,6 +12,7 @@ import (
 	initialize "github.com/securacore/codectx/cmds/init"
 	"github.com/securacore/codectx/cmds/install"
 	"github.com/securacore/codectx/cmds/link"
+	new "github.com/securacore/codectx/cmds/new"
 	"github.com/securacore/codectx/cmds/search"
 	"github.com/securacore/codectx/cmds/self"
 	"github.com/securacore/codectx/cmds/sync"
@@ -34,6 +35,7 @@ func main() {
 			initialize.Command,
 			install.Command,
 			link.Command,
+			new.Command,
 			search.Command,
 			self.Command,
 			sync.Command,

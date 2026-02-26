@@ -25,8 +25,8 @@ func TestGenerateReadme_allSections(t *testing.T) {
 	m := &manifest.Manifest{
 		Name: "full-project",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "a", Path: "foundation/a.md", Description: "A"},
-			{ID: "b", Path: "foundation/b.md", Description: "B"},
+			{ID: "a", Path: "foundation/a/README.md", Description: "A"},
+			{ID: "b", Path: "foundation/b/README.md", Description: "B"},
 		},
 		Application: []manifest.ApplicationEntry{
 			{ID: "arch", Path: "application/arch/README.md", Description: "Architecture"},
@@ -38,7 +38,7 @@ func TestGenerateReadme_allSections(t *testing.T) {
 			{ID: "d", Path: "prompts/d/README.md", Description: "D"},
 		},
 		Plans: []manifest.PlanEntry{
-			{ID: "e", Path: "plans/e/README.md", State: "plans/e/state.yml", Description: "E"},
+			{ID: "e", Path: "plans/e/README.md", PlanState: "plans/e/plan.yml", Description: "E"},
 		},
 	}
 
@@ -59,7 +59,7 @@ func TestGenerateReadme_partialSections(t *testing.T) {
 	m := &manifest.Manifest{
 		Name: "partial-project",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "a", Path: "foundation/a.md", Description: "A"},
+			{ID: "a", Path: "foundation/a/README.md", Description: "A"},
 		},
 	}
 
@@ -94,8 +94,8 @@ func TestGenerateReadme_withHeuristics(t *testing.T) {
 	m := &manifest.Manifest{
 		Name: "heuristics-project",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "a", Path: "foundation/a.md", Description: "A", Load: "always"},
-			{ID: "b", Path: "foundation/b.md", Description: "B"},
+			{ID: "a", Path: "foundation/a/README.md", Description: "A", Load: "always"},
+			{ID: "b", Path: "foundation/b/README.md", Description: "B"},
 		},
 		Topics: []manifest.TopicEntry{
 			{ID: "c", Path: "topics/c/README.md", Description: "C"},
@@ -138,8 +138,8 @@ func TestGenerateReadme_withHeuristicsMultipleAlwaysLoad(t *testing.T) {
 	m := &manifest.Manifest{
 		Name: "multi-always",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "a", Path: "foundation/a.md", Load: "always"},
-			{ID: "b", Path: "foundation/b.md", Load: "always"},
+			{ID: "a", Path: "foundation/a/README.md", Load: "always"},
+			{ID: "b", Path: "foundation/b/README.md", Load: "always"},
 		},
 	}
 

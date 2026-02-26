@@ -86,6 +86,12 @@ func pathToEntryID(m *Manifest) map[string]string {
 
 	for _, e := range m.Foundation {
 		index[e.Path] = e.ID
+		if e.Spec != "" {
+			index[e.Spec] = e.ID
+		}
+		for _, f := range e.Files {
+			index[f] = e.ID
+		}
 	}
 	for _, e := range m.Application {
 		index[e.Path] = e.ID
@@ -133,6 +139,12 @@ func inferRelationships(pkgDir string, m *Manifest) {
 
 	for _, e := range m.Foundation {
 		files = append(files, fileRef{e.ID, e.Path})
+		if e.Spec != "" {
+			files = append(files, fileRef{e.ID, e.Spec})
+		}
+		for _, f := range e.Files {
+			files = append(files, fileRef{e.ID, f})
+		}
 	}
 	for _, e := range m.Application {
 		files = append(files, fileRef{e.ID, e.Path})

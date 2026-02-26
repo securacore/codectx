@@ -15,7 +15,7 @@ func TestCheckCompatibility_emptyDir(t *testing.T) {
 	assert.Empty(t, issues)
 }
 
-func TestCheckCompatibility_validPackageYml(t *testing.T) {
+func TestCheckCompatibility_validManifestYml(t *testing.T) {
 	dir := t.TempDir()
 	content := `name: test
 author: org
@@ -28,7 +28,7 @@ description: "Test package"
 	assert.Empty(t, issues)
 }
 
-func TestCheckCompatibility_invalidPackageYml(t *testing.T) {
+func TestCheckCompatibility_invalidManifestYml(t *testing.T) {
 	dir := t.TempDir()
 	// Missing required fields.
 	content := `name: test
@@ -40,7 +40,7 @@ func TestCheckCompatibility_invalidPackageYml(t *testing.T) {
 	assert.Contains(t, issues[0].reason, "schema validation failed")
 }
 
-func TestCheckCompatibility_invalidPackageYmlSchema(t *testing.T) {
+func TestCheckCompatibility_invalidManifestYmlSchema(t *testing.T) {
 	dir := t.TempDir()
 	// Valid YAML but missing required fields — triggers schema validation failure.
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "manifest.yml"), []byte("foo: bar\n"), 0o644))

@@ -32,9 +32,9 @@ Foundational documentation establishes the baseline conventions that every other
 
 ## Dependencies
 
-- [docs/foundation/specs.md](../specs.md): defines the spec template this document follows
-- [docs/foundation/ai-authoring.md](../ai-authoring.md): cross-model authoring conventions
-- [docs/README.md](../../README.md): documentation entry point and index
+- [docs/foundation/specs](../README.md): defines the spec template this document follows
+- [docs/foundation/ai-authoring](../../ai-authoring/README.md): cross-model authoring conventions
+- [docs/README.md](../../../README.md): documentation entry point and index
 
 ## Structure
 

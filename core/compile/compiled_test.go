@@ -20,7 +20,7 @@ func TestToCompiledManifest_foundation(t *testing.T) {
 		Foundation: []manifest.FoundationEntry{
 			{
 				ID:          "philosophy",
-				Path:        "foundation/philosophy.md",
+				Path:        "foundation/philosophy/README.md",
 				Description: "Core philosophy",
 				Load:        "always",
 				DependsOn:   nil,
@@ -30,7 +30,7 @@ func TestToCompiledManifest_foundation(t *testing.T) {
 	}
 
 	pathToHash := map[string]string{
-		"foundation/philosophy.md": "a1b2c3d4e5f67890",
+		"foundation/philosophy/README.md": "a1b2c3d4e5f67890",
 	}
 	provenance := map[string]string{
 		"foundation:philosophy": "local",
@@ -149,7 +149,7 @@ func TestToCompiledManifest_planWithState(t *testing.T) {
 			{
 				ID:          "migration",
 				Path:        "plans/migration/README.md",
-				State:       "plans/migration/state.yml",
+				PlanState:   "plans/migration/plan.yml",
 				Description: "Migration plan",
 			},
 		},
@@ -168,7 +168,7 @@ func TestToCompiledManifest_planWithState(t *testing.T) {
 	e := cm.Plans[0]
 	assert.Equal(t, "migration", e.ID)
 	assert.Equal(t, "objects/7777777777777777.md", e.Object)
-	assert.Equal(t, "state/migration.yml", e.State)
+	assert.Equal(t, "state/migration.yml", e.PlanState)
 	assert.Equal(t, "local", e.Source)
 }
 
@@ -194,7 +194,7 @@ func TestToCompiledManifest_planNoState(t *testing.T) {
 	cm := toCompiledManifest(unified, pathToHash, provenance)
 
 	require.Len(t, cm.Plans, 1)
-	assert.Empty(t, cm.Plans[0].State)
+	assert.Empty(t, cm.Plans[0].PlanState)
 }
 
 func TestToCompiledManifest_applicationWithSpecAndFiles(t *testing.T) {
@@ -265,7 +265,7 @@ func TestToCompiledManifest_allSections(t *testing.T) {
 		Name:        "full-project",
 		Description: "A full project",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "a", Path: "foundation/a.md", Description: "A"},
+			{ID: "a", Path: "foundation/a/README.md", Description: "A"},
 		},
 		Application: []manifest.ApplicationEntry{
 			{ID: "arch", Path: "application/arch/README.md", Description: "Arch"},
@@ -277,12 +277,12 @@ func TestToCompiledManifest_allSections(t *testing.T) {
 			{ID: "c", Path: "prompts/c/README.md", Description: "C"},
 		},
 		Plans: []manifest.PlanEntry{
-			{ID: "d", Path: "plans/d/README.md", State: "plans/d/state.yml", Description: "D"},
+			{ID: "d", Path: "plans/d/README.md", PlanState: "plans/d/plan.yml", Description: "D"},
 		},
 	}
 
 	pathToHash := map[string]string{
-		"foundation/a.md":            "aaaaaaaaaaaaaaaa",
+		"foundation/a/README.md":     "aaaaaaaaaaaaaaaa",
 		"application/arch/README.md": "abababababababab",
 		"topics/b/README.md":         "bbbbbbbbbbbbbbbb",
 		"prompts/c/README.md":        "cccccccccccccccc",
@@ -326,7 +326,7 @@ func TestToCompiledManifest_missingHash(t *testing.T) {
 	unified := &manifest.Manifest{
 		Name: "test",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "missing", Path: "foundation/missing.md", Description: "Missing"},
+			{ID: "missing", Path: "foundation/missing/README.md", Description: "Missing"},
 		},
 	}
 
@@ -394,7 +394,7 @@ func TestWriteAndLoad_compiledManifest(t *testing.T) {
 				ID:          "migration",
 				Object:      "objects/5555555555555555.md",
 				Description: "Migration plan",
-				State:       "state/migration.yml",
+				PlanState:   "state/migration.yml",
 				Source:      "local",
 			},
 		},
@@ -436,7 +436,7 @@ func TestWriteAndLoad_compiledManifest(t *testing.T) {
 	assert.Equal(t, "review", loaded.Prompts[0].ID)
 
 	require.Len(t, loaded.Plans, 1)
-	assert.Equal(t, "state/migration.yml", loaded.Plans[0].State)
+	assert.Equal(t, "state/migration.yml", loaded.Plans[0].PlanState)
 }
 
 func TestWriteCompiledManifest_invalidPath(t *testing.T) {
@@ -716,12 +716,12 @@ func TestToCompiledManifest_noManifestRefs(t *testing.T) {
 		Name:        "test",
 		Description: "Test",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "a", Path: "foundation/a.md", Description: "A"},
+			{ID: "a", Path: "foundation/a/README.md", Description: "A"},
 		},
 	}
 
 	cm := toCompiledManifest(unified, map[string]string{
-		"foundation/a.md": "aaaaaaaaaaaaaaaa",
+		"foundation/a/README.md": "aaaaaaaaaaaaaaaa",
 	}, map[string]string{
 		"foundation:a": "local",
 	})

@@ -76,10 +76,23 @@
           "type": "string",
           "description": "One-line purpose statement."
         },
+        "spec": {
+          "type": "string",
+          "pattern": "^objects/[0-9a-f]{16}\\.md$",
+          "description": "Content-addressed object path for the foundation spec."
+        },
         "load": {
           "type": "string",
           "enum": ["always", "documentation"],
           "description": "When to load into AI context."
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^objects/[0-9a-f]{16}\\.md$"
+          },
+          "description": "Content-addressed object paths for sub-files."
         },
         "source": {
           "type": "string",
@@ -248,10 +261,10 @@
           "type": "string",
           "description": "One-line purpose statement."
         },
-        "state": {
+        "plan_state": {
           "type": "string",
           "pattern": "^state/.+\\.yml$",
-          "description": "Path to mutable state file (e.g., 'state/migrate.yml')."
+          "description": "Path to mutable plan state file (e.g., 'state/migrate.yml')."
         },
         "source": {
           "type": "string",

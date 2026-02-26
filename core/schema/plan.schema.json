@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Plan State",
-  "description": "Schema for state.yml. Validates plan state files that provide lightweight status tracking for AI triage. AI reads this file to assess plan status without loading the full plan into context.",
+  "description": "Schema for plan.yml. Validates plan state files that provide lightweight status tracking for AI triage. AI reads this file to assess plan status without loading the full plan into context.",
   "type": "object",
   "required": ["plan", "status", "summary"],
   "additionalProperties": false,

@@ -105,7 +105,7 @@ func TestSchemaFiles_expectedSubset(t *testing.T) {
 	expected := []string{
 		CodectxSchemaFile,
 		ManifestSchemaFile,
-		StateSchemaFile,
+		PlanSchemaFile,
 	}
 	assert.Equal(t, expected, schemaFiles)
 	assert.Len(t, schemaFiles, 3)

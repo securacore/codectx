@@ -62,6 +62,15 @@
           "type": "string",
           "description": "One-line purpose statement."
         },
+        "spec": {
+          "type": "string",
+          "description": "File path to the foundation spec, relative to the docs/ directory."
+        },
+        "files": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Sub-files for foundation entries, relative to the docs/ directory."
+        },
         "depends_on": {
           "type": "array",
           "items": { "type": "string" },

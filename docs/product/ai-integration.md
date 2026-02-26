@@ -28,7 +28,7 @@ When an AI tool starts a session, it follows this sequence:
 3. **Data map**: AI loads `.codectx/manifest.yml` -- the compiled data map that indexes all available documentation.
 4. **Foundation**: AI loads foundation documents marked `load: always`. These are the minimum required context for every session.
 5. **On-demand loading**: As the task progresses, AI consults the data map to find and load relevant topics, prompts, or plans.
-6. **Plan triage**: For plans, AI reads `state.yml` first to assess status without loading the full plan document.
+6. **Plan triage**: For plans, AI reads `plan.yml` first to assess status without loading the full plan document.
 
 This protocol ensures AI never loads documentation blindly. The data map acts as a table of contents, and AI selectively loads only what the current task requires. Links within compiled documents reference other objects by their content-addressed filenames, so AI can navigate between related documents directly.
 

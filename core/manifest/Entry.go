@@ -6,6 +6,8 @@ type FoundationEntry struct {
 	Path        string   `yaml:"path"`
 	Load        string   `yaml:"load,omitempty"`
 	Description string   `yaml:"description"`
+	Spec        string   `yaml:"spec,omitempty"`
+	Files       []string `yaml:"files,omitempty"`
 	DependsOn   []string `yaml:"depends_on,omitempty"`
 	RequiredBy  []string `yaml:"required_by,omitempty"`
 }
@@ -34,7 +36,7 @@ type PromptEntry struct {
 type PlanEntry struct {
 	ID          string   `yaml:"id"`
 	Path        string   `yaml:"path"`
-	State       string   `yaml:"state"`
+	PlanState   string   `yaml:"plan_state"`
 	Description string   `yaml:"description"`
 	DependsOn   []string `yaml:"depends_on,omitempty"`
 	RequiredBy  []string `yaml:"required_by,omitempty"`

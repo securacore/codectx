@@ -74,7 +74,7 @@ func TestRun_withName_createsDirectoryAndProject(t *testing.T) {
 	schemaFiles := []string{
 		"docs/schemas/codectx.schema.json",
 		"docs/schemas/manifest.schema.json",
-		"docs/schemas/state.schema.json",
+		"docs/schemas/plan.schema.json",
 	}
 	for _, f := range schemaFiles {
 		_, err := os.Stat(filepath.Join(projectDir, f))
@@ -345,9 +345,9 @@ func TestRun_initDiscoversExistingDocs(t *testing.T) {
 	// Pre-create the project directory with docs files BEFORE init runs.
 	// init uses MkdirAll which is a no-op for existing dirs.
 	projectDir := filepath.Join(dir, "discover-test")
-	require.NoError(t, os.MkdirAll(filepath.Join(projectDir, "docs", "foundation"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(projectDir, "docs", "foundation", "philosophy"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(projectDir, "docs", "foundation", "philosophy.md"),
+		filepath.Join(projectDir, "docs", "foundation", "philosophy", "README.md"),
 		[]byte("# Philosophy\nCore principles.\n"), 0o644))
 
 	err = run("discover-test", preferences.BoolPtr(true))
@@ -358,7 +358,7 @@ func TestRun_initDiscoversExistingDocs(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, m.Foundation, 1)
 	assert.Equal(t, "philosophy", m.Foundation[0].ID)
-	assert.Equal(t, "foundation/philosophy.md", m.Foundation[0].Path)
+	assert.Equal(t, "foundation/philosophy/README.md", m.Foundation[0].Path)
 }
 
 func TestRun_initInfersRelationships(t *testing.T) {
@@ -371,13 +371,14 @@ func TestRun_initInfersRelationships(t *testing.T) {
 
 	// Pre-create foundation files that link to each other.
 	projectDir := filepath.Join(dir, "rel-test")
-	require.NoError(t, os.MkdirAll(filepath.Join(projectDir, "docs", "foundation"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(projectDir, "docs", "foundation", "alpha"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(projectDir, "docs", "foundation", "beta"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(projectDir, "docs", "foundation", "alpha.md"),
-		[]byte("# Alpha\nSee [beta](beta.md) for more.\n"), 0o644))
+		filepath.Join(projectDir, "docs", "foundation", "alpha", "README.md"),
+		[]byte("# Alpha\nSee [beta](../beta/README.md) for more.\n"), 0o644))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(projectDir, "docs", "foundation", "beta.md"),
-		[]byte("# Beta\nExtends [alpha](alpha.md).\n"), 0o644))
+		filepath.Join(projectDir, "docs", "foundation", "beta", "README.md"),
+		[]byte("# Beta\nExtends [alpha](../alpha/README.md).\n"), 0o644))
 
 	err = run("rel-test", preferences.BoolPtr(true))
 	require.NoError(t, err)

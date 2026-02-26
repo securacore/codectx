@@ -65,7 +65,7 @@ func checkCompatibility(dir string) []compatIssue {
 	codectxSchemas := map[string]bool{
 		"codectx.schema.json":    true,
 		"manifest.schema.json":   true,
-		"state.schema.json":      true,
+		"plan.schema.json":       true,
 		"compiled.schema.json":   true,
 		"heuristics.schema.json": true,
 	}

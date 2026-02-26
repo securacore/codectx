@@ -10,7 +10,7 @@ The following checks apply to all files in `docs/`, excluding `docs/prompts/`.
 
 ### Formatting Compliance
 
-Verify against [markdown.md](markdown.md):
+Verify against [markdown.md](../markdown/README.md):
 
 - Single H1 per file, always first.
 - Maximum heading depth is H3. No H4 or deeper.
@@ -26,7 +26,7 @@ Verify against [markdown.md](markdown.md):
 
 ### Linguistic Compliance
 
-Verify against [ai-authoring.md](ai-authoring.md):
+Verify against [ai-authoring.md](../ai-authoring/README.md):
 
 - Declarative language. No hedging ("should," "might want to," "consider"). Rules are statements, not suggestions.
 - Direct imperatives. "Use X" not "It would be good to use X."
@@ -37,7 +37,7 @@ Verify against [ai-authoring.md](ai-authoring.md):
 
 ### Example Compliance
 
-Verify against [ai-authoring.md](ai-authoring.md):
+Verify against [ai-authoring.md](../ai-authoring/README.md):
 
 - Every critical rule that governs concrete patterns (code structure, file organization, naming, syntax) includes at least one positive example (correct) and one negative example (labeled incorrect).
 - Negative examples are explicitly labeled as incorrect with a comment or marker.
@@ -47,7 +47,7 @@ Verify against [ai-authoring.md](ai-authoring.md):
 
 ### Semantic Marker Compliance
 
-Verify against [markdown.md](markdown.md):
+Verify against [markdown.md](../markdown/README.md):
 
 - All constraint sections are wrapped in `<rules>` / `</rules>` markers.
 - Execution steps in prompts are wrapped in `<execution>` / `</execution>` markers.
@@ -55,7 +55,7 @@ Verify against [markdown.md](markdown.md):
 
 ### Token Positioning
 
-Verify against [ai-authoring.md](ai-authoring.md):
+Verify against [ai-authoring.md](../ai-authoring/README.md):
 
 - The most critical rules appear in the first 10% of the document.
 - The most critical constraints are repeated or reinforced in the last 10% of the document.
@@ -63,7 +63,7 @@ Verify against [ai-authoring.md](ai-authoring.md):
 
 ### Structural Integrity
 
-Verify against [documentation.md](documentation.md) and [specs.md](specs.md):
+Verify against [documentation.md](../documentation/README.md) and [specs.md](../specs/README.md):
 
 - Spec compliance: spec files contain only Purpose, Decisions, Dependencies, Structure sections (in that order). Decisions contain reasoning only, never restated conventions.
 - Cross-reference integrity: all relative links resolve to existing files.
@@ -74,7 +74,7 @@ Verify against [documentation.md](documentation.md) and [specs.md](specs.md):
 
 - New topic directories are added to the Topics table in [docs/README.md](../README.md).
 - New foundational documents are added to the Foundational table in [docs/README.md](../README.md).
-- New specs follow the template in [specs.md](specs.md).
+- New specs follow the template in [specs.md](../specs/README.md).
 - `(future)` references are accurate: they reference topic directories that do not yet exist. References to existing directories use live links.
 - Dependencies sections in specs list all documents the topic depends on.
 - Structure sections in specs list all files in the topic directory.

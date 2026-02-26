@@ -40,4 +40,4 @@ Documentation references configuration; it does not duplicate it. Validate paths
 
 ### 8. Write for the Floor
 
-Write documentation and instructions for the least capable model expected to consume them. Clarity at the baseline never degrades performance for advanced models, but complexity at the ceiling always excludes lesser ones. See [ai-authoring.md](ai-authoring.md) for the concrete conventions that implement this principle.
+Write documentation and instructions for the least capable model expected to consume them. Clarity at the baseline never degrades performance for advanced models, but complexity at the ceiling always excludes lesser ones. See [ai-authoring.md](../ai-authoring/README.md) for the concrete conventions that implement this principle.

@@ -17,7 +17,7 @@ These guidelines improve how AI agents parse, navigate, and act on documentation
 
 </rules>
 
-For linguistic patterns and cross-model authoring conventions (imperative language, positive framing, explicit defaults, examples), see [ai-authoring.md](ai-authoring.md).
+For linguistic patterns and cross-model authoring conventions (imperative language, positive framing, explicit defaults, examples), see [ai-authoring.md](../ai-authoring/README.md).
 
 ### Semantic Boundary Markers
 

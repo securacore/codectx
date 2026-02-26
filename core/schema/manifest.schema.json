@@ -81,6 +81,15 @@
           "type": "string",
           "description": "One-line purpose statement."
         },
+        "spec": {
+          "type": "string",
+          "description": "File path to the foundation spec, relative to the package root."
+        },
+        "files": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Sub-files for foundation entries, relative to the package root."
+        },
         "depends_on": {
           "type": "array",
           "items": { "type": "string" },
@@ -205,7 +214,7 @@
     },
     "planEntry": {
       "type": "object",
-      "required": ["id", "path", "state", "description"],
+      "required": ["id", "path", "plan_state", "description"],
       "additionalProperties": false,
       "properties": {
         "id": {
@@ -216,9 +225,9 @@
           "type": "string",
           "description": "File path to the plan README.md, relative to the package root."
         },
-        "state": {
+        "plan_state": {
           "type": "string",
-          "description": "File path to the plan state.yml, relative to the package root."
+          "description": "File path to the plan plan.yml, relative to the package root."
         },
         "description": {
           "type": "string",

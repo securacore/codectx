@@ -567,8 +567,9 @@ func TestRun_syncReportsDiscoveredEntry(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Create a new foundation file that Sync will discover.
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "new-doc"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(docsDir, "foundation", "new-doc.md"),
+		filepath.Join(docsDir, "foundation", "new-doc", "README.md"),
 		[]byte("# New Document\n"), 0o644))
 
 	// The file creation triggers a compile. Sync should discover the entry.
@@ -596,12 +597,14 @@ func TestRun_syncReportsRelationships(t *testing.T) {
 	docsDir := filepath.Join(dir, "docs")
 
 	// Pre-create two foundation files that link to each other.
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "alpha"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "beta"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(docsDir, "foundation", "alpha.md"),
-		[]byte("# Alpha\nSee [beta](beta.md).\n"), 0o644))
+		filepath.Join(docsDir, "foundation", "alpha", "README.md"),
+		[]byte("# Alpha\nSee [beta](../beta/README.md).\n"), 0o644))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(docsDir, "foundation", "beta.md"),
-		[]byte("# Beta\nSee [alpha](alpha.md).\n"), 0o644))
+		filepath.Join(docsDir, "foundation", "beta", "README.md"),
+		[]byte("# Beta\nSee [alpha](../alpha/README.md).\n"), 0o644))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

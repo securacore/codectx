@@ -10,7 +10,7 @@ import (
 var schemaFiles = []string{
 	CodectxSchemaFile,
 	ManifestSchemaFile,
-	StateSchemaFile,
+	PlanSchemaFile,
 }
 
 // WriteAll writes all embedded schema files to the target directory.

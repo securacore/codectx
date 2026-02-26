@@ -15,7 +15,7 @@ import (
 
 // setupBareRepo creates a bare git repo with semver tags for testing.
 // Returns the path to the bare repo.
-func setupBareRepo(t *testing.T, tags []string, includePackageYml bool) string {
+func setupBareRepo(t *testing.T, tags []string, includeManifestYml bool) string {
 	t.Helper()
 	dir := t.TempDir()
 	workDir := filepath.Join(dir, "work")
@@ -29,7 +29,7 @@ func setupBareRepo(t *testing.T, tags []string, includePackageYml bool) string {
 	require.NoError(t, err)
 
 	// Create manifest.yml if requested.
-	if includePackageYml {
+	if includeManifestYml {
 		content := "name: test-pkg\nauthor: test-author\nversion: \"1.0.0\"\ndescription: Test\n"
 		require.NoError(t, os.WriteFile(filepath.Join(workDir, "manifest.yml"), []byte(content), 0o644))
 		_, err = wt.Add("manifest.yml")
@@ -185,7 +185,7 @@ func TestFetch_destAlreadyExists(t *testing.T) {
 	assert.Contains(t, err.Error(), "already exists")
 }
 
-func TestFetch_noPackageYml(t *testing.T) {
+func TestFetch_noManifestYml(t *testing.T) {
 	bareDir := setupBareRepo(t, []string{"v1.0.0"}, false)
 	destDir := filepath.Join(t.TempDir(), "fetched")
 

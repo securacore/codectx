@@ -118,7 +118,7 @@ func TestValidate_validState(t *testing.T) {
 		"status":  "in_progress",
 		"summary": "halfway done",
 	}
-	err := Validate(StateSchemaFile, v)
+	err := Validate(PlanSchemaFile, v)
 	assert.NoError(t, err)
 }
 
@@ -128,7 +128,7 @@ func TestValidate_invalidState_badStatus(t *testing.T) {
 		"status":  "unknown",
 		"summary": "halfway done",
 	}
-	err := Validate(StateSchemaFile, v)
+	err := Validate(PlanSchemaFile, v)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "validation failed")
 }
@@ -150,7 +150,7 @@ func TestValidate_packageWithPromptsPlans(t *testing.T) {
 			map[string]any{
 				"id":          "migration",
 				"path":        "plans/migration/README.md",
-				"state":       "plans/migration/state.yml",
+				"plan_state":  "plans/migration/plan.yml",
 				"description": "Migration plan",
 			},
 		},
@@ -358,7 +358,7 @@ func TestEmbeddedSchemas_readable(t *testing.T) {
 	schemaConstants := []string{
 		CodectxSchemaFile,
 		ManifestSchemaFile,
-		StateSchemaFile,
+		PlanSchemaFile,
 		CompiledSchemaFile,
 		HeuristicsSchemaFile,
 	}

@@ -271,6 +271,14 @@ func storeObjects(
 		if err := collectFile("foundation", e.ID, e.Path); err != nil {
 			return nil, 0, err
 		}
+		if err := collectFile("foundation", e.ID, e.Spec); err != nil {
+			return nil, 0, err
+		}
+		for _, f := range e.Files {
+			if err := collectFile("foundation", e.ID, f); err != nil {
+				return nil, 0, err
+			}
+		}
 	}
 
 	for _, e := range unified.Application {
@@ -335,7 +343,7 @@ func copyStateFiles(
 	outputDir string,
 ) error {
 	for _, e := range unified.Plans {
-		if e.State == "" {
+		if e.PlanState == "" {
 			continue
 		}
 
@@ -344,7 +352,7 @@ func copyStateFiles(
 			continue
 		}
 
-		srcPath := filepath.Join(srcDir, e.State)
+		srcPath := filepath.Join(srcDir, e.PlanState)
 		if _, err := os.Stat(srcPath); os.IsNotExist(err) {
 			continue
 		}

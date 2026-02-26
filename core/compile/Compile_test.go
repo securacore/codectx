@@ -90,7 +90,8 @@ func TestCompile_withLocalFiles(t *testing.T) {
 	docsDir := cfg.DocsDir()
 
 	// Add a foundation document to the manifest.
-	foundationPath := filepath.Join(docsDir, "foundation", "philosophy.md")
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "philosophy"), 0o755))
+	foundationPath := filepath.Join(docsDir, "foundation", "philosophy", "README.md")
 	require.NoError(t, os.WriteFile(foundationPath, []byte("# Philosophy\n"), 0o644))
 
 	m := &manifest.Manifest{
@@ -99,7 +100,7 @@ func TestCompile_withLocalFiles(t *testing.T) {
 		Version:     "1.0.0",
 		Description: "Test project",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "philosophy", Path: "foundation/philosophy.md", Description: "Core philosophy", Load: "always"},
+			{ID: "philosophy", Path: "foundation/philosophy/README.md", Description: "Core philosophy", Load: "always"},
 		},
 	}
 	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
@@ -142,7 +143,8 @@ func TestCompile_readmeContent(t *testing.T) {
 	docsDir := cfg.DocsDir()
 
 	// Add entries to test README generation.
-	foundationPath := filepath.Join(docsDir, "foundation", "doc.md")
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "doc"), 0o755))
+	foundationPath := filepath.Join(docsDir, "foundation", "doc", "README.md")
 	require.NoError(t, os.WriteFile(foundationPath, []byte("doc"), 0o644))
 
 	m := &manifest.Manifest{
@@ -151,7 +153,7 @@ func TestCompile_readmeContent(t *testing.T) {
 		Version:     "1.0.0",
 		Description: "Test project",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "doc", Path: "foundation/doc.md", Description: "A document"},
+			{ID: "doc", Path: "foundation/doc/README.md", Description: "A document"},
 		},
 	}
 	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
@@ -222,7 +224,8 @@ func TestCompile_dedupsSameContent(t *testing.T) {
 
 	// Write a foundation doc to the local package.
 	sharedContent := []byte("# Shared Philosophy\nThis is shared across packages.\n")
-	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "foundation", "philosophy.md"), sharedContent, 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "philosophy"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "foundation", "philosophy", "README.md"), sharedContent, 0o644))
 
 	localManifest := &manifest.Manifest{
 		Name:        "test-project",
@@ -230,22 +233,22 @@ func TestCompile_dedupsSameContent(t *testing.T) {
 		Version:     "1.0.0",
 		Description: "Test",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "philosophy", Path: "foundation/philosophy.md", Description: "Shared philosophy", Load: "always"},
+			{ID: "philosophy", Path: "foundation/philosophy/README.md", Description: "Shared philosophy", Load: "always"},
 		},
 	}
 	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), localManifest))
 
 	// Create installed package with same foundation entry and same content.
 	pkgDir := filepath.Join(docsDir, "packages", "react@org")
-	require.NoError(t, os.MkdirAll(filepath.Join(pkgDir, "foundation"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(pkgDir, "foundation", "philosophy.md"), sharedContent, 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(pkgDir, "foundation", "philosophy"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(pkgDir, "foundation", "philosophy", "README.md"), sharedContent, 0o644))
 
 	pkgManifest := &manifest.Manifest{
 		Name:    "react",
 		Author:  "org",
 		Version: "1.0.0",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "philosophy", Path: "foundation/philosophy.md", Description: "Shared philosophy"},
+			{ID: "philosophy", Path: "foundation/philosophy/README.md", Description: "Shared philosophy"},
 		},
 	}
 	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "manifest.yml"), pkgManifest))
@@ -269,8 +272,9 @@ func TestCompile_conflictDifferentContent(t *testing.T) {
 	docsDir := cfg.DocsDir()
 
 	// Local has version A of the doc.
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "conventions"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(docsDir, "foundation", "conventions.md"),
+		filepath.Join(docsDir, "foundation", "conventions", "README.md"),
 		[]byte("# Local Conventions\n"), 0o644))
 
 	localManifest := &manifest.Manifest{
@@ -278,16 +282,16 @@ func TestCompile_conflictDifferentContent(t *testing.T) {
 		Author:  "tester",
 		Version: "1.0.0",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "conventions", Path: "foundation/conventions.md", Description: "Local conventions"},
+			{ID: "conventions", Path: "foundation/conventions/README.md", Description: "Local conventions"},
 		},
 	}
 	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), localManifest))
 
 	// Installed package has version B of the doc (different content).
 	pkgDir := filepath.Join(docsDir, "packages", "go@org")
-	require.NoError(t, os.MkdirAll(filepath.Join(pkgDir, "foundation"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(pkgDir, "foundation", "conventions"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(pkgDir, "foundation", "conventions.md"),
+		filepath.Join(pkgDir, "foundation", "conventions", "README.md"),
 		[]byte("# Go Conventions\n"), 0o644))
 
 	pkgManifest := &manifest.Manifest{
@@ -295,7 +299,7 @@ func TestCompile_conflictDifferentContent(t *testing.T) {
 		Author:  "org",
 		Version: "1.0.0",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "conventions", Path: "foundation/conventions.md", Description: "Go conventions"},
+			{ID: "conventions", Path: "foundation/conventions/README.md", Description: "Go conventions"},
 		},
 	}
 	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "manifest.yml"), pkgManifest))
@@ -322,9 +326,9 @@ func TestCompile_inactivePackageInLockFile(t *testing.T) {
 
 	// Create an installed package with a foundation entry.
 	pkgDir := filepath.Join(docsDir, "packages", "inert@org")
-	require.NoError(t, os.MkdirAll(filepath.Join(pkgDir, "foundation"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(pkgDir, "foundation", "guide"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(pkgDir, "foundation", "guide.md"),
+		filepath.Join(pkgDir, "foundation", "guide", "README.md"),
 		[]byte("# Inert Guide\n"), 0o644))
 
 	pkgManifest := &manifest.Manifest{
@@ -332,7 +336,7 @@ func TestCompile_inactivePackageInLockFile(t *testing.T) {
 		Author:  "org",
 		Version: "2.0.0",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "guide", Path: "foundation/guide.md", Description: "Inert guide"},
+			{ID: "guide", Path: "foundation/guide/README.md", Description: "Inert guide"},
 		},
 	}
 	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "manifest.yml"), pkgManifest))
@@ -378,9 +382,9 @@ func TestCompile_multiplePackages(t *testing.T) {
 
 	// Create installed package B with a foundation entry.
 	pkgBDir := filepath.Join(docsDir, "packages", "pkgB@org")
-	require.NoError(t, os.MkdirAll(filepath.Join(pkgBDir, "foundation"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(pkgBDir, "foundation", "conventions"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(pkgBDir, "foundation", "conventions.md"),
+		filepath.Join(pkgBDir, "foundation", "conventions", "README.md"),
 		[]byte("# Conventions\n"), 0o644))
 
 	pkgBManifest := &manifest.Manifest{
@@ -388,7 +392,7 @@ func TestCompile_multiplePackages(t *testing.T) {
 		Author:  "org",
 		Version: "1.0.0",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "conventions", Path: "foundation/conventions.md", Description: "Conventions"},
+			{ID: "conventions", Path: "foundation/conventions/README.md", Description: "Conventions"},
 		},
 	}
 	require.NoError(t, manifest.Write(filepath.Join(pkgBDir, "manifest.yml"), pkgBManifest))
@@ -423,9 +427,9 @@ func TestCompile_lockFileContent(t *testing.T) {
 
 	// Create an installed package with explicit source.
 	pkgDir := filepath.Join(docsDir, "packages", "mypkg@myauthor")
-	require.NoError(t, os.MkdirAll(filepath.Join(pkgDir, "foundation"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(pkgDir, "foundation", "guide"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(pkgDir, "foundation", "guide.md"),
+		filepath.Join(pkgDir, "foundation", "guide", "README.md"),
 		[]byte("# Guide\n"), 0o644))
 
 	pkgManifest := &manifest.Manifest{
@@ -433,7 +437,7 @@ func TestCompile_lockFileContent(t *testing.T) {
 		Author:  "myauthor",
 		Version: "3.2.1",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "guide", Path: "foundation/guide.md", Description: "A guide"},
+			{ID: "guide", Path: "foundation/guide/README.md", Description: "A guide"},
 		},
 	}
 	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "manifest.yml"), pkgManifest))
@@ -520,14 +524,15 @@ func TestCompile_fingerprintChangesOnContentModification(t *testing.T) {
 	docsDir := cfg.DocsDir()
 
 	// Add a foundation document.
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "doc"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(docsDir, "foundation", "doc.md"),
+		filepath.Join(docsDir, "foundation", "doc", "README.md"),
 		[]byte("# Original\n"), 0o644))
 
 	m := &manifest.Manifest{
 		Name: "test-project", Version: "1.0.0",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "doc", Path: "foundation/doc.md", Description: "A document"},
+			{ID: "doc", Path: "foundation/doc/README.md", Description: "A document"},
 		},
 	}
 	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
@@ -545,7 +550,7 @@ func TestCompile_fingerprintChangesOnContentModification(t *testing.T) {
 
 	// Modify the file content.
 	require.NoError(t, os.WriteFile(
-		filepath.Join(docsDir, "foundation", "doc.md"),
+		filepath.Join(docsDir, "foundation", "doc", "README.md"),
 		[]byte("# Modified\n"), 0o644))
 
 	// Third compile: should detect change via fingerprint.
@@ -582,10 +587,11 @@ func TestCompile_granularActivation(t *testing.T) {
 
 	// Create an installed package with multiple entries across sections.
 	pkgDir := filepath.Join(docsDir, "packages", "multi@org")
-	for _, sub := range []string{"foundation", "topics/react", "topics/go"} {
+	for _, sub := range []string{"topics/react", "topics/go"} {
 		require.NoError(t, os.MkdirAll(filepath.Join(pkgDir, sub), 0o755))
 	}
-	require.NoError(t, os.WriteFile(filepath.Join(pkgDir, "foundation", "philosophy.md"), []byte("# Philosophy\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(pkgDir, "foundation", "philosophy"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(pkgDir, "foundation", "philosophy", "README.md"), []byte("# Philosophy\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(pkgDir, "topics", "react", "README.md"), []byte("# React\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(pkgDir, "topics", "go", "README.md"), []byte("# Go\n"), 0o644))
 
@@ -594,7 +600,7 @@ func TestCompile_granularActivation(t *testing.T) {
 		Author:  "org",
 		Version: "1.0.0",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "philosophy", Path: "foundation/philosophy.md", Description: "Philosophy"},
+			{ID: "philosophy", Path: "foundation/philosophy/README.md", Description: "Philosophy"},
 		},
 		Topics: []manifest.TopicEntry{
 			{ID: "react", Path: "topics/react/README.md", Description: "React"},
@@ -622,7 +628,7 @@ func TestCompile_granularActivation(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, result.Packages)
-	// 2 objects: foundation/philosophy.md + topics/react/README.md (go excluded).
+	// 2 objects: foundation/philosophy/README.md + topics/react/README.md (go excluded).
 	assert.Equal(t, 2, result.ObjectsStored)
 
 	// Verify the compiled manifest only has the activated entries.
@@ -645,15 +651,16 @@ func TestCompile_recompileReplacesOldObjects(t *testing.T) {
 	docsDir := cfg.DocsDir()
 
 	// First compile with a foundation entry.
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "original"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(docsDir, "foundation", "original.md"),
+		filepath.Join(docsDir, "foundation", "original", "README.md"),
 		[]byte("# Original\n"), 0o644))
 
 	m := &manifest.Manifest{
 		Name:    "test-project",
 		Version: "1.0.0",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "original", Path: "foundation/original.md", Description: "Original"},
+			{ID: "original", Path: "foundation/original/README.md", Description: "Original"},
 		},
 	}
 	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
@@ -670,16 +677,17 @@ func TestCompile_recompileReplacesOldObjects(t *testing.T) {
 	require.NoError(t, err)
 
 	// Second compile: remove the old file and add a different one.
-	require.NoError(t, os.Remove(filepath.Join(docsDir, "foundation", "original.md")))
+	require.NoError(t, os.RemoveAll(filepath.Join(docsDir, "foundation", "original")))
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "replacement"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(docsDir, "foundation", "replacement.md"),
+		filepath.Join(docsDir, "foundation", "replacement", "README.md"),
 		[]byte("# Replacement\n"), 0o644))
 
 	m2 := &manifest.Manifest{
 		Name:    "test-project",
 		Version: "1.0.0",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "replacement", Path: "foundation/replacement.md", Description: "Replacement"},
+			{ID: "replacement", Path: "foundation/replacement/README.md", Description: "Replacement"},
 		},
 	}
 	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m2))
@@ -703,15 +711,17 @@ func TestCompile_contentAddressedDedup(t *testing.T) {
 
 	// Two entries referencing files with identical content.
 	content := []byte("# Shared Content\n")
-	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "foundation", "a.md"), content, 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "foundation", "b.md"), content, 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "a"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "b"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "foundation", "a", "README.md"), content, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "foundation", "b", "README.md"), content, 0o644))
 
 	m := &manifest.Manifest{
 		Name:    "test-project",
 		Version: "1.0.0",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "a", Path: "foundation/a.md", Description: "A"},
-			{ID: "b", Path: "foundation/b.md", Description: "B"},
+			{ID: "a", Path: "foundation/a/README.md", Description: "A"},
+			{ID: "b", Path: "foundation/b/README.md", Description: "B"},
 		},
 	}
 	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
@@ -809,7 +819,7 @@ func TestCompile_planWithStateFile(t *testing.T) {
 		filepath.Join(docsDir, "plans", "migrate", "README.md"),
 		[]byte("# Migration Plan\n"), 0o644))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(docsDir, "plans", "migrate", "state.yml"),
+		filepath.Join(docsDir, "plans", "migrate", "plan.yml"),
 		[]byte("phase: planning\ntasks:\n  - name: setup\n    done: false\n"), 0o644))
 
 	m := &manifest.Manifest{
@@ -819,7 +829,7 @@ func TestCompile_planWithStateFile(t *testing.T) {
 			{
 				ID:          "migrate",
 				Path:        "plans/migrate/README.md",
-				State:       "plans/migrate/state.yml",
+				PlanState:   "plans/migrate/plan.yml",
 				Description: "Database migration plan",
 			},
 		},
@@ -843,7 +853,7 @@ func TestCompile_planWithStateFile(t *testing.T) {
 	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
 	require.NoError(t, err)
 	require.Len(t, cm.Plans, 1)
-	assert.Equal(t, "state/migrate.yml", cm.Plans[0].State)
+	assert.Equal(t, "state/migrate.yml", cm.Plans[0].PlanState)
 	assert.Equal(t, "local", cm.Plans[0].Source)
 }
 
@@ -853,9 +863,9 @@ func TestCompile_fingerprintSkipWithPackages(t *testing.T) {
 
 	// Create an installed package with a foundation entry.
 	pkgDir := filepath.Join(docsDir, "packages", "react@org")
-	require.NoError(t, os.MkdirAll(filepath.Join(pkgDir, "foundation"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(pkgDir, "foundation", "guide"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(pkgDir, "foundation", "guide.md"),
+		filepath.Join(pkgDir, "foundation", "guide", "README.md"),
 		[]byte("# React Guide\n"), 0o644))
 
 	pkgManifest := &manifest.Manifest{
@@ -863,7 +873,7 @@ func TestCompile_fingerprintSkipWithPackages(t *testing.T) {
 		Author:  "org",
 		Version: "1.0.0",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "guide", Path: "foundation/guide.md", Description: "React guide"},
+			{ID: "guide", Path: "foundation/guide/README.md", Description: "React guide"},
 		},
 	}
 	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "manifest.yml"), pkgManifest))
@@ -888,7 +898,7 @@ func TestCompile_fingerprintSkipWithPackages(t *testing.T) {
 
 	// Modify a package file and recompile — should not be up-to-date.
 	require.NoError(t, os.WriteFile(
-		filepath.Join(pkgDir, "foundation", "guide.md"),
+		filepath.Join(pkgDir, "foundation", "guide", "README.md"),
 		[]byte("# React Guide (updated)\n"), 0o644))
 
 	result3, err := Compile(cfg)
@@ -906,9 +916,10 @@ func TestCompile_decompositionTriggered(t *testing.T) {
 	var foundationEntries []manifest.FoundationEntry
 	for i := range 60 {
 		id := fmt.Sprintf("doc-%03d", i)
-		path := fmt.Sprintf("foundation/%s.md", id)
+		path := fmt.Sprintf("foundation/%s/README.md", id)
 		// Write ~1KB file.
 		content := fmt.Sprintf("# Document %03d\n%s\n", i, string(make([]byte, 900)))
+		require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", id), 0o755))
 		require.NoError(t, os.WriteFile(
 			filepath.Join(docsDir, path), []byte(content), 0o644))
 		foundationEntries = append(foundationEntries, manifest.FoundationEntry{
@@ -982,7 +993,7 @@ func TestCompile_planStateMissing(t *testing.T) {
 			{
 				ID:          "future",
 				Path:        "plans/future/README.md",
-				State:       "plans/future/state.yml", // does not exist on disk
+				PlanState:   "plans/future/plan.yml", // does not exist on disk
 				Description: "A future plan",
 			},
 		},
@@ -1007,8 +1018,9 @@ func TestCompile_discoversLocalEntries(t *testing.T) {
 
 	// Create files on disk but do NOT declare them in the manifest.
 	// The manifest remains empty (metadata only) — exactly the bug scenario.
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "philosophy"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(docsDir, "foundation", "philosophy.md"),
+		filepath.Join(docsDir, "foundation", "philosophy", "README.md"),
 		[]byte("# Philosophy\n\nGuiding principles.\n"), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "topics", "react"), 0o755))
 	require.NoError(t, os.WriteFile(
@@ -1160,8 +1172,9 @@ func TestCompile_syncRemovesStaleLocalEntries(t *testing.T) {
 	docsDir := cfg.DocsDir()
 
 	// Create a foundation file on disk.
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "alive"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(docsDir, "foundation", "alive.md"),
+		filepath.Join(docsDir, "foundation", "alive", "README.md"),
 		[]byte("# Alive\n"), 0o644))
 
 	// Write a manifest that declares two entries: "alive" (file exists) and "stale" (file deleted).
@@ -1169,8 +1182,8 @@ func TestCompile_syncRemovesStaleLocalEntries(t *testing.T) {
 		Name:    "test-project",
 		Version: "1.0.0",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "alive", Path: "foundation/alive.md", Description: "Still here"},
-			{ID: "stale", Path: "foundation/stale.md", Description: "File was deleted"},
+			{ID: "alive", Path: "foundation/alive/README.md", Description: "Still here"},
+			{ID: "stale", Path: "foundation/stale/README.md", Description: "File was deleted"},
 		},
 	}
 	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
@@ -1197,8 +1210,9 @@ func TestCompile_writesBackSyncedManifest(t *testing.T) {
 	docsDir := cfg.DocsDir()
 
 	// Create files on disk but leave the manifest completely empty (metadata only).
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "discovered"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(docsDir, "foundation", "discovered.md"),
+		filepath.Join(docsDir, "foundation", "discovered", "README.md"),
 		[]byte("# Discovered\n"), 0o644))
 
 	_, err := Compile(cfg)
@@ -1209,7 +1223,7 @@ func TestCompile_writesBackSyncedManifest(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, reloaded.Foundation, 1)
 	assert.Equal(t, "discovered", reloaded.Foundation[0].ID)
-	assert.Equal(t, "foundation/discovered.md", reloaded.Foundation[0].Path)
+	assert.Equal(t, "foundation/discovered/README.md", reloaded.Foundation[0].Path)
 }
 
 func TestCompile_syncInfersRelationshipsInCompiledOutput(t *testing.T) {
@@ -1217,19 +1231,21 @@ func TestCompile_syncInfersRelationshipsInCompiledOutput(t *testing.T) {
 	docsDir := cfg.DocsDir()
 
 	// Create two foundation files that link to each other.
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "alpha"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "beta"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(docsDir, "foundation", "alpha.md"),
-		[]byte("# Alpha\nSee [beta](beta.md) for details.\n"), 0o644))
+		filepath.Join(docsDir, "foundation", "alpha", "README.md"),
+		[]byte("# Alpha\nSee [beta](../beta/README.md) for details.\n"), 0o644))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(docsDir, "foundation", "beta.md"),
-		[]byte("# Beta\nBuilds on [alpha](alpha.md).\n"), 0o644))
+		filepath.Join(docsDir, "foundation", "beta", "README.md"),
+		[]byte("# Beta\nBuilds on [alpha](../alpha/README.md).\n"), 0o644))
 
 	m := &manifest.Manifest{
 		Name:    "test-project",
 		Version: "1.0.0",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "alpha", Path: "foundation/alpha.md", Description: "Alpha doc"},
-			{ID: "beta", Path: "foundation/beta.md", Description: "Beta doc"},
+			{ID: "alpha", Path: "foundation/alpha/README.md", Description: "Alpha doc"},
+			{ID: "beta", Path: "foundation/beta/README.md", Description: "Beta doc"},
 		},
 	}
 	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
@@ -1280,16 +1296,16 @@ func TestStoreObjects_dedupByPath(t *testing.T) {
 	// stored only once (dedup-by-path on line 247-249 of Compile.go).
 	dir := t.TempDir()
 	srcDir := filepath.Join(dir, "docs")
-	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, "foundation"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, "foundation", "shared"), 0o755))
 
 	sharedContent := []byte("# Shared\nShared content.\n")
-	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "foundation", "shared.md"), sharedContent, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "foundation", "shared", "README.md"), sharedContent, 0o644))
 
 	store := NewObjectStore(filepath.Join(dir, "objects"))
 	unified := &manifest.Manifest{
 		Foundation: []manifest.FoundationEntry{
-			{ID: "a", Path: "foundation/shared.md"},
-			{ID: "b", Path: "foundation/shared.md"}, // same path as "a"
+			{ID: "a", Path: "foundation/shared/README.md"},
+			{ID: "b", Path: "foundation/shared/README.md"}, // same path as "a"
 		},
 	}
 	srcDirs := map[string]string{"local": srcDir}
@@ -1304,7 +1320,7 @@ func TestStoreObjects_dedupByPath(t *testing.T) {
 	// Only 1 object should be stored (same path deduped).
 	assert.Equal(t, 1, stored)
 	assert.Len(t, pathToHash, 1)
-	assert.Equal(t, ContentHash(sharedContent), pathToHash["foundation/shared.md"])
+	assert.Equal(t, ContentHash(sharedContent), pathToHash["foundation/shared/README.md"])
 }
 
 func TestStoreObjects_emptyProvenanceKeySkipsFile(t *testing.T) {
@@ -1312,13 +1328,13 @@ func TestStoreObjects_emptyProvenanceKeySkipsFile(t *testing.T) {
 	// the file is silently skipped (line 252-254 of Compile.go).
 	dir := t.TempDir()
 	srcDir := filepath.Join(dir, "docs")
-	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, "foundation"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "foundation", "orphan.md"), []byte("# Orphan\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, "foundation", "orphan"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "foundation", "orphan", "README.md"), []byte("# Orphan\n"), 0o644))
 
 	store := NewObjectStore(filepath.Join(dir, "objects"))
 	unified := &manifest.Manifest{
 		Foundation: []manifest.FoundationEntry{
-			{ID: "orphan", Path: "foundation/orphan.md"},
+			{ID: "orphan", Path: "foundation/orphan/README.md"},
 		},
 	}
 	srcDirs := map[string]string{"local": srcDir}
@@ -1344,7 +1360,7 @@ func TestStoreObjects_skipsMissingFiles(t *testing.T) {
 	store := NewObjectStore(filepath.Join(dir, "objects"))
 	unified := &manifest.Manifest{
 		Foundation: []manifest.FoundationEntry{
-			{ID: "missing", Path: "foundation/missing.md"},
+			{ID: "missing", Path: "foundation/missing/README.md"},
 		},
 	}
 	srcDirs := map[string]string{"local": srcDir}
@@ -1365,16 +1381,16 @@ func TestStoreObjects_readErrorNonNotExist(t *testing.T) {
 	// (line 261 of Compile.go).
 	dir := t.TempDir()
 	srcDir := filepath.Join(dir, "docs")
-	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, "foundation"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, "foundation", "secret"), 0o755))
 
-	unreadable := filepath.Join(srcDir, "foundation", "secret.md")
+	unreadable := filepath.Join(srcDir, "foundation", "secret", "README.md")
 	require.NoError(t, os.WriteFile(unreadable, []byte("# Secret\n"), 0o000))
 	t.Cleanup(func() { _ = os.Chmod(unreadable, 0o644) })
 
 	store := NewObjectStore(filepath.Join(dir, "objects"))
 	unified := &manifest.Manifest{
 		Foundation: []manifest.FoundationEntry{
-			{ID: "secret", Path: "foundation/secret.md"},
+			{ID: "secret", Path: "foundation/secret/README.md"},
 		},
 	}
 	srcDirs := map[string]string{"local": srcDir}
@@ -1390,8 +1406,8 @@ func TestStoreObjects_storeAsFailureDuringPass2(t *testing.T) {
 	// return the error with the count of files stored before the failure.
 	dir := t.TempDir()
 	srcDir := filepath.Join(dir, "docs")
-	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, "foundation"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "foundation", "doc.md"), []byte("# Doc\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, "foundation", "doc"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "foundation", "doc", "README.md"), []byte("# Doc\n"), 0o644))
 
 	// Create a blocker file where the objects directory needs to be.
 	objPath := filepath.Join(dir, "objects")
@@ -1400,7 +1416,7 @@ func TestStoreObjects_storeAsFailureDuringPass2(t *testing.T) {
 	store := NewObjectStore(objPath)
 	unified := &manifest.Manifest{
 		Foundation: []manifest.FoundationEntry{
-			{ID: "doc", Path: "foundation/doc.md"},
+			{ID: "doc", Path: "foundation/doc/README.md"},
 		},
 	}
 	srcDirs := map[string]string{"local": srcDir}

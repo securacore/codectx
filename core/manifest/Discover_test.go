@@ -112,14 +112,14 @@ func TestDiscover_nonexistentDir(t *testing.T) {
 
 func TestDiscover_foundation(t *testing.T) {
 	dir := t.TempDir()
-	createFile(t, dir, "foundation/philosophy.md", "# Philosophy\n\nGuiding principles.")
-	createFile(t, dir, "foundation/markdown.md", "# Markdown\n\nConventions.")
+	createFile(t, dir, "foundation/philosophy/README.md", "# Philosophy\n\nGuiding principles.")
+	createFile(t, dir, "foundation/markdown/README.md", "# Markdown\n\nConventions.")
 
 	result := Discover(dir, emptyManifest())
 
 	require.Len(t, result.Foundation, 2)
 	assert.Equal(t, "markdown", result.Foundation[0].ID)
-	assert.Equal(t, "foundation/markdown.md", result.Foundation[0].Path)
+	assert.Equal(t, "foundation/markdown/README.md", result.Foundation[0].Path)
 	assert.Equal(t, "Markdown", result.Foundation[0].Description)
 	assert.Equal(t, "philosophy", result.Foundation[1].ID)
 	assert.Equal(t, "Philosophy", result.Foundation[1].Description)
@@ -129,7 +129,7 @@ func TestDiscover_foundationSkipsNonMd(t *testing.T) {
 	dir := t.TempDir()
 	createFile(t, dir, "foundation/notes.txt", "not markdown")
 	createFile(t, dir, "foundation/data.json", "{}")
-	createFile(t, dir, "foundation/actual.md", "# Actual\n\nContent.")
+	createFile(t, dir, "foundation/actual/README.md", "# Actual\n\nContent.")
 
 	result := Discover(dir, emptyManifest())
 
@@ -140,7 +140,7 @@ func TestDiscover_foundationSkipsNonMd(t *testing.T) {
 func TestDiscover_foundationSkipsDirs(t *testing.T) {
 	dir := t.TempDir()
 	createFile(t, dir, "foundation/subdir/nested.md", "# Nested\n\nContent.")
-	createFile(t, dir, "foundation/top.md", "# Top\n\nContent.")
+	createFile(t, dir, "foundation/top/README.md", "# Top\n\nContent.")
 
 	result := Discover(dir, emptyManifest())
 
@@ -285,7 +285,7 @@ func TestDiscover_promptNoReadme(t *testing.T) {
 func TestDiscover_plans(t *testing.T) {
 	dir := t.TempDir()
 	createFile(t, dir, "plans/migration/README.md", "# Migration\n\nMigration plan.")
-	createFile(t, dir, "plans/migration/state.yml", "id: migration\nstatus: not_started")
+	createFile(t, dir, "plans/migration/plan.yml", "id: migration\nstatus: not_started")
 
 	result := Discover(dir, emptyManifest())
 
@@ -293,7 +293,7 @@ func TestDiscover_plans(t *testing.T) {
 	assert.Equal(t, "migration", result.Plans[0].ID)
 	assert.Equal(t, "plans/migration/README.md", result.Plans[0].Path)
 	assert.Equal(t, "Migration", result.Plans[0].Description)
-	assert.Equal(t, "plans/migration/state.yml", result.Plans[0].State)
+	assert.Equal(t, "plans/migration/plan.yml", result.Plans[0].PlanState)
 }
 
 func TestDiscover_planWithoutState(t *testing.T) {
@@ -304,7 +304,7 @@ func TestDiscover_planWithoutState(t *testing.T) {
 
 	require.Len(t, result.Plans, 1)
 	assert.Equal(t, "redesign", result.Plans[0].ID)
-	assert.Empty(t, result.Plans[0].State)
+	assert.Empty(t, result.Plans[0].PlanState)
 }
 
 // --- Discover: merge-missing behavior ---
@@ -345,7 +345,7 @@ func TestDiscover_preservesExistingEntries(t *testing.T) {
 
 func TestDiscover_mergesMissingAcrossSections(t *testing.T) {
 	dir := t.TempDir()
-	createFile(t, dir, "foundation/philosophy.md", "# Philosophy\n\nContent.")
+	createFile(t, dir, "foundation/philosophy/README.md", "# Philosophy\n\nContent.")
 	createFile(t, dir, "application/architecture/README.md", "# Architecture\n\nContent.")
 	createFile(t, dir, "topics/react/README.md", "# React\n\nContent.")
 	createFile(t, dir, "prompts/review/README.md", "# Review\n\nContent.")
@@ -354,7 +354,7 @@ func TestDiscover_mergesMissingAcrossSections(t *testing.T) {
 	// Only has foundation pre-declared.
 	existing := emptyManifest()
 	existing.Foundation = []FoundationEntry{
-		{ID: "philosophy", Path: "foundation/philosophy.md", Description: "Pre-existing"},
+		{ID: "philosophy", Path: "foundation/philosophy/README.md", Description: "Pre-existing"},
 	}
 
 	result := Discover(dir, existing)
@@ -376,13 +376,13 @@ func TestDiscover_mergesMissingAcrossSections(t *testing.T) {
 
 func TestDiscover_partialSection(t *testing.T) {
 	dir := t.TempDir()
-	createFile(t, dir, "foundation/philosophy.md", "# Philosophy")
-	createFile(t, dir, "foundation/markdown.md", "# Markdown")
-	createFile(t, dir, "foundation/docs.md", "# Documentation")
+	createFile(t, dir, "foundation/philosophy/README.md", "# Philosophy")
+	createFile(t, dir, "foundation/markdown/README.md", "# Markdown")
+	createFile(t, dir, "foundation/docs/README.md", "# Documentation")
 
 	existing := emptyManifest()
 	existing.Foundation = []FoundationEntry{
-		{ID: "markdown", Path: "foundation/markdown.md", Description: "Manual entry", Load: "always"},
+		{ID: "markdown", Path: "foundation/markdown/README.md", Description: "Manual entry", Load: "always"},
 	}
 
 	result := Discover(dir, existing)
@@ -400,11 +400,11 @@ func TestDiscover_partialSection(t *testing.T) {
 
 func TestDiscover_doesNotMutateInput(t *testing.T) {
 	dir := t.TempDir()
-	createFile(t, dir, "foundation/new.md", "# New\n\nContent.")
+	createFile(t, dir, "foundation/new/README.md", "# New\n\nContent.")
 
 	existing := emptyManifest()
 	existing.Foundation = []FoundationEntry{
-		{ID: "old", Path: "foundation/old.md", Description: "Original"},
+		{ID: "old", Path: "foundation/old/README.md", Description: "Original"},
 	}
 	origLen := len(existing.Foundation)
 
@@ -422,8 +422,8 @@ func TestDiscover_fullPackage(t *testing.T) {
 	dir := t.TempDir()
 
 	// Foundation.
-	createFile(t, dir, "foundation/philosophy.md", "# Philosophy\n\nGuiding principles.")
-	createFile(t, dir, "foundation/markdown.md", "# Markdown\n\nFormatting rules.")
+	createFile(t, dir, "foundation/philosophy/README.md", "# Philosophy\n\nGuiding principles.")
+	createFile(t, dir, "foundation/markdown/README.md", "# Markdown\n\nFormatting rules.")
 
 	// Application.
 	createFile(t, dir, "application/architecture/README.md", "# Architecture\n\nSystem design.")
@@ -440,7 +440,7 @@ func TestDiscover_fullPackage(t *testing.T) {
 
 	// Plans.
 	createFile(t, dir, "plans/migration/README.md", "# Migration\n\nMigration plan.")
-	createFile(t, dir, "plans/migration/state.yml", "id: migration\nstatus: not_started")
+	createFile(t, dir, "plans/migration/plan.yml", "id: migration\nstatus: not_started")
 
 	result := Discover(dir, emptyManifest())
 
@@ -471,7 +471,7 @@ func TestDiscover_fullPackage(t *testing.T) {
 	// Plans: 1 entry.
 	require.Len(t, result.Plans, 1)
 	assert.Equal(t, "migration", result.Plans[0].ID)
-	assert.Equal(t, "plans/migration/state.yml", result.Plans[0].State)
+	assert.Equal(t, "plans/migration/plan.yml", result.Plans[0].PlanState)
 }
 
 // --- Discover: description fallback ---
@@ -479,7 +479,7 @@ func TestDiscover_fullPackage(t *testing.T) {
 func TestDiscover_descriptionFallback(t *testing.T) {
 	dir := t.TempDir()
 	// File with no heading.
-	createFile(t, dir, "foundation/noheading.md", "Just plain text, no markdown heading.\n")
+	createFile(t, dir, "foundation/noheading/README.md", "Just plain text, no markdown heading.\n")
 
 	result := Discover(dir, emptyManifest())
 

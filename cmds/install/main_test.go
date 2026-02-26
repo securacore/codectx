@@ -116,7 +116,7 @@ description: "Test"
 	assert.Equal(t, "docs", docsDir) // should not have changed
 }
 
-func TestSetupDocsDir_preservesExistingPackageYml(t *testing.T) {
+func TestSetupDocsDir_preservesExistingManifestYml(t *testing.T) {
 	dir := t.TempDir()
 	origDir, err := os.Getwd()
 	require.NoError(t, err)

@@ -98,8 +98,9 @@ func TestRun_discoversNewEntries(t *testing.T) {
 	docsDir := filepath.Join(dir, "docs")
 
 	// Create foundation and topic files on disk.
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "philosophy"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(docsDir, "foundation", "philosophy.md"),
+		filepath.Join(docsDir, "foundation", "philosophy", "README.md"),
 		[]byte("# Philosophy\n"), 0o644))
 
 	topicDir := filepath.Join(docsDir, "topics", "react")
@@ -144,8 +145,9 @@ func TestRun_removesStaleEntries(t *testing.T) {
 	docsDir := filepath.Join(dir, "docs")
 
 	// Create a foundation file on disk.
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "philosophy"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(docsDir, "foundation", "philosophy.md"),
+		filepath.Join(docsDir, "foundation", "philosophy", "README.md"),
 		[]byte("# Philosophy\n"), 0o644))
 
 	// Write manifest with a stale entry that doesn't exist on disk.
@@ -154,8 +156,8 @@ func TestRun_removesStaleEntries(t *testing.T) {
 		Author:  "tester",
 		Version: "1.0.0",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "philosophy", Path: "foundation/philosophy.md", Description: "Philosophy"},
-			{ID: "removed", Path: "foundation/removed.md", Description: "Gone"},
+			{ID: "philosophy", Path: "foundation/philosophy/README.md", Description: "Philosophy"},
+			{ID: "removed", Path: "foundation/removed/README.md", Description: "Gone"},
 		},
 	}
 	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
@@ -174,8 +176,9 @@ func TestRun_infersRelationships(t *testing.T) {
 	docsDir := filepath.Join(dir, "docs")
 
 	// Foundation doc.
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "philosophy"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(docsDir, "foundation", "philosophy.md"),
+		filepath.Join(docsDir, "foundation", "philosophy", "README.md"),
 		[]byte("# Philosophy\n"), 0o644))
 
 	// Topic that links to foundation.
@@ -183,7 +186,7 @@ func TestRun_infersRelationships(t *testing.T) {
 	require.NoError(t, os.MkdirAll(topicDir, 0o755))
 	require.NoError(t, os.WriteFile(
 		filepath.Join(topicDir, "README.md"),
-		[]byte("# React\nSee [philosophy](../../foundation/philosophy.md).\n"), 0o644))
+		[]byte("# React\nSee [philosophy](../../foundation/philosophy/README.md).\n"), 0o644))
 
 	err := run()
 	require.NoError(t, err)
@@ -229,8 +232,9 @@ func TestRun_preservesEntryDescriptions(t *testing.T) {
 	docsDir := filepath.Join(dir, "docs")
 
 	// Create a foundation file.
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "philosophy"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(docsDir, "foundation", "philosophy.md"),
+		filepath.Join(docsDir, "foundation", "philosophy", "README.md"),
 		[]byte("# Philosophy\n"), 0o644))
 
 	// Write manifest with a custom description for the entry.
@@ -238,7 +242,7 @@ func TestRun_preservesEntryDescriptions(t *testing.T) {
 		Name:    "test-project",
 		Version: "1.0.0",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "philosophy", Path: "foundation/philosophy.md",
+			{ID: "philosophy", Path: "foundation/philosophy/README.md",
 				Description: "Custom description", Load: "always"},
 		},
 	}
@@ -259,8 +263,9 @@ func TestRun_fullSync(t *testing.T) {
 	docsDir := filepath.Join(dir, "docs")
 
 	// Create foundation doc.
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "philosophy"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(docsDir, "foundation", "philosophy.md"),
+		filepath.Join(docsDir, "foundation", "philosophy", "README.md"),
 		[]byte("# Philosophy\n"), 0o644))
 
 	// Create application doc.
@@ -268,7 +273,7 @@ func TestRun_fullSync(t *testing.T) {
 	require.NoError(t, os.MkdirAll(appDir, 0o755))
 	require.NoError(t, os.WriteFile(
 		filepath.Join(appDir, "README.md"),
-		[]byte("# Architecture\nSee [philosophy](../../foundation/philosophy.md).\n"), 0o644))
+		[]byte("# Architecture\nSee [philosophy](../../foundation/philosophy/README.md).\n"), 0o644))
 
 	// Create two topics with cross-references.
 	for _, topic := range []string{"react", "typescript"} {
@@ -277,17 +282,17 @@ func TestRun_fullSync(t *testing.T) {
 	}
 	require.NoError(t, os.WriteFile(
 		filepath.Join(docsDir, "topics", "react", "README.md"),
-		[]byte("# React\nSee [TypeScript](../typescript/README.md).\nSee [philosophy](../../foundation/philosophy.md).\n"), 0o644))
+		[]byte("# React\nSee [TypeScript](../typescript/README.md).\nSee [philosophy](../../foundation/philosophy/README.md).\n"), 0o644))
 	require.NoError(t, os.WriteFile(
 		filepath.Join(docsDir, "topics", "typescript", "README.md"),
-		[]byte("# TypeScript\nSee [philosophy](../../foundation/philosophy.md).\n"), 0o644))
+		[]byte("# TypeScript\nSee [philosophy](../../foundation/philosophy/README.md).\n"), 0o644))
 
 	// Create a prompt.
 	promptDir := filepath.Join(docsDir, "prompts", "audit")
 	require.NoError(t, os.MkdirAll(promptDir, 0o755))
 	require.NoError(t, os.WriteFile(
 		filepath.Join(promptDir, "README.md"),
-		[]byte("# Audit\nLoad [philosophy](../../foundation/philosophy.md).\n"), 0o644))
+		[]byte("# Audit\nLoad [philosophy](../../foundation/philosophy/README.md).\n"), 0o644))
 
 	// Create a plan.
 	planDir := filepath.Join(docsDir, "plans", "migrate")
@@ -296,7 +301,7 @@ func TestRun_fullSync(t *testing.T) {
 		filepath.Join(planDir, "README.md"),
 		[]byte("# Migrate\n"), 0o644))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(planDir, "state.yml"),
+		filepath.Join(planDir, "plan.yml"),
 		[]byte("status: in-progress\n"), 0o644))
 
 	err := run()
@@ -351,8 +356,9 @@ func TestRun_missingManifestCreatesOne(t *testing.T) {
 	require.NoError(t, config.Write(filepath.Join(dir, configFile), cfg))
 
 	// Create a foundation file on disk.
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "philosophy"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(docsDir, "foundation", "philosophy.md"),
+		filepath.Join(docsDir, "foundation", "philosophy", "README.md"),
 		[]byte("# Philosophy\n"), 0o644))
 
 	err = run()
@@ -371,8 +377,9 @@ func TestRun_idempotent(t *testing.T) {
 	docsDir := filepath.Join(dir, "docs")
 
 	// Create a foundation file.
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "philosophy"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(docsDir, "foundation", "philosophy.md"),
+		filepath.Join(docsDir, "foundation", "philosophy", "README.md"),
 		[]byte("# Philosophy\n"), 0o644))
 
 	// First sync.
@@ -419,8 +426,9 @@ func TestRun_customDocsDir(t *testing.T) {
 	m := &manifest.Manifest{Name: "test-project", Version: "1.0.0"}
 	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
 
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "philosophy"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(docsDir, "foundation", "philosophy.md"),
+		filepath.Join(docsDir, "foundation", "philosophy", "README.md"),
 		[]byte("# Philosophy\n"), 0o644))
 
 	err = run()
@@ -570,8 +578,9 @@ func TestRun_corruptManifestRecovery(t *testing.T) {
 		[]byte("{{{{not valid yaml"), 0o644))
 
 	// Create a foundation file on disk.
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "philosophy"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(docsDir, "foundation", "philosophy.md"),
+		filepath.Join(docsDir, "foundation", "philosophy", "README.md"),
 		[]byte("# Philosophy\n"), 0o644))
 
 	err = run()
@@ -598,8 +607,9 @@ func TestRun_addFileBetweenSyncs(t *testing.T) {
 	assert.Nil(t, first.Foundation)
 
 	// Add a foundation file.
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "philosophy"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(docsDir, "foundation", "philosophy.md"),
+		filepath.Join(docsDir, "foundation", "philosophy", "README.md"),
 		[]byte("# Philosophy\n"), 0o644))
 
 	// Second sync: discovers the new file.
@@ -617,11 +627,13 @@ func TestRun_deleteFileBetweenSyncs(t *testing.T) {
 	docsDir := filepath.Join(dir, "docs")
 
 	// Create two foundation files.
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "a"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(docsDir, "foundation", "a.md"),
+		filepath.Join(docsDir, "foundation", "a", "README.md"),
 		[]byte("# A\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "b"), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(docsDir, "foundation", "b.md"),
+		filepath.Join(docsDir, "foundation", "b", "README.md"),
 		[]byte("# B\n"), 0o644))
 
 	// First sync discovers both.
@@ -633,7 +645,7 @@ func TestRun_deleteFileBetweenSyncs(t *testing.T) {
 	require.Len(t, first.Foundation, 2)
 
 	// Delete one file.
-	require.NoError(t, os.Remove(filepath.Join(docsDir, "foundation", "b.md")))
+	require.NoError(t, os.RemoveAll(filepath.Join(docsDir, "foundation", "b")))
 
 	// Second sync removes the stale entry.
 	err = run()

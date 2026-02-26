@@ -54,6 +54,10 @@ func collectFilePaths(m *manifest.Manifest) []string {
 
 	for _, e := range m.Foundation {
 		paths = append(paths, e.Path)
+		if e.Spec != "" {
+			paths = append(paths, e.Spec)
+		}
+		paths = append(paths, e.Files...)
 	}
 
 	for _, e := range m.Application {
@@ -78,8 +82,8 @@ func collectFilePaths(m *manifest.Manifest) []string {
 
 	for _, e := range m.Plans {
 		paths = append(paths, e.Path)
-		if e.State != "" {
-			paths = append(paths, e.State)
+		if e.PlanState != "" {
+			paths = append(paths, e.PlanState)
 		}
 	}
 

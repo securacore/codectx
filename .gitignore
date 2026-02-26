@@ -2,7 +2,7 @@
 # ======================
 
 # App
-state.yml
+plan.yml
 codectx
 .repocli/
 .repo-cli/

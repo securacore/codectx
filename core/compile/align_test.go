@@ -17,8 +17,8 @@ func testManifest() *manifest.Manifest {
 		Version:     "1.0.0",
 		Description: "Test package",
 		Foundation: []manifest.FoundationEntry{
-			{ID: "philosophy", Path: "foundation/philosophy.md", Description: "Core philosophy"},
-			{ID: "conventions", Path: "foundation/conventions.md", Description: "Conventions"},
+			{ID: "philosophy", Path: "foundation/philosophy/README.md", Description: "Core philosophy"},
+			{ID: "conventions", Path: "foundation/conventions/README.md", Description: "Conventions"},
 		},
 		Application: []manifest.ApplicationEntry{
 			{ID: "architecture", Path: "application/architecture/README.md", Description: "System architecture"},
@@ -32,7 +32,7 @@ func testManifest() *manifest.Manifest {
 			{ID: "review", Path: "prompts/review/README.md", Description: "Code review"},
 		},
 		Plans: []manifest.PlanEntry{
-			{ID: "migration", Path: "plans/migration/README.md", State: "plans/migration/state.yml", Description: "Migration plan"},
+			{ID: "migration", Path: "plans/migration/README.md", PlanState: "plans/migration/plan.yml", Description: "Migration plan"},
 		},
 	}
 }
@@ -131,12 +131,12 @@ func TestFilterManifest_emptyActivation(t *testing.T) {
 func TestMergeManifest(t *testing.T) {
 	dst := &manifest.Manifest{
 		Foundation: []manifest.FoundationEntry{
-			{ID: "local", Path: "foundation/local.md", Description: "Local doc"},
+			{ID: "local", Path: "foundation/local/README.md", Description: "Local doc"},
 		},
 	}
 	src := &manifest.Manifest{
 		Foundation: []manifest.FoundationEntry{
-			{ID: "remote", Path: "foundation/remote.md", Description: "Remote doc"},
+			{ID: "remote", Path: "foundation/remote/README.md", Description: "Remote doc"},
 		},
 		Application: []manifest.ApplicationEntry{
 			{ID: "arch", Path: "application/arch/README.md", Description: "Architecture"},
@@ -160,7 +160,7 @@ func TestMergeManifest(t *testing.T) {
 func TestMergeManifest_emptySource(t *testing.T) {
 	dst := &manifest.Manifest{
 		Foundation: []manifest.FoundationEntry{
-			{ID: "local", Path: "foundation/local.md", Description: "Local"},
+			{ID: "local", Path: "foundation/local/README.md", Description: "Local"},
 		},
 	}
 	src := &manifest.Manifest{}

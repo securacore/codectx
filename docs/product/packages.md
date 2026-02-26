@@ -18,7 +18,7 @@ A codectx package is a directory of Markdown documentation files organized by co
   plans/                # Implementation plans with state tracking
     [plan-name]/
       README.md
-      state.yml
+      plan.yml
 ```
 
 Not every package contains all directories. A package may provide only topics, or only foundation documents, or any combination.
@@ -55,7 +55,7 @@ Topic entries are on-demand reference documentation, typically organized by tech
 
 ### Plan Entries
 
-Plan entries describe implementation work. Each plan has a `state` field pointing to a `state.yml` file for lightweight status tracking. AI reads `state.yml` first to assess plan status without loading the full plan document.
+Plan entries describe implementation work. Each plan has a `plan_state` field pointing to a `plan.yml` file for lightweight status tracking. AI reads `plan.yml` first to assess plan status without loading the full plan document.
 
 ## Naming and Resolution
 
@@ -87,16 +87,16 @@ See [Compilation](compilation.md) for details on how the source manifest is tran
 
 ## Plans and State Tracking
 
-Plans are implementation documents that describe what to build and how. Each plan is a directory containing `README.md` (the plan content) and `state.yml` (the state tracker).
+Plans are implementation documents that describe what to build and how. Each plan is a directory containing `README.md` (the plan content) and `plan.yml` (the state tracker).
 
-`state.yml` is validated by [state.schema.json](../schemas/state.schema.json) and contains:
+`plan.yml` is validated by [plan.schema.json](../schemas/plan.schema.json) and contains:
 
 - Plan ID
 - Status: `not_started`, `in_progress`, `completed`, `blocked`
 - Optional timestamps: `started_at`, `updated_at`
 - Summary: one to three sentences describing current state
 
-AI reads `state.yml` first to triage whether to load the full plan. This avoids loading large plan documents unnecessarily.
+AI reads `plan.yml` first to triage whether to load the full plan. This avoids loading large plan documents unnecessarily.
 
 ## Related
 

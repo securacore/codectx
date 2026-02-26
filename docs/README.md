@@ -11,13 +11,13 @@ At the start of every session, load [metadata.yml](metadata.yml) and all foundat
 
 | Document                                              | Purpose                                       |
 | ----------------------------------------------------- | --------------------------------------------- |
-| [philosophy.md](foundation/philosophy.md)             | Guiding principles for decision-making        |
-| [markdown.md](foundation/markdown.md)                 | Markdown formatting conventions               |
-| [documentation.md](foundation/documentation.md)       | Documentation management and strategy         |
-| [specs.md](foundation/specs.md)                       | Specification template and process            |
-| [ai-authoring.md](foundation/ai-authoring.md)         | Cross-model AI authoring conventions          |
-| [review-standards.md](foundation/review-standards.md) | Post-update documentation review checklist    |
-| [metadata.md](foundation/metadata.md)                 | Metadata manifest conventions and maintenance |
+| [philosophy](foundation/philosophy/README.md)             | Guiding principles for decision-making        |
+| [markdown](foundation/markdown/README.md)                 | Markdown formatting conventions               |
+| [documentation](foundation/documentation/README.md)       | Documentation management and strategy         |
+| [specs](foundation/specs/README.md)                       | Specification template and process            |
+| [ai-authoring](foundation/ai-authoring/README.md)         | Cross-model AI authoring conventions          |
+| [review-standards](foundation/review-standards/README.md) | Post-update documentation review checklist    |
+| [metadata](foundation/metadata/README.md)                 | Metadata manifest conventions and maintenance |
 
 ## Product
 
@@ -36,7 +36,7 @@ At the start of every session, load [metadata.yml](metadata.yml) and all foundat
 | --------------------------------------------------------- | ------------------------------------ |
 | [codectx.schema.json](schemas/codectx.schema.json)       | Validates `codectx.yml`              |
 | [manifest.schema.json](schemas/manifest.schema.json)        | Validates `manifest.yml`              |
-| [state.schema.json](schemas/state.schema.json)            | Validates `state.yml` (plan state)   |
+| [plan.schema.json](schemas/plan.schema.json)              | Validates `plan.yml` (plan state)    |
 
 ## Topics
 
@@ -59,8 +59,8 @@ At the start of every session, load [metadata.yml](metadata.yml) and all foundat
 ## Maintaining Documentation
 
 - **Adding topic documentation:** Create a subdirectory under `docs/topics/` (lowercase kebab-case) with a `README.md` entry point, then add an entry to the Topics table in this file and a corresponding entry in `metadata.yml`.
-- **Adding a foundational document:** Add the file to `docs/foundation/`, then add an entry to the Foundational table in this file and a corresponding entry in `metadata.yml`.
-- **Adding a spec:** Create a `spec/` subdirectory within the topic directory with a `README.md` entry point following the template in [specs.md](foundation/specs.md).
+- **Adding a foundational document:** Create a subdirectory under `docs/foundation/` (lowercase kebab-case) with a `README.md` entry point, then add an entry to the Foundational table in this file and a corresponding entry in `metadata.yml`.
+- **Adding a spec:** Create a `spec/` subdirectory within the topic or foundation directory with a `README.md` entry point following the template in [specs](foundation/specs/README.md).
 - **Adding a prompt:** Create a subdirectory under `docs/prompts/` with a `README.md` entry point, then add an entry to the Prompts table in this file and a corresponding entry in `metadata.yml`.
 - **Adding product documentation:** Add the file to `docs/product/`, then add an entry to the Product table in this file and a corresponding entry in `metadata.yml`.
-- **After any documentation change:** If the change adds, removes, renames, or restructures documentation files or their relationships, update `docs/metadata.yml` to reflect the change. Maintain `depends_on`/`required_by` symmetry and audit for drift. See [metadata.md](foundation/metadata.md) for the full conventions.
+- **After any documentation change:** If the change adds, removes, renames, or restructures documentation files or their relationships, update `docs/metadata.yml` to reflect the change. Maintain `depends_on`/`required_by` symmetry and audit for drift. See [metadata](foundation/metadata/README.md) for the full conventions.

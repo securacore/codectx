@@ -44,7 +44,9 @@ type CompiledFoundationEntry struct {
 	ID          string   `yaml:"id"`
 	Object      string   `yaml:"object"`
 	Description string   `yaml:"description"`
+	Spec        string   `yaml:"spec,omitempty"`
 	Load        string   `yaml:"load,omitempty"`
+	Files       []string `yaml:"files,omitempty"`
 	Source      string   `yaml:"source"`
 	DependsOn   []string `yaml:"depends_on,omitempty"`
 	RequiredBy  []string `yaml:"required_by,omitempty"`
@@ -90,7 +92,7 @@ type CompiledPlanEntry struct {
 	ID          string   `yaml:"id"`
 	Object      string   `yaml:"object"`
 	Description string   `yaml:"description"`
-	State       string   `yaml:"state,omitempty"`
+	PlanState   string   `yaml:"plan_state,omitempty"`
 	Source      string   `yaml:"source"`
 	DependsOn   []string `yaml:"depends_on,omitempty"`
 	RequiredBy  []string `yaml:"required_by,omitempty"`
@@ -118,6 +120,16 @@ func toCompiledManifest(
 			Source:      provenance["foundation:"+e.ID],
 			DependsOn:   e.DependsOn,
 			RequiredBy:  e.RequiredBy,
+		}
+		if e.Spec != "" {
+			if h, ok := pathToHash[e.Spec]; ok {
+				ce.Spec = ObjectPath(h)
+			}
+		}
+		for _, f := range e.Files {
+			if h, ok := pathToHash[f]; ok {
+				ce.Files = append(ce.Files, ObjectPath(h))
+			}
 		}
 		cm.Foundation = append(cm.Foundation, ce)
 	}
@@ -188,9 +200,9 @@ func toCompiledManifest(
 			DependsOn:   e.DependsOn,
 			RequiredBy:  e.RequiredBy,
 		}
-		// State files go to state/{plan-id}.yml, not the object store.
-		if e.State != "" {
-			ce.State = "state/" + e.ID + ".yml"
+		// Plan state files go to state/{plan-id}.yml, not the object store.
+		if e.PlanState != "" {
+			ce.PlanState = "state/" + e.ID + ".yml"
 		}
 		cm.Plans = append(cm.Plans, ce)
 	}

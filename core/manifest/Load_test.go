@@ -39,7 +39,7 @@ version: "2.0.0"
 description: Full package
 foundation:
   - id: philosophy
-    path: foundation/philosophy.md
+    path: foundation/philosophy/README.md
     description: Core philosophy
     load: always
 topics:
@@ -56,7 +56,7 @@ prompts:
 plans:
   - id: migration
     path: plans/migration/README.md
-    state: plans/migration/state.yml
+    plan_state: plans/migration/plan.yml
     description: Migration plan
 `
 	err := os.WriteFile(path, []byte(content), 0o644)
@@ -79,7 +79,7 @@ plans:
 
 	require.Len(t, m.Plans, 1)
 	assert.Equal(t, "migration", m.Plans[0].ID)
-	assert.Equal(t, "plans/migration/state.yml", m.Plans[0].State)
+	assert.Equal(t, "plans/migration/plan.yml", m.Plans[0].PlanState)
 }
 
 func TestLoad_schemaValidationFailure(t *testing.T) {
@@ -126,10 +126,10 @@ version: "1.0.0"
 description: Package with depends_on and required_by
 foundation:
   - id: conventions
-    path: foundation/conventions.md
+    path: foundation/conventions/README.md
     description: Coding conventions
   - id: philosophy
-    path: foundation/philosophy.md
+    path: foundation/philosophy/README.md
     description: Core philosophy
     depends_on:
       - conventions
@@ -161,13 +161,13 @@ version: "1.0.0"
 description: Package with multiple entries
 foundation:
   - id: philosophy
-    path: foundation/philosophy.md
+    path: foundation/philosophy/README.md
     description: Core philosophy
   - id: markdown
-    path: foundation/markdown.md
+    path: foundation/markdown/README.md
     description: Markdown conventions
   - id: documentation
-    path: foundation/documentation.md
+    path: foundation/documentation/README.md
     description: Documentation management
 topics:
   - id: react
@@ -211,11 +211,11 @@ prompts:
 plans:
   - id: migration
     path: plans/migration/README.md
-    state: plans/migration/state.yml
+    plan_state: plans/migration/plan.yml
     description: Database migration plan
   - id: redesign
     path: plans/redesign/README.md
-    state: plans/redesign/state.yml
+    plan_state: plans/redesign/plan.yml
     description: UI redesign plan
 `
 	err := os.WriteFile(path, []byte(content), 0o644)
@@ -233,10 +233,10 @@ plans:
 	require.Len(t, m.Plans, 2)
 	assert.Equal(t, "migration", m.Plans[0].ID)
 	assert.Equal(t, "plans/migration/README.md", m.Plans[0].Path)
-	assert.Equal(t, "plans/migration/state.yml", m.Plans[0].State)
+	assert.Equal(t, "plans/migration/plan.yml", m.Plans[0].PlanState)
 	assert.Equal(t, "Database migration plan", m.Plans[0].Description)
 	assert.Equal(t, "redesign", m.Plans[1].ID)
-	assert.Equal(t, "plans/redesign/state.yml", m.Plans[1].State)
+	assert.Equal(t, "plans/redesign/plan.yml", m.Plans[1].PlanState)
 }
 
 // --- Write + Load round-trip ---
@@ -273,7 +273,7 @@ func TestWrite_withAllSections(t *testing.T) {
 		Version:     "2.0.0",
 		Description: "All sections test",
 		Foundation: []FoundationEntry{
-			{ID: "philosophy", Path: "foundation/philosophy.md", Description: "Core philosophy", Load: "always"},
+			{ID: "philosophy", Path: "foundation/philosophy/README.md", Description: "Core philosophy", Load: "always"},
 		},
 		Topics: []TopicEntry{
 			{ID: "react", Path: "topics/react/README.md", Description: "React conventions"},
@@ -282,7 +282,7 @@ func TestWrite_withAllSections(t *testing.T) {
 			{ID: "review", Path: "prompts/review/README.md", Description: "Code review prompt"},
 		},
 		Plans: []PlanEntry{
-			{ID: "migration", Path: "plans/migration/README.md", State: "plans/migration/state.yml", Description: "Migration plan"},
+			{ID: "migration", Path: "plans/migration/README.md", PlanState: "plans/migration/plan.yml", Description: "Migration plan"},
 		},
 	}
 
@@ -302,7 +302,7 @@ func TestWrite_withAllSections(t *testing.T) {
 	assert.Equal(t, "review", loaded.Prompts[0].ID)
 	require.Len(t, loaded.Plans, 1)
 	assert.Equal(t, "migration", loaded.Plans[0].ID)
-	assert.Equal(t, "plans/migration/state.yml", loaded.Plans[0].State)
+	assert.Equal(t, "plans/migration/plan.yml", loaded.Plans[0].PlanState)
 }
 
 func TestWrite_invalidPath(t *testing.T) {
@@ -360,7 +360,7 @@ func TestWriteAndLoad_roundTrip(t *testing.T) {
 		Version:     "1.0.0",
 		Description: "Round trip test",
 		Foundation: []FoundationEntry{
-			{ID: "doc", Path: "foundation/doc.md", Description: "A doc"},
+			{ID: "doc", Path: "foundation/doc/README.md", Description: "A doc"},
 		},
 		Topics: []TopicEntry{
 			{ID: "topic", Path: "topics/topic/README.md", Description: "A topic"},
@@ -438,7 +438,7 @@ description: Test package
 plans:
   - id: migration
     path: plans/migration/README.md
-    state: plans/migration/state.yml
+    plan_state: plans/migration/plan.yml
     description: Database migration plan
     depends_on: [schema-design]
     required_by: [deployment]

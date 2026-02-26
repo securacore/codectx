@@ -1,6 +1,6 @@
 # Documentation
 
-This document defines how documentation is managed, organized, and written in this repository. For markdown formatting conventions, see [markdown.md](markdown.md).
+This document defines how documentation is managed, organized, and written in this repository. For markdown formatting conventions, see [markdown.md](../markdown/README.md).
 
 ## Audience and Purpose
 
@@ -10,7 +10,7 @@ Documentation describes _approach and process_, never implementation. It answers
 
 Each document covers one cohesive topic so AI can selectively load only what is relevant. This keeps token usage low and context focused. A guide on building React components does not embed utility conventions inline. It references the utility guide, which AI can load if and when needed.
 
-For cross-model authoring conventions that ensure documentation works across AI model tiers, see [ai-authoring.md](ai-authoring.md).
+For cross-model authoring conventions that ensure documentation works across AI model tiers, see [ai-authoring.md](../ai-authoring/README.md).
 
 ## Documentation Structure
 
@@ -20,7 +20,7 @@ Documentation is organized in two tiers: foundational and topic-specific.
 
 Foundational documents live in `docs/foundation/`. They govern how we work across the entire repository: philosophy, formatting conventions, documentation strategy. Each foundation document has a `load` field in `docs/metadata.yml` that controls when it is loaded into AI context: `always` for every session, `documentation` for sessions that involve writing or editing documentation. All foundation documents change only when the approach itself changes.
 
-Foundational files follow the naming conventions in [markdown.md](markdown.md).
+Foundational files follow the naming conventions in [markdown.md](../markdown/README.md).
 
 ### Topic Documentation
 
@@ -36,7 +36,7 @@ Within any tier, split documents based on cohesion: when a document begins to co
 
 ### Specification Documentation
 
-Topic directories may contain a `spec/` subdirectory that captures the reasoning behind the documentation. The spec template is defined in [specs.md](specs.md).
+Topic directories may contain a `spec/` subdirectory that captures the reasoning behind the documentation. The spec template is defined in [specs.md](../specs/README.md).
 
 ## Timeless Content
 
@@ -46,7 +46,7 @@ Documentation must remain valid independent of the current state of application 
 
 - **No implementation samples.** Never include code that mirrors or references application code. When the code changes, the documentation becomes a liability.
 - **Conceptual examples only.** When a sample aids understanding, it must illustrate the _concept_, not the application. Samples are supplementary. They exist to convey an idea, not to demonstrate how specifics are done in this codebase.
-- **Configuration references, not duplication.** When documentation needs to reference configuration, point to the configuration file itself. Do not copy configuration values into documentation as examples. Per [philosophy.md](philosophy.md), when documentation and configuration conflict, configuration wins. Avoid creating opportunities for conflict.
+- **Configuration references, not duplication.** When documentation needs to reference configuration, point to the configuration file itself. Do not copy configuration values into documentation as examples. Per [philosophy.md](../philosophy/README.md), when documentation and configuration conflict, configuration wins. Avoid creating opportunities for conflict.
 
 </rules>
 

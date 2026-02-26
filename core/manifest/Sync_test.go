@@ -11,7 +11,7 @@ import (
 
 func TestSync_discoversNewEntries(t *testing.T) {
 	dir := t.TempDir()
-	createFile(t, dir, "foundation/philosophy.md", "# Philosophy\n")
+	createFile(t, dir, "foundation/philosophy/README.md", "# Philosophy\n")
 	createFile(t, dir, "topics/react/README.md", "# React\n")
 	createFile(t, dir, "application/architecture/README.md", "# Architecture\n")
 
@@ -27,13 +27,13 @@ func TestSync_discoversNewEntries(t *testing.T) {
 
 func TestSync_removesStaleEntries(t *testing.T) {
 	dir := t.TempDir()
-	// Only philosophy.md exists on disk, not markdown.md
-	createFile(t, dir, "foundation/philosophy.md", "# Philosophy\n")
+	// Only philosophy exists on disk, not markdown
+	createFile(t, dir, "foundation/philosophy/README.md", "# Philosophy\n")
 
 	existing := &Manifest{
 		Foundation: []FoundationEntry{
-			{ID: "philosophy", Path: "foundation/philosophy.md", Description: "Philosophy"},
-			{ID: "markdown", Path: "foundation/markdown.md", Description: "Markdown"},
+			{ID: "philosophy", Path: "foundation/philosophy/README.md", Description: "Philosophy"},
+			{ID: "markdown", Path: "foundation/markdown/README.md", Description: "Markdown"},
 		},
 	}
 
@@ -108,9 +108,9 @@ func TestSync_removesStalePlans(t *testing.T) {
 
 func TestSync_infersRelationships(t *testing.T) {
 	dir := t.TempDir()
-	createFile(t, dir, "foundation/philosophy.md", "# Philosophy\n")
+	createFile(t, dir, "foundation/philosophy/README.md", "# Philosophy\n")
 	createFile(t, dir, "topics/react/README.md", `# React
-See [philosophy](../../foundation/philosophy.md).
+See [philosophy](../../foundation/philosophy/README.md).
 See [TypeScript](../typescript/README.md).
 `)
 	createFile(t, dir, "topics/typescript/README.md", "# TypeScript\n")
@@ -133,9 +133,9 @@ See [TypeScript](../typescript/README.md).
 func TestSync_discoversAndRemovesAndInfers(t *testing.T) {
 	dir := t.TempDir()
 	// Create new entries on disk
-	createFile(t, dir, "foundation/philosophy.md", "# Philosophy\n")
+	createFile(t, dir, "foundation/philosophy/README.md", "# Philosophy\n")
 	createFile(t, dir, "topics/react/README.md", `# React
-See [philosophy](../../foundation/philosophy.md).
+See [philosophy](../../foundation/philosophy/README.md).
 `)
 
 	// Existing manifest has a stale entry
@@ -143,7 +143,7 @@ See [philosophy](../../foundation/philosophy.md).
 		Name:    "test-project",
 		Version: "1.0.0",
 		Foundation: []FoundationEntry{
-			{ID: "stale", Path: "foundation/stale.md", Description: "Stale entry"},
+			{ID: "stale", Path: "foundation/stale/README.md", Description: "Stale entry"},
 		},
 	}
 
@@ -165,12 +165,12 @@ See [philosophy](../../foundation/philosophy.md).
 
 func TestSync_preservesEntryMetadata(t *testing.T) {
 	dir := t.TempDir()
-	createFile(t, dir, "foundation/philosophy.md", "# Philosophy\n")
+	createFile(t, dir, "foundation/philosophy/README.md", "# Philosophy\n")
 	createFile(t, dir, "application/arch/README.md", "# Architecture\n")
 
 	existing := &Manifest{
 		Foundation: []FoundationEntry{
-			{ID: "philosophy", Path: "foundation/philosophy.md",
+			{ID: "philosophy", Path: "foundation/philosophy/README.md",
 				Description: "Custom description", Load: "always"},
 		},
 		Application: []ApplicationEntry{
@@ -204,22 +204,22 @@ func TestSync_emptyDir(t *testing.T) {
 
 func TestSync_fullPackage(t *testing.T) {
 	dir := t.TempDir()
-	createFile(t, dir, "foundation/philosophy.md", "# Philosophy\n")
+	createFile(t, dir, "foundation/philosophy/README.md", "# Philosophy\n")
 	createFile(t, dir, "application/architecture/README.md", `# Architecture
-See [philosophy](../../foundation/philosophy.md).
+See [philosophy](../../foundation/philosophy/README.md).
 `)
 	createFile(t, dir, "topics/react/README.md", `# React
-See [philosophy](../../foundation/philosophy.md).
+See [philosophy](../../foundation/philosophy/README.md).
 See [TypeScript](../typescript/README.md).
 `)
 	createFile(t, dir, "topics/typescript/README.md", `# TypeScript
-See [philosophy](../../foundation/philosophy.md).
+See [philosophy](../../foundation/philosophy/README.md).
 `)
 	createFile(t, dir, "prompts/audit/README.md", `# Audit
-Load [philosophy](../../foundation/philosophy.md).
+Load [philosophy](../../foundation/philosophy/README.md).
 `)
 	createFile(t, dir, "plans/migrate/README.md", "# Migration\n")
-	createFile(t, dir, "plans/migrate/state.yml", "status: in-progress\n")
+	createFile(t, dir, "plans/migrate/plan.yml", "status: in-progress\n")
 
 	result := Sync(dir, emptyManifest())
 
@@ -251,15 +251,15 @@ func TestSync_nilSections(t *testing.T) {
 func TestSync_staleEntryRemovedBeforeRelationshipInference(t *testing.T) {
 	dir := t.TempDir()
 	// Create react and philosophy on disk. typescript is stale (no file).
-	createFile(t, dir, "foundation/philosophy.md", "# Philosophy\n")
+	createFile(t, dir, "foundation/philosophy/README.md", "# Philosophy\n")
 	createFile(t, dir, "topics/react/README.md", `# React
-See [philosophy](../../foundation/philosophy.md).
+See [philosophy](../../foundation/philosophy/README.md).
 See [TypeScript](../typescript/README.md).
 `)
 
 	existing := &Manifest{
 		Foundation: []FoundationEntry{
-			{ID: "philosophy", Path: "foundation/philosophy.md"},
+			{ID: "philosophy", Path: "foundation/philosophy/README.md"},
 		},
 		Topics: []TopicEntry{
 			{ID: "react", Path: "topics/react/README.md"},
@@ -282,16 +282,16 @@ See [TypeScript](../typescript/README.md).
 
 func TestSync_doesNotMutateInput(t *testing.T) {
 	dir := t.TempDir()
-	createFile(t, dir, "foundation/philosophy.md", "# Philosophy\n")
+	createFile(t, dir, "foundation/philosophy/README.md", "# Philosophy\n")
 	createFile(t, dir, "topics/react/README.md", `# React
-See [philosophy](../../foundation/philosophy.md).
+See [philosophy](../../foundation/philosophy/README.md).
 `)
 
 	existing := &Manifest{
 		Name:    "original",
 		Version: "1.0.0",
 		Foundation: []FoundationEntry{
-			{ID: "philosophy", Path: "foundation/philosophy.md", Description: "Original desc"},
+			{ID: "philosophy", Path: "foundation/philosophy/README.md", Description: "Original desc"},
 		},
 	}
 
@@ -313,16 +313,16 @@ See [philosophy](../../foundation/philosophy.md).
 
 func TestSync_replacesExistingRelationships(t *testing.T) {
 	dir := t.TempDir()
-	createFile(t, dir, "foundation/a.md", "# A\n")
-	createFile(t, dir, "foundation/b.md", `# B
-See [a](a.md).
+	createFile(t, dir, "foundation/a/README.md", "# A\n")
+	createFile(t, dir, "foundation/b/README.md", `# B
+See [a](../a/README.md).
 `)
 
 	existing := &Manifest{
 		Foundation: []FoundationEntry{
-			{ID: "a", Path: "foundation/a.md",
+			{ID: "a", Path: "foundation/a/README.md",
 				DependsOn: []string{"stale-dep"}, RequiredBy: []string{"stale-rev"}},
-			{ID: "b", Path: "foundation/b.md",
+			{ID: "b", Path: "foundation/b/README.md",
 				DependsOn: []string{"old-dep"}, RequiredBy: []string{"old-rev"}},
 		},
 	}
@@ -341,7 +341,7 @@ func TestSync_nonexistentDir(t *testing.T) {
 		Name:    "test",
 		Version: "1.0.0",
 		Foundation: []FoundationEntry{
-			{ID: "philosophy", Path: "foundation/philosophy.md"},
+			{ID: "philosophy", Path: "foundation/philosophy/README.md"},
 		},
 		Topics: []TopicEntry{
 			{ID: "react", Path: "topics/react/README.md"},
@@ -377,12 +377,12 @@ func TestSync_allMetadataPreserved(t *testing.T) {
 
 func TestSync_mergesNewEntriesIntoExistingSection(t *testing.T) {
 	dir := t.TempDir()
-	createFile(t, dir, "foundation/philosophy.md", "# Philosophy\n")
-	createFile(t, dir, "foundation/markdown.md", "# Markdown\n")
+	createFile(t, dir, "foundation/philosophy/README.md", "# Philosophy\n")
+	createFile(t, dir, "foundation/markdown/README.md", "# Markdown\n")
 
 	existing := &Manifest{
 		Foundation: []FoundationEntry{
-			{ID: "philosophy", Path: "foundation/philosophy.md",
+			{ID: "philosophy", Path: "foundation/philosophy/README.md",
 				Description: "Custom desc", Load: "always"},
 		},
 	}
@@ -434,7 +434,7 @@ func TestSync_preservesTopicSpecAndFiles(t *testing.T) {
 func TestSync_mixedStaleAcrossAllSections(t *testing.T) {
 	dir := t.TempDir()
 	// Create one valid file per section, leave the stale ones missing.
-	createFile(t, dir, "foundation/philosophy.md", "# Philosophy\n")
+	createFile(t, dir, "foundation/philosophy/README.md", "# Philosophy\n")
 	createFile(t, dir, "application/arch/README.md", "# Architecture\n")
 	createFile(t, dir, "topics/react/README.md", "# React\n")
 	createFile(t, dir, "prompts/audit/README.md", "# Audit\n")
@@ -442,8 +442,8 @@ func TestSync_mixedStaleAcrossAllSections(t *testing.T) {
 
 	existing := &Manifest{
 		Foundation: []FoundationEntry{
-			{ID: "philosophy", Path: "foundation/philosophy.md"},
-			{ID: "stale-f", Path: "foundation/stale.md"},
+			{ID: "philosophy", Path: "foundation/philosophy/README.md"},
+			{ID: "stale-f", Path: "foundation/stale/README.md"},
 		},
 		Application: []ApplicationEntry{
 			{ID: "arch", Path: "application/arch/README.md"},
@@ -479,12 +479,12 @@ func TestSync_mixedStaleAcrossAllSections(t *testing.T) {
 
 func TestSync_deterministicOutput(t *testing.T) {
 	dir := t.TempDir()
-	createFile(t, dir, "foundation/a.md", "# A\n")
-	createFile(t, dir, "foundation/b.md", `# B
-See [a](a.md).
+	createFile(t, dir, "foundation/a/README.md", "# A\n")
+	createFile(t, dir, "foundation/b/README.md", `# B
+See [a](../a/README.md).
 `)
 	createFile(t, dir, "topics/x/README.md", `# X
-See [a](../../foundation/a.md).
+See [a](../../foundation/a/README.md).
 `)
 
 	existing := emptyManifest()

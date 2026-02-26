@@ -1,6 +1,6 @@
 # AI Authoring
 
-This document governs how to write documentation and prompts for cross-model AI consumption. It covers linguistic patterns, instructional structure, and cross-model compatibility. For markdown formatting, see [markdown.md](markdown.md). For documentation organization, see [documentation.md](documentation.md).
+This document governs how to write documentation and prompts for cross-model AI consumption. It covers linguistic patterns, instructional structure, and cross-model compatibility. For markdown formatting, see [markdown.md](../markdown/README.md). For documentation organization, see [documentation.md](../documentation/README.md).
 
 **Core principle: write for the floor, not the ceiling.** A capable model always handles well-structured simple input. A less capable model fails on clever or ambiguous input. Clarity is never wasted on a smart model, but it is always missing for a dumb one.
 
@@ -27,7 +27,7 @@ These rules govern how to write instructions, conventions, and rules within docu
 ## Definitions and Terminology
 
 - Define terms on first use. Do not assume the model understands project-specific jargon. Example: "The SLA (Service Level Agreement, the contractual uptime commitment to the customer) must be referenced in all incident reports."
-- Use the same term for the same concept throughout all documentation. This reinforces the consistent terminology rule in [markdown.md](markdown.md).
+- Use the same term for the same concept throughout all documentation. This reinforces the consistent terminology rule in [markdown.md](../markdown/README.md).
 
 ## Examples
 
