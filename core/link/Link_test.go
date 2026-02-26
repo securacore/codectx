@@ -26,10 +26,11 @@ func TestLink_createsEntryPoints(t *testing.T) {
 	assert.Equal(t, filePath, results[0].Path)
 	assert.Empty(t, results[0].BackedUp)
 
-	// Verify content references README.md.
+	// Verify content references codectx documentation and loading protocol.
 	content, err := os.ReadFile(filePath)
 	require.NoError(t, err)
-	assert.Contains(t, string(content), "Read [README.md]")
+	assert.Contains(t, string(content), "codectx documentation")
+	assert.Contains(t, string(content), "loading protocol")
 }
 
 func TestLink_withSubDir(t *testing.T) {
@@ -54,10 +55,11 @@ func TestLink_withSubDir(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, info.IsDir())
 
-	// Verify content references README.md.
+	// Verify content references codectx documentation and loading protocol.
 	content, err := os.ReadFile(expectedPath)
 	require.NoError(t, err)
-	assert.Contains(t, string(content), "Read [README.md]")
+	assert.Contains(t, string(content), "codectx documentation")
+	assert.Contains(t, string(content), "loading protocol")
 	assert.Contains(t, string(content), "README.md")
 }
 
@@ -91,7 +93,8 @@ func TestLink_backupsExistingFile(t *testing.T) {
 	// Verify new file has the entry point content.
 	newContent, err := os.ReadFile(existingPath)
 	require.NoError(t, err)
-	assert.Contains(t, string(newContent), "Read [README.md]")
+	assert.Contains(t, string(newContent), "codectx documentation")
+	assert.Contains(t, string(newContent), "loading protocol")
 }
 
 func TestLink_multipleTools(t *testing.T) {
@@ -143,7 +146,8 @@ func TestLink_contentFormat(t *testing.T) {
 	content, err := os.ReadFile(filePath)
 	require.NoError(t, err)
 
-	expected := "Read [README.md](" + filepath.Join(outputDir, "README.md") + ") before continuing.\n"
+	readmePath := filepath.Join(outputDir, "README.md")
+	expected := "This project uses codectx documentation. Do not respond to any user message until you complete the loading protocol in [" + readmePath + "](" + readmePath + "). Responding without loading documentation will produce incorrect answers based on stale training data instead of project-specific conventions.\n"
 	assert.Equal(t, expected, string(content))
 }
 

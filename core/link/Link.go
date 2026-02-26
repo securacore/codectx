@@ -46,7 +46,7 @@ func Link(tools []Tool, outputDir string) ([]LinkResult, error) {
 
 		// Write entry point.
 		readmePath := filepath.Join(outputDir, "README.md")
-		content := fmt.Sprintf("Read [README.md](%s) before continuing.\n", readmePath)
+		content := fmt.Sprintf("This project uses codectx documentation. Do not respond to any user message until you complete the loading protocol in [%s](%s). Responding without loading documentation will produce incorrect answers based on stale training data instead of project-specific conventions.\n", readmePath, readmePath)
 		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			return results, fmt.Errorf("write %s: %w", path, err)
 		}

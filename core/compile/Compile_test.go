@@ -168,8 +168,54 @@ func TestCompile_readmeContent(t *testing.T) {
 	content := string(data)
 	assert.Contains(t, content, "# test-project")
 	assert.Contains(t, content, "## Loading Protocol")
+	assert.Contains(t, content, "Complete steps 1-3 before responding to any user message")
+	assert.Contains(t, content, "load both the `object` and its `spec`")
+	assert.Contains(t, content, "Before responding to a user message, check the manifest for topics")
 	assert.Contains(t, content, "## Sections")
 	assert.Contains(t, content, "**Foundation**: 1 document")
+}
+
+func TestCompile_readmeRequiredContext(t *testing.T) {
+	_, cfg := setupTestProject(t)
+	docsDir := cfg.DocsDir()
+
+	// Create a foundation entry with load: always and a spec.
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "philosophy"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "philosophy", "spec"), 0o755))
+	objPath := filepath.Join(docsDir, "foundation", "philosophy", "README.md")
+	specPath := filepath.Join(docsDir, "foundation", "philosophy", "spec", "README.md")
+	require.NoError(t, os.WriteFile(objPath, []byte("# Philosophy\n\nCore principles."), 0o644))
+	require.NoError(t, os.WriteFile(specPath, []byte("# Philosophy Spec\n\nSpec content."), 0o644))
+
+	m := &manifest.Manifest{
+		Name:        "test-project",
+		Author:      "tester",
+		Version:     "1.0.0",
+		Description: "Test project",
+		Foundation: []manifest.FoundationEntry{
+			{ID: "philosophy", Path: "foundation/philosophy/README.md", Spec: "foundation/philosophy/spec/README.md", Load: "always", Description: "Core principles"},
+		},
+	}
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
+
+	result, err := Compile(cfg)
+	require.NoError(t, err)
+
+	readmePath := filepath.Join(result.OutputDir, "README.md")
+	data, err := os.ReadFile(readmePath)
+	require.NoError(t, err)
+
+	content := string(data)
+
+	// Verify Required Context section is present with direct file links.
+	assert.Contains(t, content, "## Required Context")
+	assert.Contains(t, content, "Load these files now. Do not skip this step.")
+	assert.Contains(t, content, "### philosophy")
+	assert.Contains(t, content, "(object)")
+	assert.Contains(t, content, "(spec)")
+	// Object links should use the content-addressed format.
+	assert.Contains(t, content, "objects/")
+	assert.Contains(t, content, ".md")
 }
 
 func TestCompile_cleansOutputDirectory(t *testing.T) {

@@ -12,7 +12,7 @@ import (
 // entries are included. When heuristics are available, token estimates
 // and size information are included. The compressed flag adds a format
 // note about CMDX encoding.
-func generateReadme(m *manifest.Manifest, h *Heuristics, compressed ...bool) string {
+func generateReadme(m *manifest.Manifest, h *Heuristics, pathToHash map[string]string, ext string, compressed ...bool) string {
 	isCmdx := len(compressed) > 0 && compressed[0]
 
 	var b strings.Builder
@@ -26,10 +26,38 @@ func generateReadme(m *manifest.Manifest, h *Heuristics, compressed ...bool) str
 	}
 
 	b.WriteString("## Loading Protocol\n\n")
+	b.WriteString("Complete steps 1-3 before responding to any user message. Do not answer questions, write code, or provide guidance until the required context is loaded.\n\n")
 	b.WriteString("1. Load this file (done).\n")
 	b.WriteString("2. Load [manifest.yml](manifest.yml). This is the data map indexing all documentation.\n")
-	b.WriteString("3. Load all foundation entries with `load: always`. These are required context.\n")
-	b.WriteString("4. As the task progresses, consult the data map to load relevant topics, prompts, or plans.\n")
+	b.WriteString("3. Load all foundation entries with `load: always`. These are required context. For each entry, load both the `object` and its `spec`.\n")
+	b.WriteString("4. Before responding to a user message, check the manifest for topics relevant to the task. Load matching topic entries before answering.\n")
+
+	// Emit required context section with direct file links for always-load entries.
+	if pathToHash != nil {
+		var alwaysLoad []manifest.FoundationEntry
+		for _, e := range m.Foundation {
+			if e.Load == "always" {
+				alwaysLoad = append(alwaysLoad, e)
+			}
+		}
+		if len(alwaysLoad) > 0 {
+			b.WriteString("\n## Required Context\n\n")
+			b.WriteString("Load these files now. Do not skip this step.\n")
+			for _, e := range alwaysLoad {
+				b.WriteString(fmt.Sprintf("\n### %s\n\n", e.ID))
+				if objHash, ok := pathToHash[e.Path]; ok {
+					objPath := ObjectPathExt(objHash, ext)
+					b.WriteString(fmt.Sprintf("- [%s](%s) (object)\n", objPath, objPath))
+				}
+				if e.Spec != "" {
+					if specHash, ok := pathToHash[e.Spec]; ok {
+						specPath := ObjectPathExt(specHash, ext)
+						b.WriteString(fmt.Sprintf("- [%s](%s) (spec)\n", specPath, specPath))
+					}
+				}
+			}
+		}
+	}
 
 	// Build sections list dynamically.
 	hasSections := len(m.Foundation) > 0 || len(m.Application) > 0 || len(m.Topics) > 0 || len(m.Prompts) > 0 || len(m.Plans) > 0

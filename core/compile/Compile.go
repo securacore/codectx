@@ -208,7 +208,7 @@ func Compile(cfg *config.Config, onProgress ...func(ProgressEvent)) (*Result, er
 	}
 
 	// Generate and write compiled README.md.
-	readmeContent := generateReadme(unified, h, compressed)
+	readmeContent := generateReadme(unified, h, pathToHash, store.ext(), compressed)
 	readmePath := filepath.Join(outputDir, "README.md")
 	if err := os.WriteFile(readmePath, []byte(readmeContent), 0o644); err != nil {
 		return nil, fmt.Errorf("write compiled README.md: %w", err)
