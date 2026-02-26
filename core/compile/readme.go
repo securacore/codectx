@@ -44,15 +44,15 @@ func generateReadme(m *manifest.Manifest, h *Heuristics, pathToHash map[string]s
 			b.WriteString("\n## Required Context\n\n")
 			b.WriteString("Load these files now. Do not skip this step.\n")
 			for _, e := range alwaysLoad {
-				b.WriteString(fmt.Sprintf("\n### %s\n\n", e.ID))
+				fmt.Fprintf(&b, "\n### %s\n\n", e.ID)
 				if objHash, ok := pathToHash[e.Path]; ok {
 					objPath := ObjectPathExt(objHash, ext)
-					b.WriteString(fmt.Sprintf("- [%s](%s) (object)\n", objPath, objPath))
+					fmt.Fprintf(&b, "- [%s](%s) (object)\n", objPath, objPath)
 				}
 				if e.Spec != "" {
 					if specHash, ok := pathToHash[e.Spec]; ok {
 						specPath := ObjectPathExt(specHash, ext)
-						b.WriteString(fmt.Sprintf("- [%s](%s) (spec)\n", specPath, specPath))
+						fmt.Fprintf(&b, "- [%s](%s) (spec)\n", specPath, specPath)
 					}
 				}
 			}
