@@ -27,7 +27,7 @@ func TestRun_withName_createsDirectoryAndProject(t *testing.T) {
 	defer func() { _ = os.Chdir(origDir) }()
 	require.NoError(t, os.Chdir(dir))
 
-	err = run("test-project", preferences.BoolPtr(true))
+	err = run("test-project", preferences.BoolPtr(true), false)
 	require.NoError(t, err)
 
 	projectDir := filepath.Join(dir, "test-project")
@@ -97,14 +97,14 @@ func TestRun_failsIfAlreadyInitialized(t *testing.T) {
 	require.NoError(t, os.Chdir(dir))
 
 	// First init succeeds.
-	err = run("test-project", preferences.BoolPtr(true))
+	err = run("test-project", preferences.BoolPtr(true), false)
 	require.NoError(t, err)
 
 	// Chdir into the project dir so the second init detects it.
 	require.NoError(t, os.Chdir(filepath.Join(dir, "test-project")))
 
 	// Second init fails (codectx.yml exists in cwd).
-	err = run("", preferences.BoolPtr(true))
+	err = run("", preferences.BoolPtr(true), false)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "already exists")
 }
@@ -294,7 +294,7 @@ func TestRun_withName_configContent(t *testing.T) {
 	defer func() { _ = os.Chdir(origDir) }()
 	require.NoError(t, os.Chdir(dir))
 
-	err = run("my-project", preferences.BoolPtr(false))
+	err = run("my-project", preferences.BoolPtr(false), false)
 	require.NoError(t, err)
 
 	projectDir := filepath.Join(dir, "my-project")
@@ -350,7 +350,7 @@ func TestRun_initDiscoversExistingDocs(t *testing.T) {
 		filepath.Join(projectDir, "docs", "foundation", "philosophy", "README.md"),
 		[]byte("# Philosophy\nCore principles.\n"), 0o644))
 
-	err = run("discover-test", preferences.BoolPtr(true))
+	err = run("discover-test", preferences.BoolPtr(true), false)
 	require.NoError(t, err)
 
 	// Read back the manifest — it should contain the pre-existing entry
@@ -388,7 +388,7 @@ func TestRun_initInfersRelationships(t *testing.T) {
 		filepath.Join(projectDir, "docs", "foundation", "beta", "README.md"),
 		[]byte("# Beta\nExtends [alpha](../alpha/README.md).\n"), 0o644))
 
-	err = run("rel-test", preferences.BoolPtr(true))
+	err = run("rel-test", preferences.BoolPtr(true), false)
 	require.NoError(t, err)
 
 	// Read back the manifest — should have default entries plus alpha and beta.
@@ -420,7 +420,7 @@ func TestRun_nonInteractive_aiConfigNil(t *testing.T) {
 	require.NoError(t, os.Chdir(dir))
 
 	// Non-interactive mode: autoCompile is non-nil, so AI prompt is skipped.
-	err = run("ai-skip-test", preferences.BoolPtr(true))
+	err = run("ai-skip-test", preferences.BoolPtr(true), false)
 	require.NoError(t, err)
 
 	projectDir := filepath.Join(dir, "ai-skip-test")
@@ -442,7 +442,7 @@ func TestRun_writesDefaultFoundationFiles(t *testing.T) {
 	defer func() { _ = os.Chdir(origDir) }()
 	require.NoError(t, os.Chdir(dir))
 
-	err = run("defaults-test", preferences.BoolPtr(true))
+	err = run("defaults-test", preferences.BoolPtr(true), false)
 	require.NoError(t, err)
 
 	projectDir := filepath.Join(dir, "defaults-test")
@@ -470,7 +470,7 @@ func TestRun_manifestContainsDefaultFoundationEntries(t *testing.T) {
 	defer func() { _ = os.Chdir(origDir) }()
 	require.NoError(t, os.Chdir(dir))
 
-	err = run("manifest-defaults-test", preferences.BoolPtr(true))
+	err = run("manifest-defaults-test", preferences.BoolPtr(true), false)
 	require.NoError(t, err)
 
 	projectDir := filepath.Join(dir, "manifest-defaults-test")
@@ -516,7 +516,7 @@ func TestRun_defaultsDoNotOverwriteExistingFiles(t *testing.T) {
 	customContent := []byte("# My Custom Philosophy\nUser-owned.\n")
 	require.NoError(t, os.WriteFile(customPath, customContent, 0o644))
 
-	err = run("no-overwrite-test", preferences.BoolPtr(true))
+	err = run("no-overwrite-test", preferences.BoolPtr(true), false)
 	require.NoError(t, err)
 
 	// Verify the custom file was NOT overwritten.
@@ -530,6 +530,108 @@ func TestRun_defaultsDoNotOverwriteExistingFiles(t *testing.T) {
 	assert.NoError(t, err, "documentation/README.md should be created since it didn't exist")
 }
 
+func TestRun_packageMode_noFoundationFiles(t *testing.T) {
+	dir := t.TempDir()
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(dir))
+
+	err = run("my-package", preferences.BoolPtr(true), true)
+	require.NoError(t, err)
+
+	projectDir := filepath.Join(dir, "my-package")
+
+	// Default foundation files should NOT exist.
+	defaultDocs := []string{"philosophy", "documentation", "markdown", "specs", "ai-authoring"}
+	for _, doc := range defaultDocs {
+		readme := filepath.Join(projectDir, "docs", "foundation", doc, "README.md")
+		_, err := os.Stat(readme)
+		assert.True(t, os.IsNotExist(err), "foundation/%s/README.md should not exist in package mode", doc)
+	}
+
+	// But the foundation directory itself should still be created (empty).
+	info, err := os.Stat(filepath.Join(projectDir, "docs", "foundation"))
+	require.NoError(t, err)
+	assert.True(t, info.IsDir())
+}
+
+func TestRun_packageMode_noFoundationEntriesInManifest(t *testing.T) {
+	dir := t.TempDir()
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(dir))
+
+	err = run("my-package", preferences.BoolPtr(true), true)
+	require.NoError(t, err)
+
+	projectDir := filepath.Join(dir, "my-package")
+	m, err := manifest.Load(filepath.Join(projectDir, "docs", "manifest.yml"))
+	require.NoError(t, err)
+
+	// Manifest should have no foundation entries (no defaults pre-populated,
+	// no files on disk for Discover to find).
+	assert.Empty(t, m.Foundation, "package mode should have no foundation entries")
+}
+
+func TestRun_packageMode_stillCreatesProjectStructure(t *testing.T) {
+	dir := t.TempDir()
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(dir))
+
+	err = run("my-package", preferences.BoolPtr(true), true)
+	require.NoError(t, err)
+
+	projectDir := filepath.Join(dir, "my-package")
+
+	// Core project files should still exist.
+	_, err = os.Stat(filepath.Join(projectDir, "codectx.yml"))
+	assert.NoError(t, err, "codectx.yml should exist")
+
+	_, err = os.Stat(filepath.Join(projectDir, "docs", "manifest.yml"))
+	assert.NoError(t, err, "manifest.yml should exist")
+
+	_, err = os.Stat(filepath.Join(projectDir, ".codectx", "preferences.yml"))
+	assert.NoError(t, err, "preferences.yml should exist")
+
+	// Schemas should still be written (useful for development).
+	schemaFiles := []string{
+		"docs/schemas/codectx.schema.json",
+		"docs/schemas/manifest.schema.json",
+		"docs/schemas/plan.schema.json",
+	}
+	for _, f := range schemaFiles {
+		_, err := os.Stat(filepath.Join(projectDir, f))
+		assert.NoError(t, err, "schema %s should exist in package mode", f)
+	}
+
+	// Directory structure should still exist.
+	dirs := []string{"docs/topics", "docs/prompts", "docs/plans"}
+	for _, d := range dirs {
+		info, err := os.Stat(filepath.Join(projectDir, d))
+		require.NoError(t, err, "directory %s should exist", d)
+		assert.True(t, info.IsDir())
+	}
+}
+
+func TestRun_packageMode_commandFlagRegistered(t *testing.T) {
+	// Verify the --package flag is registered on the Command.
+	var found bool
+	for _, f := range Command.Flags {
+		if names := f.Names(); len(names) > 0 && names[0] == "package" {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "Command should have a --package flag")
+}
+
 func TestRun_withName_preferencesAutoCompileTrue(t *testing.T) {
 	dir := t.TempDir()
 
@@ -538,7 +640,7 @@ func TestRun_withName_preferencesAutoCompileTrue(t *testing.T) {
 	defer func() { _ = os.Chdir(origDir) }()
 	require.NoError(t, os.Chdir(dir))
 
-	err = run("pref-test", preferences.BoolPtr(true))
+	err = run("pref-test", preferences.BoolPtr(true), false)
 	require.NoError(t, err)
 
 	projectDir := filepath.Join(dir, "pref-test")

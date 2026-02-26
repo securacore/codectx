@@ -27,12 +27,18 @@ var Command = &cli.Command{
 	Name:      "init",
 	Usage:     "Initialize a new codectx project",
 	ArgsUsage: "[name]",
+	Flags: []cli.Flag{
+		&cli.BoolFlag{
+			Name:  "package",
+			Usage: "Initialize as a documentation package (skip default foundation documents)",
+		},
+	},
 	Action: func(ctx context.Context, c *cli.Command) error {
-		return run(c.Args().First(), nil)
+		return run(c.Args().First(), nil, c.Bool("package"))
 	},
 }
 
-func run(name string, autoCompile *bool) error {
+func run(name string, autoCompile *bool, isPackage bool) error {
 	// If a name is provided as argument, create the directory and work inside it.
 	if name != "" {
 		if err := os.MkdirAll(name, 0o755); err != nil {
@@ -112,9 +118,13 @@ func run(name string, autoCompile *bool) error {
 	}
 
 	// Write embedded default foundation documents to docs/foundation/.
-	foundationDir := filepath.Join(docsDir, "foundation")
-	if err := defaults.WriteAll(foundationDir); err != nil {
-		return fmt.Errorf("write defaults: %w", err)
+	// Packages skip this step — foundation documents are project-level
+	// conventions and should not be duplicated into every published package.
+	if !isPackage {
+		foundationDir := filepath.Join(docsDir, "foundation")
+		if err := defaults.WriteAll(foundationDir); err != nil {
+			return fmt.Errorf("write defaults: %w", err)
+		}
 	}
 
 	// Create codectx.yml.
@@ -127,14 +137,18 @@ func run(name string, autoCompile *bool) error {
 	}
 
 	// Create docs/manifest.yml (local package data map).
-	// Pre-populate Foundation with default entries so Sync's merge-missing
-	// preserves their load values (which Discover never auto-sets).
 	m := &manifest.Manifest{
 		Name:        name,
 		Author:      "",
 		Version:     "0.1.0",
 		Description: fmt.Sprintf("Documentation package for %s", name),
-		Foundation:  defaults.Entries(),
+	}
+
+	// Pre-populate Foundation with default entries so Sync's merge-missing
+	// preserves their load values (which Discover never auto-sets).
+	// Packages skip this — they don't ship default foundation documents.
+	if !isPackage {
+		m.Foundation = defaults.Entries()
 	}
 
 	// Sync: discover entries, remove stale, infer relationships from links.
@@ -192,7 +206,11 @@ func run(name string, autoCompile *bool) error {
 		return fmt.Errorf("write preferences: %w", err)
 	}
 
-	ui.Done(fmt.Sprintf("Initialized codectx project: %s", name))
+	kind := "project"
+	if isPackage {
+		kind = "package"
+	}
+	ui.Done(fmt.Sprintf("Initialized codectx %s: %s", kind, name))
 	ui.Blank()
 	ui.Header("Created:")
 	ui.Item(configFile)

@@ -1,0 +1,59 @@
+@CMDX v1
+@DICT{
+  $0=https://api.example.com/v2
+  $1=The unique identifier of the user
+  $2=string
+  $3=Display name
+  $4=Primary email address
+  $5=Returns a JSON object containing
+  $6=One of: admin, user, viewer
+}
+@META{title:User Management API}
+
+@H1 User Management API
+@P Base URL: @C{$0}
+@P All requests require an @B{Authorization} header with a valid Bearer token. See @LINK{Authentication Guide>$0/docs/auth} for details.
+
+@H2 Endpoints
+
+@ENDPOINT{GET /users/{id}}
+@P Retrieves a user by their unique identifier.
+@PARAMS{
+  id:$2:R~$1
+}
+@P $5 the user data:
+@KV{
+  id:$2~$1
+  name:$2~$3
+  email:$2~$4
+  role:$2~$6
+  created_at:$2~ISO 8601 timestamp
+}
+
+@ENDPOINT{POST /users}
+@P Creates a new user account.
+@PARAMS{
+  name:$2:R~$3
+  email:$2:R~$4
+  role:$2:O~$6. Default: user
+}
+@P $5 the created user.
+
+@ENDPOINT{DELETE /users/{id}}
+@P Deletes a user by their unique identifier.
+@PARAMS{
+  id:$2:R~$1
+}
+@P $5 a confirmation message.
+@WARN{This action is irreversible. All user data will be permanently deleted.}
+
+@H2 Rate Limits
+@P All endpoints are subject to rate limiting. See @LINK{Rate Limits>$0/docs/rate-limits} for current limits.
+
+@H2 Errors
+@P All errors return a JSON object containing:
+@KV{
+  code:$2~Machine-readable error code
+  message:$2~Human-readable error description
+  request_id:$2~Unique identifier for the request
+}
