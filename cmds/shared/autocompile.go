@@ -70,6 +70,7 @@ func MaybeAutoCompile(cfg *config.Config) error {
 		ui.KV("Objects pruned", result.ObjectsPruned, 16)
 	}
 	ui.KV("Packages", result.Packages, 16)
+	ui.Blank()
 
 	return nil
 }

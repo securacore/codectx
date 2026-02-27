@@ -47,3 +47,32 @@ func TestValidateAIProvider_empty(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown AI provider")
 }
+
+func TestValidateAIProvider_knownProviders(t *testing.T) {
+	// Test each known provider. If the binary is available, it should
+	// succeed. If not, it should fail with "binary not found" (not
+	// "unknown provider").
+	for _, id := range []string{"claude", "opencode", "ollama"} {
+		err := ValidateAIProvider(id)
+		if err != nil {
+			// It's a known provider but binary not found on PATH — that's
+			// a legitimate runtime state, not a test failure.
+			assert.Contains(t, err.Error(), "binary")
+			assert.Contains(t, err.Error(), "not found")
+			assert.NotContains(t, err.Error(), "unknown AI provider")
+		}
+		// If no error, the binary was found on PATH.
+	}
+}
+
+func TestValidateAIProvider_errorFormat(t *testing.T) {
+	// Unknown provider error should list all known providers.
+	err := ValidateAIProvider("nonexistent")
+	require.Error(t, err)
+	msg := err.Error()
+	assert.Contains(t, msg, "unknown AI provider")
+	assert.Contains(t, msg, "nonexistent")
+	assert.Contains(t, msg, "claude")
+	assert.Contains(t, msg, "opencode")
+	assert.Contains(t, msg, "ollama")
+}

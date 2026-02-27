@@ -84,6 +84,7 @@ func (m compileModel) View() string {
 }
 
 func run() error {
+	ui.Blank()
 	cfg, err := config.Load(configFile)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
@@ -177,6 +178,7 @@ func run() error {
 			}
 		}
 	}
+	ui.Blank()
 
 	return nil
 }

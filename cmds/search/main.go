@@ -37,6 +37,7 @@ func run(query, author string) error {
 }
 
 func runWith(query, author string, search searchFn) error {
+	ui.Blank()
 	var results []resolve.SearchResult
 	err := ui.SpinErr(fmt.Sprintf("Searching for packages matching %q...", query), func() error {
 		var searchErr error
@@ -68,6 +69,7 @@ func runWith(query, author string, search searchFn) error {
 	ui.Table(headers, rows, 2)
 	ui.Blank()
 	ui.Done(fmt.Sprintf("%d package(s) found. Install with: codectx add <package>", len(results)))
+	ui.Blank()
 
 	return nil
 }

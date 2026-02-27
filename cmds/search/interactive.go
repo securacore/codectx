@@ -374,5 +374,6 @@ func runInteractive(author string) error {
 		return nil
 	}
 
+	// add.Run adds its own leading+trailing blanks.
 	return add.Run([]string{pkg}, "", "")
 }

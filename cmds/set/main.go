@@ -59,6 +59,7 @@ var Command = &cli.Command{
 
 // showAll lists every known preference with its current value.
 func showAll() error {
+	ui.Blank()
 	cfg, err := config.Load(configFile)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
@@ -80,6 +81,7 @@ func showAll() error {
 
 	ui.Blank()
 	ui.Item("Set a value: codectx set key=value")
+	ui.Blank()
 
 	return nil
 }

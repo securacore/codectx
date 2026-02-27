@@ -19,6 +19,7 @@ var statsCommand = &cli.Command{
 }
 
 func runStats(c *cli.Command) error {
+	ui.Blank()
 	input, err := readInput(c)
 	if err != nil {
 		return err
@@ -36,6 +37,7 @@ func runStats(c *cli.Command) error {
 	ui.KV("Token savings", fmt.Sprintf("%.1f%%", stats.TokenSavings), 18)
 	ui.KV("Dict entries", fmt.Sprintf("%d (saved %d bytes)", stats.DictEntries, stats.DictSavings), 18)
 	ui.KV("Domain savings", fmt.Sprintf("%d bytes", stats.DomainSavings), 18)
+	ui.Blank()
 
 	return nil
 }

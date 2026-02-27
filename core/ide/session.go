@@ -1,0 +1,177 @@
+package ide
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/securacore/codectx/core/llm"
+	"gopkg.in/yaml.v3"
+)
+
+// Session represents a documentation authoring session.
+type Session struct {
+	ID              string        `yaml:"id"`
+	Provider        string        `yaml:"provider"`
+	ProviderSession string        `yaml:"provider_session,omitempty"` // Claude CLI session UUID
+	Title           string        `yaml:"title"`
+	Category        string        `yaml:"category,omitempty"` // foundation/topic/prompt/application
+	Target          string        `yaml:"target,omitempty"`   // e.g., docs/topics/go-error-handling/
+	Phase           Phase         `yaml:"phase"`
+	Created         time.Time     `yaml:"created"`
+	Updated         time.Time     `yaml:"updated"`
+	Messages        []llm.Message `yaml:"messages,omitempty"` // Full history for stateless providers
+	Document        string        `yaml:"document,omitempty"` // Latest document draft content
+}
+
+// NewSession creates a new session with a UUID-based ID.
+func NewSession(provider string) *Session {
+	id := uuid.New().String()[:8] // Short prefix until classified
+	now := time.Now().UTC()
+	return &Session{
+		ID:       id,
+		Provider: provider,
+		Title:    "New document",
+		Phase:    PhaseDiscover,
+		Created:  now,
+		Updated:  now,
+	}
+}
+
+// SessionDir returns the sessions directory path inside the output directory.
+func SessionDir(outputDir string) string {
+	return filepath.Join(outputDir, "sessions")
+}
+
+// Save writes the session to a YAML file in the sessions directory.
+func Save(outputDir string, s *Session) error {
+	dir := SessionDir(outputDir)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("create sessions dir: %w", err)
+	}
+
+	s.Updated = time.Now().UTC()
+
+	data, err := yaml.Marshal(s)
+	if err != nil {
+		return fmt.Errorf("marshal session: %w", err)
+	}
+
+	path := filepath.Join(dir, s.ID+".yml")
+	return os.WriteFile(path, data, 0o644)
+}
+
+// Load reads a session from the sessions directory by ID.
+func Load(outputDir, id string) (*Session, error) {
+	path := filepath.Join(SessionDir(outputDir), id+".yml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read session %q: %w", id, err)
+	}
+
+	var s Session
+	if err := yaml.Unmarshal(data, &s); err != nil {
+		return nil, fmt.Errorf("parse session %q: %w", id, err)
+	}
+	return &s, nil
+}
+
+// List returns all sessions sorted by updated time (newest first).
+func List(outputDir string) ([]*Session, error) {
+	dir := SessionDir(outputDir)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read sessions dir: %w", err)
+	}
+
+	var sessions []*Session
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".yml") {
+			continue
+		}
+		id := strings.TrimSuffix(entry.Name(), ".yml")
+		s, err := Load(outputDir, id)
+		if err != nil {
+			continue // Skip corrupt sessions
+		}
+		sessions = append(sessions, s)
+	}
+
+	sort.Slice(sessions, func(i, j int) bool {
+		return sessions[i].Updated.After(sessions[j].Updated)
+	})
+
+	return sessions, nil
+}
+
+// Active returns sessions that are not in PhaseComplete, sorted by updated
+// time (newest first).
+func Active(outputDir string) ([]*Session, error) {
+	all, err := List(outputDir)
+	if err != nil {
+		return nil, err
+	}
+
+	var active []*Session
+	for _, s := range all {
+		if s.Phase != PhaseComplete {
+			active = append(active, s)
+		}
+	}
+	return active, nil
+}
+
+// Rename changes a session's ID and renames the file on disk.
+// If the target ID already exists, a numeric suffix is appended (-2, -3, etc.).
+func Rename(outputDir string, s *Session, newID string) error {
+	dir := SessionDir(outputDir)
+	oldPath := filepath.Join(dir, s.ID+".yml")
+
+	// Resolve collisions.
+	finalID := newID
+	for i := 2; ; i++ {
+		candidate := filepath.Join(dir, finalID+".yml")
+		if _, err := os.Stat(candidate); os.IsNotExist(err) {
+			break
+		}
+		finalID = fmt.Sprintf("%s-%d", newID, i)
+	}
+
+	newPath := filepath.Join(dir, finalID+".yml")
+	if err := os.Rename(oldPath, newPath); err != nil {
+		return fmt.Errorf("rename session: %w", err)
+	}
+
+	s.ID = finalID
+	return Save(outputDir, s)
+}
+
+// Cleanup removes completed sessions older than maxAge.
+func Cleanup(outputDir string, maxAge time.Duration) (int, error) {
+	all, err := List(outputDir)
+	if err != nil {
+		return 0, err
+	}
+
+	cutoff := time.Now().UTC().Add(-maxAge)
+	removed := 0
+	dir := SessionDir(outputDir)
+
+	for _, s := range all {
+		if s.Phase == PhaseComplete && s.Updated.Before(cutoff) {
+			path := filepath.Join(dir, s.ID+".yml")
+			if err := os.Remove(path); err == nil {
+				removed++
+			}
+		}
+	}
+
+	return removed, nil
+}

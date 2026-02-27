@@ -11,6 +11,7 @@ import (
 	cmdsai "github.com/securacore/codectx/cmds/ai"
 	"github.com/securacore/codectx/cmds/cmdx"
 	"github.com/securacore/codectx/cmds/compile"
+	"github.com/securacore/codectx/cmds/ide"
 	initialize "github.com/securacore/codectx/cmds/init"
 	"github.com/securacore/codectx/cmds/install"
 	"github.com/securacore/codectx/cmds/link"
@@ -37,6 +38,7 @@ func main() {
 			cmdsai.Command,
 			cmdx.Command,
 			compile.Command,
+			ide.Command,
 			initialize.Command,
 			install.Command,
 			link.Command,
@@ -56,21 +58,17 @@ func main() {
 		updateCh <- update.Check(version.Version)
 	}()
 
-	// Breathing room: blank line before and after all command output.
-	fmt.Println()
 	if err := app.Run(context.Background(), os.Args); err != nil {
 		ui.Fail(err.Error())
-		fmt.Println()
 		os.Exit(1)
 	}
-	fmt.Println()
 
 	// Collect update result with a short timeout.
 	if ui.IsTTY() {
 		select {
 		case result := <-updateCh:
 			if result != nil && result.Available {
-				fmt.Println()
+				ui.Blank()
 				ui.Warn(fmt.Sprintf(
 					"A new version of codectx is available: v%s -> v%s",
 					result.Current, result.Latest,

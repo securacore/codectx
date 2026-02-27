@@ -21,6 +21,7 @@ var statusCommand = &cli.Command{
 }
 
 func runStatus() error {
+	ui.Blank()
 	// Load config to determine output directory.
 	cfg, err := config.Load(configFile)
 	if err != nil {
@@ -70,6 +71,7 @@ func runStatus() error {
 			ui.Fail(fmt.Sprintf("%s (not found)", r.Provider.Name))
 		}
 	}
+	ui.Blank()
 
 	return nil
 }

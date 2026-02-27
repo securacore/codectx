@@ -652,5 +652,6 @@ func runInteractive() error {
 		return err
 	}
 
+	ui.Blank()
 	return nil
 }

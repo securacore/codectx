@@ -40,6 +40,7 @@ var Command = &cli.Command{
 
 // runCLI activates one or more packages by name via the command line.
 func runCLI(identifiers []string, activateFlag string) error {
+	ui.Blank()
 	cfg, err := config.Load(configFile)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
@@ -93,6 +94,7 @@ func runCLI(identifiers []string, activateFlag string) error {
 	if err := config.Write(configFile, cfg); err != nil {
 		return fmt.Errorf("write config: %w", err)
 	}
+	ui.Blank()
 
 	if err := shared.MaybeAutoCompile(cfg); err != nil {
 		return err

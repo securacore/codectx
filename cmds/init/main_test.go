@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/manifest"
 	"github.com/securacore/codectx/core/preferences"
 
@@ -704,4 +705,100 @@ func TestFormatBool(t *testing.T) {
 	assert.Equal(t, "true", formatBool(preferences.BoolPtr(true)))
 	assert.Equal(t, "false", formatBool(preferences.BoolPtr(false)))
 	assert.Equal(t, "(unset)", formatBool(nil))
+}
+
+// --- autoCompileAfterInit ---
+
+func TestAutoCompileAfterInit_success(t *testing.T) {
+	dir := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+	require.NoError(t, os.Chdir(dir))
+
+	// Set up a minimal project.
+	docsDir := filepath.Join(dir, "docs")
+	for _, sub := range []string{"foundation", "topics", "prompts", "plans"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(docsDir, sub), 0o755))
+	}
+
+	// Write a foundation document so compile has something to process.
+	require.NoError(t, os.WriteFile(
+		filepath.Join(docsDir, "foundation", "philosophy.md"),
+		[]byte("# Philosophy\nCore beliefs.\n"), 0o644))
+
+	cfg := &config.Config{
+		Name:     "test-project",
+		Packages: []config.PackageDep{},
+	}
+	require.NoError(t, config.Write(filepath.Join(dir, configFile), cfg))
+
+	m := &manifest.Manifest{
+		Name:    "test-project",
+		Version: "1.0.0",
+		Foundation: []manifest.FoundationEntry{
+			{ID: "philosophy", Path: "foundation/philosophy.md", Description: "Core philosophy"},
+		},
+	}
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
+
+	// autoCompileAfterInit should succeed.
+	err = autoCompileAfterInit(cfg)
+	require.NoError(t, err)
+
+	// Verify compiled output was produced.
+	outputDir := filepath.Join(dir, ".codectx")
+	_, err = os.Stat(filepath.Join(outputDir, "manifest.yml"))
+	assert.NoError(t, err)
+
+	entries, err := os.ReadDir(filepath.Join(outputDir, "objects"))
+	require.NoError(t, err)
+	assert.NotEmpty(t, entries)
+}
+
+func TestAutoCompileAfterInit_emptyProject(t *testing.T) {
+	dir := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+	require.NoError(t, os.Chdir(dir))
+
+	docsDir := filepath.Join(dir, "docs")
+	for _, sub := range []string{"foundation", "topics", "prompts", "plans"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(docsDir, sub), 0o755))
+	}
+
+	cfg := &config.Config{
+		Name:     "test-project",
+		Packages: []config.PackageDep{},
+	}
+	require.NoError(t, config.Write(filepath.Join(dir, configFile), cfg))
+
+	m := &manifest.Manifest{
+		Name:    "test-project",
+		Version: "1.0.0",
+	}
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
+
+	// Should succeed even with no entries.
+	err = autoCompileAfterInit(cfg)
+	require.NoError(t, err)
+}
+
+func TestAutoCompileAfterInit_missingManifest(t *testing.T) {
+	dir := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+	require.NoError(t, os.Chdir(dir))
+
+	cfg := &config.Config{
+		Name:     "test-project",
+		Packages: []config.PackageDep{},
+	}
+	require.NoError(t, config.Write(filepath.Join(dir, configFile), cfg))
+
+	// No docs/ dir or manifest — compile should fail.
+	err = autoCompileAfterInit(cfg)
+	require.Error(t, err)
 }

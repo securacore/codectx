@@ -8,8 +8,10 @@ import (
 	"path/filepath"
 
 	"github.com/securacore/codectx/cmds/shared"
+	"github.com/securacore/codectx/core/compile"
 	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/defaults"
+	corelink "github.com/securacore/codectx/core/link"
 	"github.com/securacore/codectx/core/manifest"
 	"github.com/securacore/codectx/core/preferences"
 	"github.com/securacore/codectx/core/schema"
@@ -39,6 +41,7 @@ var Command = &cli.Command{
 }
 
 func run(name string, autoCompile *bool, isPackage bool) error {
+	ui.Blank()
 	// If a name is provided as argument, create the directory and work inside it.
 	if name != "" {
 		if err := os.MkdirAll(name, 0o755); err != nil {
@@ -228,6 +231,19 @@ func run(name string, autoCompile *bool, isPackage bool) error {
 	ui.Blank()
 	ui.Item("Adjust preferences: codectx set")
 
+	// Auto-compile: since default foundation documents always exist after init,
+	// there is always content to compile. This gives the user a complete setup.
+	if ui.IsTTY() {
+		if err := autoCompileAfterInit(cfg); err != nil {
+			ui.Warn(fmt.Sprintf("compile: %s", err))
+		}
+
+		// Offer to link AI tools.
+		if err := promptLink(cfg.OutputDir()); err != nil {
+			ui.Warn(fmt.Sprintf("link: %s", err))
+		}
+	}
+
 	return nil
 }
 
@@ -292,6 +308,74 @@ func ensureGitignore() error {
 
 	// Create new .gitignore.
 	return os.WriteFile(path, []byte(gitignoreContent), 0o644)
+}
+
+// autoCompileAfterInit compiles the initial documentation using the inline
+// spinner pattern. Since default foundation documents always exist after init,
+// there is always content to compile.
+func autoCompileAfterInit(cfg *config.Config) error {
+	ui.Blank()
+	var result *compile.Result
+	err := ui.SpinErr("Compiling...", func() error {
+		var compileErr error
+		result, compileErr = compile.Compile(cfg)
+		return compileErr
+	})
+	if err != nil {
+		return err
+	}
+
+	ui.Done(fmt.Sprintf("Compiled to %s", result.OutputDir))
+	ui.KV("Objects stored", result.ObjectsStored, 16)
+	if result.ObjectsPruned > 0 {
+		ui.KV("Objects pruned", result.ObjectsPruned, 16)
+	}
+	ui.KV("Packages", result.Packages, 16)
+
+	return nil
+}
+
+// promptLink offers to set up AI tool integration by creating entry point files.
+// If the user declines, a hint is printed.
+func promptLink(outputDir string) error {
+	ui.Blank()
+	var confirm bool
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("Set up AI tool integration?").
+				Description("Creates entry point files so your AI tools automatically\nload project documentation on every session.").
+				Affirmative("Yes (recommended)").
+				Negative("No, I'll run 'codectx link' later").
+				Value(&confirm),
+		),
+	).WithTheme(ui.Theme())
+
+	if err := form.Run(); err != nil {
+		return nil // User canceled, not an error.
+	}
+
+	if !confirm {
+		ui.Step("Run 'codectx link' when you're ready.")
+		return nil
+	}
+
+	// Link all available tools with all selected by default.
+	results, err := corelink.Link(corelink.Tools, outputDir)
+	if err != nil {
+		return err
+	}
+
+	ui.Done("Linked")
+	for _, r := range results {
+		if r.BackedUp != "" {
+			ui.ItemDetail(r.Path, "backed up to "+r.BackedUp)
+		} else {
+			ui.Item(r.Path)
+		}
+	}
+
+	return nil
 }
 
 // splitLines splits a string into lines, handling both \n and \r\n.

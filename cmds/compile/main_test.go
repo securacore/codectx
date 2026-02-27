@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/securacore/codectx/core/compile"
 	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/manifest"
 
@@ -257,6 +258,108 @@ func TestRun_withDedupAndConflict(t *testing.T) {
 	outputDir := filepath.Join(dir, ".codectx")
 	_, err = os.Stat(filepath.Join(outputDir, "manifest.yml"))
 	assert.NoError(t, err)
+}
+
+// --- formatSize ---
+
+func TestFormatSize_bytes(t *testing.T) {
+	assert.Equal(t, "0 B", formatSize(0))
+	assert.Equal(t, "1 B", formatSize(1))
+	assert.Equal(t, "500 B", formatSize(500))
+	assert.Equal(t, "1023 B", formatSize(1023))
+}
+
+func TestFormatSize_kilobytes(t *testing.T) {
+	assert.Equal(t, "1.0 kB", formatSize(1024))
+	assert.Equal(t, "2.5 kB", formatSize(2560))
+	assert.Equal(t, "10.0 kB", formatSize(10240))
+	assert.Equal(t, "1023.0 kB", formatSize(1023*1024))
+}
+
+func TestFormatSize_megabytes(t *testing.T) {
+	assert.Equal(t, "1.0 MB", formatSize(1048576))
+	assert.Equal(t, "2.5 MB", formatSize(int(2.5*1024*1024)))
+	assert.Equal(t, "10.0 MB", formatSize(10*1024*1024))
+}
+
+// --- formatTokens ---
+
+func TestFormatTokens_below1000(t *testing.T) {
+	assert.Equal(t, "~0", formatTokens(0))
+	assert.Equal(t, "~1", formatTokens(1))
+	assert.Equal(t, "~500", formatTokens(500))
+	assert.Equal(t, "~999", formatTokens(999))
+}
+
+func TestFormatTokens_exact_thousands(t *testing.T) {
+	assert.Equal(t, "~1k", formatTokens(1000))
+	assert.Equal(t, "~2k", formatTokens(2000))
+	assert.Equal(t, "~10k", formatTokens(10000))
+}
+
+func TestFormatTokens_fractional_thousands(t *testing.T) {
+	assert.Equal(t, "~1.5k", formatTokens(1500))
+	assert.Equal(t, "~2.3k", formatTokens(2300))
+	assert.Equal(t, "~12.5k", formatTokens(12500))
+}
+
+// --- compileModel bubbletea ---
+
+func TestCompileModel_init(t *testing.T) {
+	m := newCompileModel()
+	assert.Equal(t, "Compiling...", m.message)
+	assert.False(t, m.done)
+	assert.Nil(t, m.result)
+	assert.Nil(t, m.err)
+	cmd := m.Init()
+	assert.NotNil(t, cmd) // spinner.Tick
+}
+
+func TestCompileModel_compileMsg(t *testing.T) {
+	m := newCompileModel()
+	result := &compile.Result{OutputDir: "/out", ObjectsStored: 5}
+
+	updated, cmd := m.Update(compileMsg{result: result, err: nil})
+	cm := updated.(compileModel)
+
+	assert.True(t, cm.done)
+	assert.Equal(t, result, cm.result)
+	assert.Nil(t, cm.err)
+	assert.NotNil(t, cmd) // tea.Quit
+}
+
+func TestCompileModel_compileMsgError(t *testing.T) {
+	m := newCompileModel()
+
+	updated, _ := m.Update(compileMsg{err: assert.AnError})
+	cm := updated.(compileModel)
+
+	assert.True(t, cm.done)
+	assert.Error(t, cm.err)
+}
+
+func TestCompileModel_progressMsg(t *testing.T) {
+	m := newCompileModel()
+
+	updated, cmd := m.Update(progressMsg{Message: "Processing foundation..."})
+	cm := updated.(compileModel)
+
+	assert.Equal(t, "Processing foundation...", cm.message)
+	assert.False(t, cm.done)
+	assert.Nil(t, cmd)
+}
+
+func TestCompileModel_viewNotDone(t *testing.T) {
+	m := newCompileModel()
+	view := m.View()
+	assert.Contains(t, view, "Compiling...")
+}
+
+func TestCompileModel_viewDone(t *testing.T) {
+	m := newCompileModel()
+	m.done = true
+	view := m.View()
+	assert.Empty(t, view)
 }
 
 func TestRun_customOutputDir(t *testing.T) {

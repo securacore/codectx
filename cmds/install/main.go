@@ -50,6 +50,7 @@ type installedPkg struct {
 }
 
 func run(activateFlag string) error {
+	ui.Blank()
 	// Load config.
 	cfg, err := config.Load(configFile)
 	if err != nil {
@@ -255,6 +256,7 @@ func run(activateFlag string) error {
 		ui.KV("Objects pruned", result.ObjectsPruned, 16)
 	}
 	ui.KV("Packages", result.Packages, 16)
+	ui.Blank()
 
 	return nil
 }
