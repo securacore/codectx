@@ -11,7 +11,6 @@ import (
 	cmdsai "github.com/securacore/codectx/cmds/ai"
 	"github.com/securacore/codectx/cmds/cmdx"
 	"github.com/securacore/codectx/cmds/compile"
-	"github.com/securacore/codectx/cmds/ide"
 	initialize "github.com/securacore/codectx/cmds/init"
 	"github.com/securacore/codectx/cmds/install"
 	"github.com/securacore/codectx/cmds/link"
@@ -38,7 +37,6 @@ func main() {
 			cmdsai.Command,
 			cmdx.Command,
 			compile.Command,
-			ide.Command,
 			initialize.Command,
 			install.Command,
 			link.Command,

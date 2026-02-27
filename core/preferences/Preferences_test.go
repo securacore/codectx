@@ -206,7 +206,7 @@ func TestWriteAndLoad_allFields(t *testing.T) {
 	original := &Preferences{
 		Compression: BoolPtr(true),
 		AutoCompile: BoolPtr(false),
-		AI:          &AIConfig{Provider: "claude", Model: ""},
+		AI:          &AIConfig{Bin: "claude", Model: ""},
 	}
 	require.NoError(t, Write(dir, original))
 
@@ -217,12 +217,12 @@ func TestWriteAndLoad_allFields(t *testing.T) {
 	require.NotNil(t, loaded.AutoCompile)
 	assert.False(t, *loaded.AutoCompile)
 	require.NotNil(t, loaded.AI)
-	assert.Equal(t, "claude", loaded.AI.Provider)
+	assert.Equal(t, "claude", loaded.AI.Bin)
 }
 
 func TestLoad_compressionFromFullYAML(t *testing.T) {
 	dir := t.TempDir()
-	yaml := "compression: true\nauto_compile: true\nai:\n  provider: claude\n"
+	yaml := "compression: true\nauto_compile: true\nai:\n  bin: claude\n"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "preferences.yml"), []byte(yaml), 0o644))
 
 	p, err := Load(dir)
@@ -232,7 +232,7 @@ func TestLoad_compressionFromFullYAML(t *testing.T) {
 	require.NotNil(t, p.AutoCompile)
 	assert.True(t, *p.AutoCompile)
 	require.NotNil(t, p.AI)
-	assert.Equal(t, "claude", p.AI.Provider)
+	assert.Equal(t, "claude", p.AI.Bin)
 }
 
 // --- AIConfig tests ---
@@ -257,7 +257,7 @@ func TestWriteAndLoad_aiConfig_roundTrip(t *testing.T) {
 	dir := t.TempDir()
 	original := &Preferences{
 		AutoCompile: BoolPtr(true),
-		AI:          &AIConfig{Provider: "claude"},
+		AI:          &AIConfig{Bin: "claude"},
 	}
 
 	err := Write(dir, original)
@@ -266,7 +266,7 @@ func TestWriteAndLoad_aiConfig_roundTrip(t *testing.T) {
 	loaded, err := Load(dir)
 	require.NoError(t, err)
 	require.NotNil(t, loaded.AI)
-	assert.Equal(t, "claude", loaded.AI.Provider)
+	assert.Equal(t, "claude", loaded.AI.Bin)
 	assert.Empty(t, loaded.AI.Model)
 }
 
@@ -274,7 +274,7 @@ func TestWriteAndLoad_aiConfig_withModel(t *testing.T) {
 	dir := t.TempDir()
 	original := &Preferences{
 		AutoCompile: BoolPtr(false),
-		AI:          &AIConfig{Provider: "ollama", Model: "llama3.2:latest"},
+		AI:          &AIConfig{Bin: "ollama", Model: "llama3.2:latest"},
 	}
 
 	err := Write(dir, original)
@@ -283,7 +283,7 @@ func TestWriteAndLoad_aiConfig_withModel(t *testing.T) {
 	loaded, err := Load(dir)
 	require.NoError(t, err)
 	require.NotNil(t, loaded.AI)
-	assert.Equal(t, "ollama", loaded.AI.Provider)
+	assert.Equal(t, "ollama", loaded.AI.Bin)
 	assert.Equal(t, "llama3.2:latest", loaded.AI.Model)
 }
 
@@ -305,7 +305,7 @@ func TestWriteAndLoad_aiConfig_nilAI(t *testing.T) {
 func TestWriteAndLoad_aiConfig_providerOnly(t *testing.T) {
 	dir := t.TempDir()
 	original := &Preferences{
-		AI: &AIConfig{Provider: "opencode"},
+		AI: &AIConfig{Bin: "opencode"},
 	}
 
 	err := Write(dir, original)
@@ -314,7 +314,7 @@ func TestWriteAndLoad_aiConfig_providerOnly(t *testing.T) {
 	loaded, err := Load(dir)
 	require.NoError(t, err)
 	require.NotNil(t, loaded.AI)
-	assert.Equal(t, "opencode", loaded.AI.Provider)
+	assert.Equal(t, "opencode", loaded.AI.Bin)
 	assert.Empty(t, loaded.AI.Model)
 	// AutoCompile should remain nil when not set.
 	assert.Nil(t, loaded.AutoCompile)
@@ -322,7 +322,7 @@ func TestWriteAndLoad_aiConfig_providerOnly(t *testing.T) {
 
 func TestLoad_aiConfig_fromYAML(t *testing.T) {
 	dir := t.TempDir()
-	yaml := "auto_compile: true\nai:\n  provider: ollama\n  model: codellama:7b\n"
+	yaml := "auto_compile: true\nai:\n  bin: ollama\n  model: codellama:7b\n"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "preferences.yml"), []byte(yaml), 0o644))
 
 	p, err := Load(dir)
@@ -330,19 +330,19 @@ func TestLoad_aiConfig_fromYAML(t *testing.T) {
 	require.NotNil(t, p.AutoCompile)
 	assert.True(t, *p.AutoCompile)
 	require.NotNil(t, p.AI)
-	assert.Equal(t, "ollama", p.AI.Provider)
+	assert.Equal(t, "ollama", p.AI.Bin)
 	assert.Equal(t, "codellama:7b", p.AI.Model)
 }
 
 func TestLoad_aiConfig_partialYAML_providerOnly(t *testing.T) {
 	dir := t.TempDir()
-	yaml := "ai:\n  provider: claude\n"
+	yaml := "ai:\n  bin: claude\n"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "preferences.yml"), []byte(yaml), 0o644))
 
 	p, err := Load(dir)
 	require.NoError(t, err)
 	require.NotNil(t, p.AI)
-	assert.Equal(t, "claude", p.AI.Provider)
+	assert.Equal(t, "claude", p.AI.Bin)
 	assert.Empty(t, p.AI.Model)
 }
 
@@ -351,7 +351,7 @@ func TestLoad_aiConfig_partialYAML_providerOnly(t *testing.T) {
 func TestWriteAndLoad_aiConfig_withClass(t *testing.T) {
 	dir := t.TempDir()
 	original := &Preferences{
-		AI: &AIConfig{Provider: "claude", Class: "gpt-4o-class"},
+		AI: &AIConfig{Bin: "claude", Class: "gpt-4o-class"},
 	}
 
 	err := Write(dir, original)
@@ -360,7 +360,7 @@ func TestWriteAndLoad_aiConfig_withClass(t *testing.T) {
 	loaded, err := Load(dir)
 	require.NoError(t, err)
 	require.NotNil(t, loaded.AI)
-	assert.Equal(t, "claude", loaded.AI.Provider)
+	assert.Equal(t, "claude", loaded.AI.Bin)
 	assert.Equal(t, "gpt-4o-class", loaded.AI.Class)
 }
 
@@ -376,19 +376,19 @@ func TestWriteAndLoad_aiConfig_classOnly(t *testing.T) {
 	loaded, err := Load(dir)
 	require.NoError(t, err)
 	require.NotNil(t, loaded.AI)
-	assert.Empty(t, loaded.AI.Provider)
+	assert.Empty(t, loaded.AI.Bin)
 	assert.Equal(t, "o1-class", loaded.AI.Class)
 }
 
 func TestLoad_aiConfig_classFromYAML(t *testing.T) {
 	dir := t.TempDir()
-	yaml := "ai:\n  provider: claude\n  class: claude-sonnet-class\n"
+	yaml := "ai:\n  bin: claude\n  class: claude-sonnet-class\n"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "preferences.yml"), []byte(yaml), 0o644))
 
 	p, err := Load(dir)
 	require.NoError(t, err)
 	require.NotNil(t, p.AI)
-	assert.Equal(t, "claude", p.AI.Provider)
+	assert.Equal(t, "claude", p.AI.Bin)
 	assert.Equal(t, "claude-sonnet-class", p.AI.Class)
 }
 
@@ -397,7 +397,7 @@ func TestWriteAndLoad_allFieldsIncludingClass(t *testing.T) {
 	original := &Preferences{
 		Compression: BoolPtr(true),
 		AutoCompile: BoolPtr(false),
-		AI:          &AIConfig{Provider: "claude", Model: "sonnet", Class: "gpt-4o-class"},
+		AI:          &AIConfig{Bin: "claude", Model: "sonnet", Class: "gpt-4o-class"},
 	}
 	require.NoError(t, Write(dir, original))
 
@@ -408,7 +408,7 @@ func TestWriteAndLoad_allFieldsIncludingClass(t *testing.T) {
 	require.NotNil(t, loaded.AutoCompile)
 	assert.False(t, *loaded.AutoCompile)
 	require.NotNil(t, loaded.AI)
-	assert.Equal(t, "claude", loaded.AI.Provider)
+	assert.Equal(t, "claude", loaded.AI.Bin)
 	assert.Equal(t, "sonnet", loaded.AI.Model)
 	assert.Equal(t, "gpt-4o-class", loaded.AI.Class)
 }
@@ -425,7 +425,7 @@ func TestWriteAndLoad_existingPrefs_addAI(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, loaded.AI)
 
-	loaded.AI = &AIConfig{Provider: "claude"}
+	loaded.AI = &AIConfig{Bin: "claude"}
 	require.NoError(t, Write(dir, loaded))
 
 	// Reload and verify both fields are preserved.
@@ -434,5 +434,5 @@ func TestWriteAndLoad_existingPrefs_addAI(t *testing.T) {
 	require.NotNil(t, reloaded.AutoCompile)
 	assert.True(t, *reloaded.AutoCompile)
 	require.NotNil(t, reloaded.AI)
-	assert.Equal(t, "claude", reloaded.AI.Provider)
+	assert.Equal(t, "claude", reloaded.AI.Bin)
 }

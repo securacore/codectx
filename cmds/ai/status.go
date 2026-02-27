@@ -38,15 +38,15 @@ func runStatus() error {
 	if prefs.AI == nil {
 		ui.Warn("Not configured. Run 'codectx ai setup' to enable.")
 	} else {
-		provider, ok := ai.ProviderByID(prefs.AI.Provider)
+		provider, ok := ai.ProviderByID(prefs.AI.Bin)
 		if !ok {
-			ui.Fail(fmt.Sprintf("Unknown provider: %s", prefs.AI.Provider))
+			ui.Fail(fmt.Sprintf("Unknown AI binary: %s", prefs.AI.Bin))
 		} else {
 			result := ai.DetectProvider(provider)
 			if result.Found {
-				ui.Done(fmt.Sprintf("Provider: %s (%s)", provider.Name, result.Path))
+				ui.Done(fmt.Sprintf("Binary: %s (%s)", provider.Name, result.Path))
 			} else {
-				ui.Fail(fmt.Sprintf("Provider: %s (binary not found — was it uninstalled?)", provider.Name))
+				ui.Fail(fmt.Sprintf("Binary: %s (not found on PATH — was it uninstalled?)", provider.Name))
 			}
 		}
 		if prefs.AI.Model != "" {
@@ -54,7 +54,7 @@ func runStatus() error {
 		}
 
 		// Ollama-specific: show service status.
-		if prefs.AI.Provider == "ollama" {
+		if prefs.AI.Bin == "ollama" {
 			printOllamaStatus()
 		}
 	}

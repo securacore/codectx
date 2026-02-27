@@ -78,7 +78,7 @@ func PromptAISetup() (*preferences.AIConfig, error) {
 	}
 
 	cfg := &preferences.AIConfig{
-		Provider: selectedID,
+		Bin: selectedID,
 	}
 
 	// Ollama-specific: prompt for model selection if service is running.

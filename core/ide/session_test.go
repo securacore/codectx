@@ -31,7 +31,7 @@ func saveRaw(t *testing.T, dir string, s *Session) {
 func TestNewSession(t *testing.T) {
 	s := NewSession("claude")
 	assert.Len(t, s.ID, 8) // UUID prefix
-	assert.Equal(t, "claude", s.Provider)
+	assert.Equal(t, "claude", s.Bin)
 	assert.Equal(t, "New document", s.Title)
 	assert.Equal(t, PhaseDiscover, s.Phase)
 	assert.False(t, s.Created.IsZero())
@@ -56,7 +56,7 @@ func TestSession_saveAndLoad(t *testing.T) {
 	assert.Equal(t, "topic", loaded.Category)
 	assert.Equal(t, "docs/topics/go-error-handling/", loaded.Target)
 	assert.Equal(t, PhaseDraft, loaded.Phase)
-	assert.Equal(t, "claude", loaded.Provider)
+	assert.Equal(t, "claude", loaded.Bin)
 }
 
 func TestSession_list(t *testing.T) {

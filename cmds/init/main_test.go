@@ -433,7 +433,7 @@ func TestRun_nonInteractive_aiConfigNil(t *testing.T) {
 	assert.True(t, *prefs.AutoCompile)
 	// AI config exists because the default model class is always set.
 	require.NotNil(t, prefs.AI)
-	assert.Empty(t, prefs.AI.Provider, "provider should be empty when prompt is skipped")
+	assert.Empty(t, prefs.AI.Bin, "ai.bin should be empty when prompt is skipped")
 	assert.Equal(t, "gpt-4o-class", prefs.AI.Class, "default model class should be set")
 }
 

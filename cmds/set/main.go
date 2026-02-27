@@ -28,7 +28,7 @@ type preferenceKey struct {
 var registry = []preferenceKey{
 	{Key: "compression", Description: "Encode compiled objects to CMDX format", Type: "bool"},
 	{Key: "auto_compile", Description: "Recompile automatically after changes", Type: "bool"},
-	{Key: "ai.provider", Description: "AI provider (claude, opencode, ollama)", Type: "string"},
+	{Key: "ai.bin", Description: "AI binary (claude, opencode)", Type: "string"},
 	{Key: "ai.model", Description: "AI model name (ollama only)", Type: "string"},
 	{Key: "ai.class", Description: "Documentation target model class", Type: "string"},
 }
@@ -146,19 +146,19 @@ func applyValue(prefs *preferences.Preferences, entry *preferenceKey, value stri
 		}
 		prefs.AutoCompile = preferences.BoolPtr(b)
 
-	case "ai.provider":
+	case "ai.bin":
 		if value == "" {
-			// Clear the provider (and model).
+			// Clear the binary (and model).
 			prefs.AI = nil
 			return nil
 		}
-		if err := validateAIProvider(value); err != nil {
+		if err := validateAIBin(value); err != nil {
 			return err
 		}
 		if prefs.AI == nil {
 			prefs.AI = &preferences.AIConfig{}
 		}
-		prefs.AI.Provider = value
+		prefs.AI.Bin = value
 
 	case "ai.model":
 		if prefs.AI == nil {
@@ -186,9 +186,9 @@ func applyValue(prefs *preferences.Preferences, entry *preferenceKey, value stri
 	return nil
 }
 
-// validateAIProvider delegates to the shared validator.
-func validateAIProvider(id string) error {
-	return shared.ValidateAIProvider(id)
+// validateAIBin delegates to the shared validator.
+func validateAIBin(id string) error {
+	return shared.ValidateAIBin(id)
 }
 
 // validateAIClass delegates to the shared validator.
@@ -203,9 +203,9 @@ func readValue(prefs *preferences.Preferences, key string) string {
 		return formatBoolPtr(prefs.Compression)
 	case "auto_compile":
 		return formatBoolPtr(prefs.AutoCompile)
-	case "ai.provider":
-		if prefs.AI != nil && prefs.AI.Provider != "" {
-			return prefs.AI.Provider
+	case "ai.bin":
+		if prefs.AI != nil && prefs.AI.Bin != "" {
+			return prefs.AI.Bin
 		}
 		return ui.DimStyle.Render("(unset)")
 	case "ai.model":

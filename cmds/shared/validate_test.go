@@ -31,10 +31,10 @@ func TestValidateAIClass_empty(t *testing.T) {
 	assert.Contains(t, err.Error(), "unknown model class")
 }
 
-// --- ValidateAIProvider ---
+// --- ValidateAIBin ---
 
-func TestValidateAIProvider_unknown(t *testing.T) {
-	err := ValidateAIProvider("chatgpt")
+func TestValidateAIBin_unknown(t *testing.T) {
+	err := ValidateAIBin("chatgpt")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown AI provider")
 	assert.Contains(t, err.Error(), "claude")
@@ -42,32 +42,29 @@ func TestValidateAIProvider_unknown(t *testing.T) {
 	assert.Contains(t, err.Error(), "ollama")
 }
 
-func TestValidateAIProvider_empty(t *testing.T) {
-	err := ValidateAIProvider("")
+func TestValidateAIBin_empty(t *testing.T) {
+	err := ValidateAIBin("")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown AI provider")
 }
 
-func TestValidateAIProvider_knownProviders(t *testing.T) {
-	// Test each known provider. If the binary is available, it should
-	// succeed. If not, it should fail with "binary not found" (not
-	// "unknown provider").
+func TestValidateAIBin_knownBinaries(t *testing.T) {
+	// Test each known binary. If available on PATH, it should succeed.
+	// If not, it should fail with "binary not found" (not "unknown").
 	for _, id := range []string{"claude", "opencode", "ollama"} {
-		err := ValidateAIProvider(id)
+		err := ValidateAIBin(id)
 		if err != nil {
-			// It's a known provider but binary not found on PATH — that's
-			// a legitimate runtime state, not a test failure.
+			// Known binary but not found on PATH — legitimate runtime state.
 			assert.Contains(t, err.Error(), "binary")
 			assert.Contains(t, err.Error(), "not found")
 			assert.NotContains(t, err.Error(), "unknown AI provider")
 		}
-		// If no error, the binary was found on PATH.
 	}
 }
 
-func TestValidateAIProvider_errorFormat(t *testing.T) {
-	// Unknown provider error should list all known providers.
-	err := ValidateAIProvider("nonexistent")
+func TestValidateAIBin_errorFormat(t *testing.T) {
+	// Unknown binary error should list all known providers.
+	err := ValidateAIBin("nonexistent")
 	require.Error(t, err)
 	msg := err.Error()
 	assert.Contains(t, msg, "unknown AI provider")

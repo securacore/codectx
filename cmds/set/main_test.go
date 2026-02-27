@@ -100,12 +100,12 @@ func TestReadValue_boolSet(t *testing.T) {
 func TestReadValue_aiSet(t *testing.T) {
 	prefs := &preferences.Preferences{
 		AI: &preferences.AIConfig{
-			Provider: "claude",
-			Model:    "sonnet",
-			Class:    "gpt-4o-class",
+			Bin:   "claude",
+			Model: "sonnet",
+			Class: "gpt-4o-class",
 		},
 	}
-	assert.Equal(t, "claude", readValue(prefs, "ai.provider"))
+	assert.Equal(t, "claude", readValue(prefs, "ai.bin"))
 	assert.Equal(t, "sonnet", readValue(prefs, "ai.model"))
 	assert.Equal(t, "gpt-4o-class", readValue(prefs, "ai.class"))
 }
@@ -151,13 +151,13 @@ func TestSetKeyValue_aiModel(t *testing.T) {
 	assert.Equal(t, "llama3", prefs.AI.Model)
 }
 
-func TestSetKeyValue_aiProviderClear(t *testing.T) {
+func TestSetKeyValue_aiBinClear(t *testing.T) {
 	prefs := &preferences.Preferences{
-		AI: &preferences.AIConfig{Provider: "claude", Model: "sonnet"},
+		AI: &preferences.AIConfig{Bin: "claude", Model: "sonnet"},
 	}
 	setupProject(t, prefs)
 
-	require.NoError(t, setKeyValue("ai.provider="))
+	require.NoError(t, setKeyValue("ai.bin="))
 
 	cfg, err := config.Load(configFile)
 	require.NoError(t, err)
@@ -190,10 +190,10 @@ func TestSetKeyValue_invalidBool(t *testing.T) {
 	assert.Contains(t, err.Error(), "expected true or false")
 }
 
-func TestSetKeyValue_aiProviderUnknown(t *testing.T) {
+func TestSetKeyValue_aiBinUnknown(t *testing.T) {
 	setupProject(t, nil)
 
-	err := setKeyValue("ai.provider=chatgpt")
+	err := setKeyValue("ai.bin=chatgpt")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown AI provider")
 }
@@ -248,7 +248,7 @@ func TestShowAll_withPrefs(t *testing.T) {
 		Compression: preferences.BoolPtr(true),
 		AutoCompile: preferences.BoolPtr(false),
 		AI: &preferences.AIConfig{
-			Provider: "claude",
+			Bin: "claude",
 		},
 	}
 	setupProject(t, prefs)
@@ -291,11 +291,11 @@ func TestApplyValue_aiModel_createsAIConfig(t *testing.T) {
 	assert.Equal(t, "llama3", prefs.AI.Model)
 }
 
-func TestApplyValue_aiProviderEmpty_clearsAI(t *testing.T) {
+func TestApplyValue_aiBinEmpty_clearsAI(t *testing.T) {
 	prefs := &preferences.Preferences{
-		AI: &preferences.AIConfig{Provider: "claude", Model: "sonnet"},
+		AI: &preferences.AIConfig{Bin: "claude", Model: "sonnet"},
 	}
-	entry := &preferenceKey{Key: "ai.provider", Type: "string"}
+	entry := &preferenceKey{Key: "ai.bin", Type: "string"}
 	require.NoError(t, applyValue(prefs, entry, ""))
 	assert.Nil(t, prefs.AI)
 }
@@ -308,10 +308,10 @@ func TestApplyValue_boolInvalid(t *testing.T) {
 	assert.Contains(t, err.Error(), "expected true or false")
 }
 
-// --- validateAIProvider ---
+// --- validateAIBin ---
 
-func TestValidateAIProvider_unknownID(t *testing.T) {
-	err := validateAIProvider("chatgpt")
+func TestValidateAIBin_unknownID(t *testing.T) {
+	err := validateAIBin("chatgpt")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown AI provider")
 	assert.Contains(t, err.Error(), "claude")
@@ -340,7 +340,7 @@ func TestRegistry_allKeysNonEmpty(t *testing.T) {
 }
 
 func TestRegistry_containsExpectedKeys(t *testing.T) {
-	expected := []string{"compression", "auto_compile", "ai.provider", "ai.model", "ai.class"}
+	expected := []string{"compression", "auto_compile", "ai.bin", "ai.model", "ai.class"}
 	keys := make([]string, len(registry))
 	for i, k := range registry {
 		keys[i] = k.Key
@@ -397,7 +397,7 @@ func TestSetKeyValue_aiClassUnknown(t *testing.T) {
 
 func TestSetKeyValue_aiClassClear(t *testing.T) {
 	prefs := &preferences.Preferences{
-		AI: &preferences.AIConfig{Provider: "claude", Class: "gpt-4o-class"},
+		AI: &preferences.AIConfig{Bin: "claude", Class: "gpt-4o-class"},
 	}
 	setupProject(t, prefs)
 
@@ -407,9 +407,9 @@ func TestSetKeyValue_aiClassClear(t *testing.T) {
 	require.NoError(t, err)
 	loaded, err := preferences.Load(cfg.OutputDir())
 	require.NoError(t, err)
-	// AI config should still exist (provider is set), but class should be empty.
+	// AI config should still exist (bin is set), but class should be empty.
 	require.NotNil(t, loaded.AI)
-	assert.Equal(t, "claude", loaded.AI.Provider)
+	assert.Equal(t, "claude", loaded.AI.Bin)
 	assert.Empty(t, loaded.AI.Class)
 }
 

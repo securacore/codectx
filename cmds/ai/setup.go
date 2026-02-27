@@ -54,7 +54,7 @@ func runSetup() error {
 	}
 
 	ui.Blank()
-	ui.Done(fmt.Sprintf("AI integration enabled: %s", aiCfg.Provider))
+	ui.Done(fmt.Sprintf("AI integration enabled: %s", aiCfg.Bin))
 	ui.Blank()
 	return nil
 }

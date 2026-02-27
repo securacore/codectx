@@ -15,7 +15,7 @@ import (
 func TestCommand_structure(t *testing.T) {
 	assert.Equal(t, "ai", Command.Name)
 	assert.Equal(t, "Manage AI tool integration", Command.Usage)
-	require.Len(t, Command.Commands, 2)
+	require.Len(t, Command.Commands, 3)
 }
 
 func TestCommand_subcommands(t *testing.T) {
@@ -24,8 +24,10 @@ func TestCommand_subcommands(t *testing.T) {
 		names[sub.Name] = sub.Usage
 	}
 
+	assert.Contains(t, names, "ide")
 	assert.Contains(t, names, "setup")
 	assert.Contains(t, names, "status")
+	assert.Equal(t, "Launch an AI documentation authoring session", names["ide"])
 	assert.Equal(t, "Detect and configure AI tool integration", names["setup"])
 	assert.Equal(t, "Show AI integration status and detected tools", names["status"])
 }
@@ -83,8 +85,8 @@ func TestRunStatus_withAIConfigured(t *testing.T) {
 	// Write preferences with AI config set to a known provider.
 	prefs := &preferences.Preferences{
 		AI: &preferences.AIConfig{
-			Provider: "claude",
-			Model:    "",
+			Bin:   "claude",
+			Model: "",
 		},
 	}
 	require.NoError(t, preferences.Write(".codectx", prefs))
@@ -100,7 +102,7 @@ func TestRunStatus_withUnknownProvider(t *testing.T) {
 	// Write preferences with an unknown provider.
 	prefs := &preferences.Preferences{
 		AI: &preferences.AIConfig{
-			Provider: "nonexistent",
+			Bin: "nonexistent",
 		},
 	}
 	require.NoError(t, preferences.Write(".codectx", prefs))
@@ -115,8 +117,8 @@ func TestRunStatus_withOllamaProvider(t *testing.T) {
 
 	prefs := &preferences.Preferences{
 		AI: &preferences.AIConfig{
-			Provider: "ollama",
-			Model:    "llama3",
+			Bin:   "ollama",
+			Model: "llama3",
 		},
 	}
 	require.NoError(t, preferences.Write(".codectx", prefs))
@@ -131,9 +133,9 @@ func TestRunStatus_withModelAndClass(t *testing.T) {
 
 	prefs := &preferences.Preferences{
 		AI: &preferences.AIConfig{
-			Provider: "claude",
-			Model:    "claude-sonnet-4-20250514",
-			Class:    "claude-sonnet-class",
+			Bin:   "claude",
+			Model: "claude-sonnet-4-20250514",
+			Class: "claude-sonnet-class",
 		},
 	}
 	require.NoError(t, preferences.Write(".codectx", prefs))

@@ -7,11 +7,11 @@ import (
 	"github.com/securacore/codectx/core/ai"
 )
 
-// ValidateAIProvider checks that the given provider ID is known and that
+// ValidateAIBin checks that the given AI binary ID is known and that
 // its binary is available on PATH. Returns nil on success. This is the
-// single validation point for all commands that accept an AI provider ID
+// single validation point for all commands that accept an AI binary ID
 // (codectx set, codectx ai setup, future AI commands).
-func ValidateAIProvider(id string) error {
+func ValidateAIBin(id string) error {
 	provider, ok := ai.ProviderByID(id)
 	if !ok {
 		known := make([]string, len(ai.Providers))

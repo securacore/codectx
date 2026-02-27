@@ -4,26 +4,29 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
+	"os/signal"
+	"syscall"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
-	"github.com/securacore/codectx/cmds/shared"
+	"github.com/securacore/codectx/core/compile"
 	"github.com/securacore/codectx/core/config"
 	coreide "github.com/securacore/codectx/core/ide"
-	"github.com/securacore/codectx/core/llm"
+	"github.com/securacore/codectx/core/ide/launcher"
 	"github.com/securacore/codectx/core/manifest"
 	"github.com/securacore/codectx/core/preferences"
+	corewatch "github.com/securacore/codectx/core/watch"
 	"github.com/securacore/codectx/ui"
 	"github.com/urfave/cli/v3"
 )
 
 const configFile = "codectx.yml"
 
-// Command is the codectx ide command.
+// Command is the codectx ai ide command.
 var Command = &cli.Command{
 	Name:  "ide",
-	Usage: "AI documentation authoring",
+	Usage: "Launch an AI documentation authoring session",
 	Flags: []cli.Flag{
 		&cli.StringFlag{
 			Name:  "resume",
@@ -39,7 +42,7 @@ var Command = &cli.Command{
 
 func run(_ context.Context, c *cli.Command) error {
 	if !ui.IsTTY() {
-		return fmt.Errorf("codectx ide requires an interactive terminal")
+		return fmt.Errorf("codectx ai ide requires an interactive terminal")
 	}
 
 	// Load project config.
@@ -49,23 +52,42 @@ func run(_ context.Context, c *cli.Command) error {
 	}
 
 	outputDir := cfg.OutputDir()
-	rootDir, _ := os.Getwd()
 
 	// Handle --list flag.
 	if c.Bool("list") {
 		return listSessions(outputDir)
 	}
 
-	// Resolve AI provider.
-	provider, err := llm.Resolve()
+	// Auto-compile to ensure documentation is fresh.
+	ui.Step("Compiling documentation...")
+	result, err := compile.Compile(cfg)
+	if err != nil {
+		return fmt.Errorf("compile: %w", err)
+	}
+	if result.UpToDate {
+		ui.Done("Documentation is up to date")
+	} else {
+		ui.Done(fmt.Sprintf("Compiled (%d objects)", result.ObjectsStored))
+	}
+
+	// Load preferences for launcher resolution and prompt context.
+	prefs, err := preferences.Load(outputDir)
+	if err != nil {
+		return fmt.Errorf("load preferences: %w", err)
+	}
+
+	// Resolve AI binary launcher.
+	l, err := launcher.Resolve(prefs)
 	if err != nil {
 		return err
 	}
 
+	ui.Done(fmt.Sprintf("AI binary: %s", l.ID()))
+
 	// Clean up old sessions.
 	_, _ = coreide.Cleanup(outputDir, 30*24*time.Hour)
 
-	// Determine session: resume or new.
+	// Determine session: resume explicit, auto-resume, or create new.
 	var session *coreide.Session
 
 	if resumeID := c.String("resume"); resumeID != "" {
@@ -74,7 +96,7 @@ func run(_ context.Context, c *cli.Command) error {
 			return fmt.Errorf("resume session: %w", err)
 		}
 	} else {
-		session, err = pickOrCreateSession(outputDir, provider.ID())
+		session, err = pickOrCreateSession(outputDir, l)
 		if err != nil {
 			return err
 		}
@@ -85,36 +107,97 @@ func run(_ context.Context, c *cli.Command) error {
 		return nil
 	}
 
-	// Assemble system prompt.
+	// Assemble the documentation authoring directive.
 	prompt, err := assemblePrompt(cfg)
 	if err != nil {
 		return fmt.Errorf("assemble prompt: %w", err)
 	}
 
-	// Launch the TUI.
-	docsDir := cfg.DocsDir()
-	m := newModel(session, provider, prompt, outputDir, docsDir, rootDir)
-	p := tea.NewProgram(m, tea.WithAltScreen())
-	final, err := p.Run()
+	// Build CLI arguments for the AI binary.
+	var args []string
+	if session.SessionID != "" {
+		args = l.ResumeArgs(session.SessionID, prompt)
+		ui.Step(fmt.Sprintf("Resuming session: %s", session.Title))
+	} else {
+		// New session — generate a session ID if the launcher supports it.
+		if l.SupportsSessionID() {
+			if cl, ok := l.(*launcher.Claude); ok {
+				sid := cl.GenerateSessionID()
+				session.SessionID = sid
+				if err := coreide.Save(outputDir, session); err != nil {
+					return fmt.Errorf("save session: %w", err)
+				}
+			}
+		}
+		args = l.NewSessionArgs(session.SessionID, prompt)
+		ui.Step("Starting new documentation session")
+	}
+
+	// Start watch goroutine for live recompilation.
+	watchCtx, watchCancel := context.WithCancel(context.Background())
+	defer watchCancel()
+
+	w := corewatch.New(configFile)
+	go func() {
+		_ = w.Run(watchCtx)
+	}()
+
+	// Drain watch results silently (the AI binary owns the terminal).
+	go func() {
+		for {
+			select {
+			case <-w.Results():
+				// Silently consume — recompilation happens automatically.
+			case <-watchCtx.Done():
+				return
+			}
+		}
+	}()
+
+	ui.Blank()
+
+	// Launch the AI binary as a child process.
+	cmd := exec.Command(l.Binary(), args...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	// Forward signals to the child process.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		for sig := range sigCh {
+			if cmd.Process != nil {
+				_ = cmd.Process.Signal(sig)
+			}
+		}
+	}()
+
+	err = cmd.Run()
+	signal.Stop(sigCh)
+	close(sigCh)
+
+	// Cancel watch goroutine.
+	watchCancel()
+
+	// Post-session: extract session ID if needed and update metadata.
+	if !l.SupportsSessionID() && session.SessionID == "" {
+		rootDir, _ := os.Getwd()
+		if sid, findErr := l.FindLatestSession(rootDir); findErr == nil && sid != "" {
+			session.SessionID = sid
+		}
+	}
+
+	// Always save session state (updates timestamp).
+	_ = coreide.Save(outputDir, session)
+
+	ui.Blank()
 	if err != nil {
-		return fmt.Errorf("ide error: %w", err)
+		ui.Warn(fmt.Sprintf("AI session exited: %s", err))
+	} else {
+		ui.Done("AI session ended")
 	}
-
-	fm := final.(ideModel)
-
-	if fm.saved {
-		ui.Done("Document written")
-		for _, block := range fm.docBlocks {
-			ui.Item(block.Path)
-		}
-
-		// Auto-compile if enabled (runs outside TUI, after exit).
-		if err := shared.MaybeAutoCompile(cfg); err != nil {
-			ui.Warn(fmt.Sprintf("auto-compile: %s", err))
-		}
-	} else if !fm.quitting {
-		ui.Step("Session saved. Resume with: codectx ide --resume " + session.ID)
-	}
+	ui.Step(fmt.Sprintf("Session saved: %s", session.ID))
 
 	return nil
 }
@@ -144,39 +227,52 @@ func listSessions(outputDir string) error {
 	return nil
 }
 
-func pickOrCreateSession(outputDir, providerID string) (*coreide.Session, error) {
+// pickOrCreateSession handles automatic session management:
+// - 0 active sessions: create new
+// - 1 active session: auto-resume
+// - N active sessions: show selector with most-recent highlighted
+func pickOrCreateSession(outputDir string, l launcher.Launcher) (*coreide.Session, error) {
 	active, err := coreide.Active(outputDir)
 	if err != nil {
 		return nil, err
 	}
 
 	if len(active) == 0 {
-		// No active sessions, create new directly.
-		s := coreide.NewSession(providerID)
+		// No active sessions — create new.
+		s := coreide.NewSession(l.ID())
 		if err := coreide.Save(outputDir, s); err != nil {
 			return nil, err
 		}
 		return s, nil
 	}
 
-	// Build options: active sessions + "new" option.
+	if len(active) == 1 {
+		// Single active session — auto-resume.
+		return active[0], nil
+	}
+
+	// Multiple active sessions — let user choose.
+	// active[0] is already the most recently updated (sorted by List).
 	options := make([]huh.Option[string], 0, len(active)+1)
-	for _, s := range active {
+	for i, s := range active {
 		var label string
 		if s.Category != "" {
 			label = fmt.Sprintf("%s  [%s]  phase:%s", s.Title, s.Category, s.Phase)
 		} else {
 			label = fmt.Sprintf("%s  phase:%s", s.Title, s.Phase)
 		}
+		if i == 0 {
+			label += "  (latest)"
+		}
 		options = append(options, huh.NewOption(label, s.ID))
 	}
-	options = append(options, huh.NewOption("Start new conversation", "__new__"))
+	options = append(options, huh.NewOption("Start new session", "__new__"))
 
 	var selected string
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewSelect[string]().
-				Title("Continue a session or start new?").
+				Title("Resume a session or start new?").
 				Options(options...).
 				Value(&selected),
 		),
@@ -187,7 +283,7 @@ func pickOrCreateSession(outputDir, providerID string) (*coreide.Session, error)
 	}
 
 	if selected == "__new__" {
-		s := coreide.NewSession(providerID)
+		s := coreide.NewSession(l.ID())
 		if err := coreide.Save(outputDir, s); err != nil {
 			return nil, err
 		}

@@ -16,8 +16,8 @@ const fileName = "preferences.yml"
 // AIConfig holds user-selected AI integration settings.
 // A nil *AIConfig in Preferences means AI has not been configured.
 type AIConfig struct {
-	// Provider is the selected AI provider ID (e.g., "claude", "opencode", "ollama").
-	Provider string `yaml:"provider,omitempty"`
+	// Bin is the selected AI binary name (e.g., "claude", "opencode").
+	Bin string `yaml:"bin,omitempty"`
 
 	// Model is the model name, relevant only for providers that require
 	// explicit model selection (e.g., Ollama). Empty for others.

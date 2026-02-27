@@ -9,36 +9,33 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/securacore/codectx/core/llm"
 	"gopkg.in/yaml.v3"
 )
 
 // Session represents a documentation authoring session.
 type Session struct {
-	ID              string        `yaml:"id"`
-	Provider        string        `yaml:"provider"`
-	ProviderSession string        `yaml:"provider_session,omitempty"` // Claude CLI session UUID
-	Title           string        `yaml:"title"`
-	Category        string        `yaml:"category,omitempty"` // foundation/topic/prompt/application
-	Target          string        `yaml:"target,omitempty"`   // e.g., docs/topics/go-error-handling/
-	Phase           Phase         `yaml:"phase"`
-	Created         time.Time     `yaml:"created"`
-	Updated         time.Time     `yaml:"updated"`
-	Messages        []llm.Message `yaml:"messages,omitempty"` // Full history for stateless providers
-	Document        string        `yaml:"document,omitempty"` // Latest document draft content
+	ID        string    `yaml:"id"`
+	Bin       string    `yaml:"bin"`                  // AI binary used (e.g., "claude", "opencode")
+	SessionID string    `yaml:"session_id,omitempty"` // AI binary's own session ID for resume
+	Title     string    `yaml:"title"`
+	Category  string    `yaml:"category,omitempty"` // foundation/topic/prompt/application
+	Target    string    `yaml:"target,omitempty"`   // e.g., docs/topics/go-error-handling/
+	Phase     Phase     `yaml:"phase"`
+	Created   time.Time `yaml:"created"`
+	Updated   time.Time `yaml:"updated"`
 }
 
 // NewSession creates a new session with a UUID-based ID.
-func NewSession(provider string) *Session {
+func NewSession(bin string) *Session {
 	id := uuid.New().String()[:8] // Short prefix until classified
 	now := time.Now().UTC()
 	return &Session{
-		ID:       id,
-		Provider: provider,
-		Title:    "New document",
-		Phase:    PhaseDiscover,
-		Created:  now,
-		Updated:  now,
+		ID:      id,
+		Bin:     bin,
+		Title:   "New document",
+		Phase:   PhaseDiscover,
+		Created: now,
+		Updated: now,
 	}
 }
 

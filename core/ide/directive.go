@@ -2,7 +2,6 @@ package ide
 
 import (
 	_ "embed"
-	"fmt"
 	"strings"
 )
 
@@ -35,26 +34,4 @@ func AssemblePrompt(manifestSummary, prefsContext string) string {
 	}
 
 	return b.String()
-}
-
-// FormatPhaseHint returns a short string the TUI can display for the current phase.
-func FormatPhaseHint(p Phase) string {
-	switch p {
-	case PhaseDiscover:
-		return "Discovering what to document..."
-	case PhaseClassify:
-		return "Classifying documentation type..."
-	case PhaseScope:
-		return "Defining document scope..."
-	case PhaseDraft:
-		return "Drafting content..."
-	case PhaseReview:
-		return "Reviewing against standards..."
-	case PhaseFinalize:
-		return "Preparing final document..."
-	case PhaseComplete:
-		return "Document complete"
-	default:
-		return fmt.Sprintf("Phase: %s", p)
-	}
 }

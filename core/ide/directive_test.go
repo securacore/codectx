@@ -40,22 +40,3 @@ func TestAssemblePrompt_includesBoth(t *testing.T) {
 	assert.Contains(t, prompt, "go")
 	assert.Contains(t, prompt, "gpt-4o-class")
 }
-
-func TestFormatPhaseHint(t *testing.T) {
-	tests := []struct {
-		phase    Phase
-		contains string
-	}{
-		{PhaseDiscover, "Discovering"},
-		{PhaseClassify, "Classifying"},
-		{PhaseScope, "scope"},
-		{PhaseDraft, "Drafting"},
-		{PhaseReview, "Reviewing"},
-		{PhaseFinalize, "Preparing"},
-		{PhaseComplete, "complete"},
-	}
-	for _, tt := range tests {
-		hint := FormatPhaseHint(tt.phase)
-		assert.Contains(t, hint, tt.contains)
-	}
-}

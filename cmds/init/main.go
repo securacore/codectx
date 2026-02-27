@@ -217,8 +217,8 @@ func run(name string, autoCompile *bool, isPackage bool) error {
 	ui.KV("compression", formatBool(prefs.Compression), 16)
 	ui.KV("auto_compile", formatBool(prefs.AutoCompile), 16)
 	if prefs.AI != nil {
-		if prefs.AI.Provider != "" {
-			ui.KV("ai.provider", prefs.AI.Provider, 16)
+		if prefs.AI.Bin != "" {
+			ui.KV("ai.bin", prefs.AI.Bin, 16)
 			if prefs.AI.Model != "" {
 				ui.KV("ai.model", prefs.AI.Model, 16)
 			}
