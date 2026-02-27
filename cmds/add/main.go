@@ -60,7 +60,6 @@ type addTarget struct {
 // for activation, writes config, and optionally auto-compiles.
 // Exported so other commands (e.g., search) can trigger the add flow.
 func Run(inputs []string, sourceFlag, activateFlag string) error {
-	ui.Blank()
 	// Load config.
 	cfg, err := config.Load(configFile)
 	if err != nil {

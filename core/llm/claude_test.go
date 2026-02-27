@@ -112,7 +112,7 @@ func TestBuildClaudeArgs_minimal(t *testing.T) {
 	req := &Request{Prompt: "Hello"}
 	args := buildClaudeArgs(req)
 
-	assert.Equal(t, []string{"-p", "--output-format", "stream-json"}, args)
+	assert.Equal(t, []string{"-p", "--verbose", "--output-format", "stream-json"}, args)
 	// Prompt must NOT be in the args — it goes via stdin.
 	assert.NotContains(t, args, "Hello")
 }
@@ -128,6 +128,7 @@ func TestBuildClaudeArgs_allFields(t *testing.T) {
 	args := buildClaudeArgs(req)
 
 	assert.Contains(t, args, "-p")
+	assert.Contains(t, args, "--verbose")
 	assert.Contains(t, args, "--system-prompt")
 	assert.Contains(t, args, "You are a documentation expert.")
 	assert.Contains(t, args, "--session-id")

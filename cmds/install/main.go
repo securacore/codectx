@@ -50,7 +50,6 @@ type installedPkg struct {
 }
 
 func run(activateFlag string) error {
-	ui.Blank()
 	// Load config.
 	cfg, err := config.Load(configFile)
 	if err != nil {

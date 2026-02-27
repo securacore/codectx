@@ -63,7 +63,6 @@ func sectionDir(kind sectionKind) string {
 // manifest sync, and prints a summary. It is the shared logic for all
 // subcommands.
 func scaffold(kind sectionKind, name string) error {
-	ui.Blank()
 	if !kebabCase.MatchString(name) {
 		return fmt.Errorf("invalid name %q: must be lowercase kebab-case (e.g. my-entry)", name)
 	}

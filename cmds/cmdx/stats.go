@@ -19,7 +19,6 @@ var statsCommand = &cli.Command{
 }
 
 func runStats(c *cli.Command) error {
-	ui.Blank()
 	input, err := readInput(c)
 	if err != nil {
 		return err

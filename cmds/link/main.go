@@ -26,7 +26,6 @@ var Command = &cli.Command{
 }
 
 func run() error {
-	ui.Blank()
 	// Load config.
 	cfg, err := config.Load(configFile)
 	if err != nil {

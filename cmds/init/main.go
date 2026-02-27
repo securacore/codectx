@@ -41,7 +41,6 @@ var Command = &cli.Command{
 }
 
 func run(name string, autoCompile *bool, isPackage bool) error {
-	ui.Blank()
 	// If a name is provided as argument, create the directory and work inside it.
 	if name != "" {
 		if err := os.MkdirAll(name, 0o755); err != nil {

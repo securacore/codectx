@@ -108,6 +108,7 @@ func (c *Claude) Stream(ctx context.Context, req *Request) (<-chan Event, error)
 func buildClaudeArgs(req *Request) []string {
 	args := []string{
 		"-p",
+		"--verbose",
 		"--output-format", "stream-json",
 	}
 

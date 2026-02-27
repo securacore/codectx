@@ -26,7 +26,6 @@ var Command = &cli.Command{
 }
 
 func run(ctx context.Context) error {
-	ui.Blank()
 	// Validate config exists before starting watch loop.
 	cfg, err := config.Load(configFile)
 	if err != nil {

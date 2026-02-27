@@ -53,7 +53,6 @@ func MaybeAutoCompile(cfg *config.Config) error {
 		return nil
 	}
 
-	ui.Blank()
 	var result *compile.Result
 	err = ui.SpinErr("Compiling...", func() error {
 		var compileErr error

@@ -21,7 +21,6 @@ var statusCommand = &cli.Command{
 }
 
 func runStatus() error {
-	ui.Blank()
 	// Load config to determine output directory.
 	cfg, err := config.Load(configFile)
 	if err != nil {

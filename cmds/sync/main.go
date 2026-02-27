@@ -23,7 +23,6 @@ var Command = &cli.Command{
 }
 
 func run() error {
-	ui.Blank()
 	cfg, err := config.Load(configFile)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)

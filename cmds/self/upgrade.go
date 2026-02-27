@@ -23,7 +23,6 @@ var upgradeCommand = &cli.Command{
 // runUpgrade checks for the latest version and upgrades the binary.
 // fetchLatest and upgrade are injected for testability.
 func runUpgrade(current string, fetchLatest func() (string, error), upgrade func(string) error) error {
-	ui.Blank()
 	if current == "dev" {
 		return fmt.Errorf("cannot upgrade a dev build — install from a release first")
 	}

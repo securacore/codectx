@@ -115,13 +115,11 @@ func run(_ context.Context, c *cli.Command) error {
 	} else if !fm.quitting {
 		ui.Step("Session saved. Resume with: codectx ide --resume " + session.ID)
 	}
-	ui.Blank()
 
 	return nil
 }
 
 func listSessions(outputDir string) error {
-	ui.Blank()
 	sessions, err := coreide.List(outputDir)
 	if err != nil {
 		return err
