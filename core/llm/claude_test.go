@@ -105,3 +105,59 @@ func TestNewClaude_ID(t *testing.T) {
 	c := NewClaude("/usr/bin/claude")
 	assert.Equal(t, "claude", c.ID())
 }
+
+// --- buildClaudeArgs ---
+
+func TestBuildClaudeArgs_minimal(t *testing.T) {
+	req := &Request{Prompt: "Hello"}
+	args := buildClaudeArgs(req)
+
+	assert.Equal(t, []string{"-p", "--output-format", "stream-json"}, args)
+	// Prompt must NOT be in the args — it goes via stdin.
+	assert.NotContains(t, args, "Hello")
+}
+
+func TestBuildClaudeArgs_allFields(t *testing.T) {
+	req := &Request{
+		Prompt:       "Explain this code",
+		SystemPrompt: "You are a documentation expert.",
+		SessionID:    "sess-42",
+		Tools:        []string{"Read", "Glob", "Grep"},
+		Model:        "claude-sonnet-4-20250514",
+	}
+	args := buildClaudeArgs(req)
+
+	assert.Contains(t, args, "-p")
+	assert.Contains(t, args, "--system-prompt")
+	assert.Contains(t, args, "You are a documentation expert.")
+	assert.Contains(t, args, "--session-id")
+	assert.Contains(t, args, "sess-42")
+	assert.Contains(t, args, "--tools")
+	assert.Contains(t, args, "Read,Glob,Grep")
+	assert.Contains(t, args, "--model")
+	assert.Contains(t, args, "claude-sonnet-4-20250514")
+	// Prompt must NOT appear as a positional arg.
+	assert.NotContains(t, args, "Explain this code")
+}
+
+func TestBuildClaudeArgs_noToolsNoPromptLeak(t *testing.T) {
+	req := &Request{
+		Prompt: "What is codectx?",
+	}
+	args := buildClaudeArgs(req)
+
+	// Even without tools, prompt must not be in args.
+	for _, a := range args {
+		assert.NotEqual(t, "What is codectx?", a)
+	}
+}
+
+func TestBuildClaudeArgs_optionalFieldsOmitted(t *testing.T) {
+	req := &Request{Prompt: "test"}
+	args := buildClaudeArgs(req)
+
+	assert.NotContains(t, args, "--system-prompt")
+	assert.NotContains(t, args, "--session-id")
+	assert.NotContains(t, args, "--tools")
+	assert.NotContains(t, args, "--model")
+}

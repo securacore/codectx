@@ -28,30 +28,13 @@ func (c *Claude) ID() string { return "claude" }
 // Each event is sent on the returned channel. The channel is closed
 // when the response is complete or an error occurs.
 func (c *Claude) Stream(ctx context.Context, req *Request) (<-chan Event, error) {
-	args := []string{
-		"-p",
-		"--output-format", "stream-json",
-	}
+	args := buildClaudeArgs(req)
 
-	if req.SystemPrompt != "" {
-		args = append(args, "--system-prompt", req.SystemPrompt)
-	}
-
-	if req.SessionID != "" {
-		args = append(args, "--session-id", req.SessionID)
-	}
-
-	if len(req.Tools) > 0 {
-		args = append(args, "--tools", strings.Join(req.Tools, ","))
-	}
-
-	if req.Model != "" {
-		args = append(args, "--model", req.Model)
-	}
-
-	args = append(args, req.Prompt)
-
+	// Pass prompt via stdin rather than as a positional argument.
+	// The --tools flag is variadic (<tools...>) and would consume
+	// a trailing positional prompt as another tool name.
 	cmd := exec.CommandContext(ctx, c.binary, args...)
+	cmd.Stdin = strings.NewReader(req.Prompt)
 	if req.WorkDir != "" {
 		cmd.Dir = req.WorkDir
 	}
@@ -117,6 +100,34 @@ func (c *Claude) Stream(ctx context.Context, req *Request) (<-chan Event, error)
 	}()
 
 	return ch, nil
+}
+
+// buildClaudeArgs constructs the CLI arguments for a claude invocation.
+// The prompt is NOT included — it is piped via stdin to avoid the
+// --tools variadic flag consuming it as a tool name.
+func buildClaudeArgs(req *Request) []string {
+	args := []string{
+		"-p",
+		"--output-format", "stream-json",
+	}
+
+	if req.SystemPrompt != "" {
+		args = append(args, "--system-prompt", req.SystemPrompt)
+	}
+
+	if req.SessionID != "" {
+		args = append(args, "--session-id", req.SessionID)
+	}
+
+	if len(req.Tools) > 0 {
+		args = append(args, "--tools", strings.Join(req.Tools, ","))
+	}
+
+	if req.Model != "" {
+		args = append(args, "--model", req.Model)
+	}
+
+	return args
 }
 
 // claudeJSON represents the common fields in Claude CLI stream-json output.
