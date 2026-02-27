@@ -23,9 +23,9 @@ func BuildManifestSummary(m *manifest.Manifest) string {
 		empty = false
 		b.WriteString("### Foundation\n\n")
 		for _, e := range m.Foundation {
-			b.WriteString(fmt.Sprintf("- **%s** (load:%s): %s\n", e.ID, e.Load, e.Description))
+			fmt.Fprintf(&b, "- **%s** (load:%s): %s\n", e.ID, e.Load, e.Description)
 			if len(e.DependsOn) > 0 {
-				b.WriteString(fmt.Sprintf("  depends_on: %s\n", strings.Join(e.DependsOn, ", ")))
+				fmt.Fprintf(&b, "  depends_on: %s\n", strings.Join(e.DependsOn, ", "))
 			}
 		}
 		b.WriteString("\n")
@@ -35,9 +35,9 @@ func BuildManifestSummary(m *manifest.Manifest) string {
 		empty = false
 		b.WriteString("### Topics\n\n")
 		for _, e := range m.Topics {
-			b.WriteString(fmt.Sprintf("- **%s**: %s\n", e.ID, e.Description))
+			fmt.Fprintf(&b, "- **%s**: %s\n", e.ID, e.Description)
 			if len(e.DependsOn) > 0 {
-				b.WriteString(fmt.Sprintf("  depends_on: %s\n", strings.Join(e.DependsOn, ", ")))
+				fmt.Fprintf(&b, "  depends_on: %s\n", strings.Join(e.DependsOn, ", "))
 			}
 		}
 		b.WriteString("\n")
@@ -47,9 +47,9 @@ func BuildManifestSummary(m *manifest.Manifest) string {
 		empty = false
 		b.WriteString("### Application\n\n")
 		for _, e := range m.Application {
-			b.WriteString(fmt.Sprintf("- **%s**: %s\n", e.ID, e.Description))
+			fmt.Fprintf(&b, "- **%s**: %s\n", e.ID, e.Description)
 			if len(e.DependsOn) > 0 {
-				b.WriteString(fmt.Sprintf("  depends_on: %s\n", strings.Join(e.DependsOn, ", ")))
+				fmt.Fprintf(&b, "  depends_on: %s\n", strings.Join(e.DependsOn, ", "))
 			}
 		}
 		b.WriteString("\n")
@@ -59,7 +59,7 @@ func BuildManifestSummary(m *manifest.Manifest) string {
 		empty = false
 		b.WriteString("### Prompts\n\n")
 		for _, e := range m.Prompts {
-			b.WriteString(fmt.Sprintf("- **%s**: %s\n", e.ID, e.Description))
+			fmt.Fprintf(&b, "- **%s**: %s\n", e.ID, e.Description)
 		}
 		b.WriteString("\n")
 	}
