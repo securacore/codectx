@@ -4,17 +4,21 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
+
+	"github.com/charmbracelet/huh"
+	"github.com/urfave/cli/v3"
 
 	initialize "github.com/securacore/codectx/cmds/init"
+	"github.com/securacore/codectx/core/ai"
 	"github.com/securacore/codectx/core/defaults"
 	"github.com/securacore/codectx/core/gitkeep"
 	"github.com/securacore/codectx/core/manifest"
 	"github.com/securacore/codectx/core/packagetpl"
 	"github.com/securacore/codectx/core/schema"
 	"github.com/securacore/codectx/ui"
-
-	"github.com/urfave/cli/v3"
 )
 
 var packageCommand = &cli.Command{
@@ -45,6 +49,19 @@ func runPackage(name string) error {
 		return err
 	}
 
+	// Prompt for author (org/username) and description (interactive only).
+	var author, description string
+	if ui.IsTTY() {
+		var promptErr error
+		author, description, promptErr = promptPackageInfo(name)
+		if promptErr != nil {
+			return promptErr
+		}
+
+		// If AI integration is configured, generate an enhanced description.
+		description = maybeGenerateDescription(result, name, description)
+	}
+
 	// Determine the AI bin from preferences for template substitution.
 	aiBin := "opencode"
 	if result.Preferences != nil && result.Preferences.AI != nil && result.Preferences.AI.Bin != "" {
@@ -61,6 +78,13 @@ func runPackage(name string) error {
 		return fmt.Errorf("scaffold package directory: %w", err)
 	}
 
+	// Write the README.md at the project root.
+	if author != "" {
+		if err := writeReadme(name, author, description); err != nil {
+			return fmt.Errorf("write README.md: %w", err)
+		}
+	}
+
 	// Re-sync the manifest to pick up the newly added prompt and
 	// foundation/prompts documents from the template files.
 	docsDir := result.DocsDir
@@ -69,6 +93,15 @@ func runPackage(name string) error {
 	if err != nil {
 		return fmt.Errorf("load manifest for re-sync: %w", err)
 	}
+
+	// Update manifest with author and description from prompts.
+	if author != "" {
+		existing.Author = author
+	}
+	if description != "" {
+		existing.Description = description
+	}
+
 	synced := manifest.Sync(docsDir, existing)
 	if err := manifest.Write(manifestPath, synced); err != nil {
 		return fmt.Errorf("write re-synced manifest: %w", err)
@@ -93,6 +126,7 @@ func runPackage(name string) error {
 	ui.Done(fmt.Sprintf("Scaffolded package: %s", fullName))
 	ui.Blank()
 	ui.Header("Extra files:")
+	ui.Item("README.md")
 	ui.Item("bin/just/")
 	ui.Item("bin/release")
 	ui.Item("docs/prompts/save/README.md")
@@ -104,6 +138,121 @@ func runPackage(name string) error {
 	initialize.RunPostInit(result.Config)
 
 	return nil
+}
+
+// promptPackageInfo prompts the user for the package author (org/username)
+// and a description of what the package covers.
+func promptPackageInfo(name string) (author, description string, err error) {
+	ui.Blank()
+
+	// Try to suggest a default from git config.
+	placeholder := detectGitUser()
+
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("GitHub username or organization").
+				Description("Used for package identification ("+name+"@author)").
+				Placeholder(placeholder).
+				Value(&author).
+				Validate(func(s string) error {
+					if strings.TrimSpace(s) == "" {
+						return fmt.Errorf("author is required")
+					}
+					return nil
+				}),
+			huh.NewInput().
+				Title("Package description").
+				Description("What does this documentation package cover?").
+				Value(&description).
+				Validate(func(s string) error {
+					if strings.TrimSpace(s) == "" {
+						return fmt.Errorf("description is required")
+					}
+					return nil
+				}),
+		),
+	).WithTheme(ui.Theme())
+
+	if err := form.Run(); err != nil {
+		return "", "", fmt.Errorf("prompt: %w", err)
+	}
+
+	author = strings.TrimSpace(author)
+	description = strings.TrimSpace(description)
+
+	// Use placeholder if author left empty but placeholder was available.
+	if author == "" && placeholder != "" {
+		author = placeholder
+	}
+
+	return author, description, nil
+}
+
+// maybeGenerateDescription uses the configured AI tool to enhance the user's
+// description. If AI is not configured or generation fails, the original
+// description is returned unchanged.
+func maybeGenerateDescription(result *initialize.CoreResult, name, description string) string {
+	if result.Preferences == nil || result.Preferences.AI == nil || result.Preferences.AI.Bin == "" {
+		return description
+	}
+
+	bin := result.Preferences.AI.Bin
+
+	// Verify the binary is still available before attempting generation.
+	if _, err := exec.LookPath(bin); err != nil {
+		ui.Warn(fmt.Sprintf("AI binary %q no longer found on PATH, using your description as-is", bin))
+		return description
+	}
+
+	prompt := fmt.Sprintf(
+		"Write a single concise sentence describing a codectx package called %q. "+
+			"The author describes it as: %q. "+
+			"The description must include the phrase \"AI documentation package\" naturally, "+
+			"with qualifying context about what it covers. "+
+			"Output only the description text, no quotes, no markdown formatting.",
+		name, description,
+	)
+
+	var generated string
+	err := ui.SpinErr("Generating description...", func() error {
+		var genErr error
+		generated, genErr = ai.Generate(bin, prompt)
+		return genErr
+	})
+
+	if err != nil {
+		ui.Warn(fmt.Sprintf("AI description generation failed: %s", err))
+		ui.Step("Using your description as-is")
+		return description
+	}
+
+	return generated
+}
+
+// writeReadme writes the package README.md at the project root.
+func writeReadme(name, author, description string) error {
+	ref := name + "@" + author
+
+	var buf strings.Builder
+	buf.WriteString("# " + ref + "\n")
+	if description != "" {
+		buf.WriteString("\n" + description + "\n")
+	}
+	buf.WriteString("\n```bash\ncodectx add " + ref + "\n```\n")
+
+	return os.WriteFile("README.md", []byte(buf.String()), 0o644)
+}
+
+// detectGitUser attempts to read the user.name from git config to use as
+// a default placeholder for the author prompt. Returns empty string on failure.
+func detectGitUser() string {
+	cmd := exec.Command("git", "config", "user.name")
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // scaffoldPackageDir creates the package/ directory structure. This is the
