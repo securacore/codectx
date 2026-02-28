@@ -6,6 +6,7 @@ import (
 
 	"github.com/securacore/codectx/core/compile"
 	"github.com/securacore/codectx/core/config"
+	"github.com/securacore/codectx/core/gitkeep"
 	"github.com/securacore/codectx/ui"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -87,6 +88,12 @@ func run() error {
 	cfg, err := config.Load(configFile)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
+	}
+
+	// Clean up .gitkeep files in documentation directories that now contain
+	// content. This keeps the working tree tidy as documentation is added.
+	if err := gitkeep.Clean(cfg.DocsDir()); err != nil {
+		ui.Warn(fmt.Sprintf("gitkeep cleanup: %s", err))
 	}
 
 	var result *compile.Result

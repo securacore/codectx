@@ -17,7 +17,7 @@ import (
 func TestCommand_metadata(t *testing.T) {
 	assert.Equal(t, "new", Command.Name)
 	assert.NotEmpty(t, Command.Usage)
-	assert.Len(t, Command.Commands, 5)
+	assert.Len(t, Command.Commands, 6)
 }
 
 func TestSubcommand_names(t *testing.T) {
@@ -30,6 +30,7 @@ func TestSubcommand_names(t *testing.T) {
 	assert.Contains(t, names, "prompt")
 	assert.Contains(t, names, "plan")
 	assert.Contains(t, names, "application")
+	assert.Contains(t, names, "package")
 }
 
 // --- setupProject ---

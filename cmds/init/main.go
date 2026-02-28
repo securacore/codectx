@@ -11,6 +11,7 @@ import (
 	"github.com/securacore/codectx/core/compile"
 	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/defaults"
+	"github.com/securacore/codectx/core/gitkeep"
 	corelink "github.com/securacore/codectx/core/link"
 	"github.com/securacore/codectx/core/manifest"
 	"github.com/securacore/codectx/core/preferences"
@@ -40,20 +41,38 @@ var Command = &cli.Command{
 	},
 }
 
-func run(name string, autoCompile *bool, isPackage bool) error {
+// CoreResult holds the outputs of RunCore that downstream callers may need.
+type CoreResult struct {
+	// Config is the codectx configuration that was written.
+	Config *config.Config
+
+	// Preferences is the preferences that were written.
+	Preferences *preferences.Preferences
+
+	// DocsDir is the path to the docs directory (relative to cwd).
+	DocsDir string
+}
+
+// RunCore performs the core initialization: directory scaffold, git init,
+// schemas, foundation defaults, config, manifest, and preferences. It does
+// NOT perform auto-compile or AI tool linking — call RunPostInit for those.
+//
+// After RunCore returns, the working directory is inside the new project
+// (if a name was provided).
+func RunCore(name string, autoCompile *bool, isPackage bool) (*CoreResult, error) {
 	// If a name is provided as argument, create the directory and work inside it.
 	if name != "" {
 		if err := os.MkdirAll(name, 0o755); err != nil {
-			return fmt.Errorf("create directory %s: %w", name, err)
+			return nil, fmt.Errorf("create directory %s: %w", name, err)
 		}
 		if err := os.Chdir(name); err != nil {
-			return fmt.Errorf("enter directory %s: %w", name, err)
+			return nil, fmt.Errorf("enter directory %s: %w", name, err)
 		}
 	}
 
 	// Guard: check if already initialized.
 	if _, err := os.Stat(configFile); err == nil {
-		return fmt.Errorf("%s already exists: project is already initialized", configFile)
+		return nil, fmt.Errorf("%s already exists: project is already initialized", configFile)
 	}
 
 	// If no name provided, prompt interactively.
@@ -76,7 +95,7 @@ func run(name string, autoCompile *bool, isPackage bool) error {
 		).WithTheme(ui.Theme())
 
 		if err := form.Run(); err != nil {
-			return fmt.Errorf("prompt: %w", err)
+			return nil, fmt.Errorf("prompt: %w", err)
 		}
 
 		if prompted != "" {
@@ -86,13 +105,13 @@ func run(name string, autoCompile *bool, isPackage bool) error {
 		}
 
 		if name == "" {
-			return fmt.Errorf("project name is required")
+			return nil, fmt.Errorf("project name is required")
 		}
 	}
 
 	// Initialize git if no .git directory exists.
-	if err := ensureGit(); err != nil {
-		return err
+	if err := EnsureGit(); err != nil {
+		return nil, err
 	}
 
 	// Create docs directory structure.
@@ -109,14 +128,27 @@ func run(name string, autoCompile *bool, isPackage bool) error {
 
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return fmt.Errorf("create directory %s: %w", dir, err)
+			return nil, fmt.Errorf("create directory %s: %w", dir, err)
+		}
+	}
+
+	// Place .gitkeep files in documentation directories that start empty.
+	gitkeepDirs := []string{
+		filepath.Join(docsDir, "topics"),
+		filepath.Join(docsDir, "prompts"),
+		filepath.Join(docsDir, "plans"),
+		filepath.Join(docsDir, "packages"),
+	}
+	for _, dir := range gitkeepDirs {
+		if err := gitkeep.Write(dir); err != nil {
+			return nil, fmt.Errorf("write .gitkeep in %s: %w", dir, err)
 		}
 	}
 
 	// Write embedded schemas to docs/schemas/.
 	schemasDir := filepath.Join(docsDir, "schemas")
 	if err := schema.WriteAll(schemasDir); err != nil {
-		return fmt.Errorf("write schemas: %w", err)
+		return nil, fmt.Errorf("write schemas: %w", err)
 	}
 
 	// Write embedded default foundation documents to docs/foundation/.
@@ -125,7 +157,7 @@ func run(name string, autoCompile *bool, isPackage bool) error {
 	if !isPackage {
 		foundationDir := filepath.Join(docsDir, "foundation")
 		if err := defaults.WriteAll(foundationDir); err != nil {
-			return fmt.Errorf("write defaults: %w", err)
+			return nil, fmt.Errorf("write defaults: %w", err)
 		}
 	}
 
@@ -135,7 +167,7 @@ func run(name string, autoCompile *bool, isPackage bool) error {
 		Packages: []config.PackageDep{},
 	}
 	if err := config.Write(configFile, cfg); err != nil {
-		return fmt.Errorf("write config: %w", err)
+		return nil, fmt.Errorf("write config: %w", err)
 	}
 
 	// Create docs/manifest.yml (local package data map).
@@ -158,13 +190,13 @@ func run(name string, autoCompile *bool, isPackage bool) error {
 
 	packagePath := filepath.Join(docsDir, manifestFile)
 	if err := manifest.Write(packagePath, m); err != nil {
-		return fmt.Errorf("write package manifest: %w", err)
+		return nil, fmt.Errorf("write package manifest: %w", err)
 	}
 
 	// Create .codectx/ directory and write default preferences.
 	outputDir := cfg.OutputDir()
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
-		return fmt.Errorf("create output directory %s: %w", outputDir, err)
+		return nil, fmt.Errorf("create output directory %s: %w", outputDir, err)
 	}
 
 	// Default boolean preferences for new projects.
@@ -179,7 +211,7 @@ func run(name string, autoCompile *bool, isPackage bool) error {
 		var aiErr error
 		aiCfg, aiErr = shared.PromptAISetup()
 		if aiErr != nil {
-			return aiErr
+			return nil, aiErr
 		}
 	}
 
@@ -195,7 +227,7 @@ func run(name string, autoCompile *bool, isPackage bool) error {
 		AI:          aiCfg,
 	}
 	if err := preferences.Write(outputDir, prefs); err != nil {
-		return fmt.Errorf("write preferences: %w", err)
+		return nil, fmt.Errorf("write preferences: %w", err)
 	}
 
 	kind := "project"
@@ -230,19 +262,39 @@ func run(name string, autoCompile *bool, isPackage bool) error {
 	ui.Blank()
 	ui.Item("Adjust preferences: codectx set")
 
-	// Auto-compile: since default foundation documents always exist after init,
-	// there is always content to compile. This gives the user a complete setup.
-	if ui.IsTTY() {
-		if err := autoCompileAfterInit(cfg); err != nil {
-			ui.Warn(fmt.Sprintf("compile: %s", err))
-		}
+	return &CoreResult{
+		Config:      cfg,
+		Preferences: prefs,
+		DocsDir:     docsDir,
+	}, nil
+}
 
-		// Offer to link AI tools.
-		if err := promptLink(cfg.OutputDir()); err != nil {
-			ui.Warn(fmt.Sprintf("link: %s", err))
-		}
+// RunPostInit performs the post-initialization steps: auto-compile and AI tool
+// linking. These are interactive (TTY-only) operations that should run after
+// the project is fully scaffolded.
+func RunPostInit(cfg *config.Config) {
+	if !ui.IsTTY() {
+		return
 	}
 
+	if err := AutoCompile(cfg); err != nil {
+		ui.Warn(fmt.Sprintf("compile: %s", err))
+	}
+
+	if err := PromptLink(cfg.OutputDir()); err != nil {
+		ui.Warn(fmt.Sprintf("link: %s", err))
+	}
+}
+
+// run is the private entry point for the init command. It calls RunCore
+// followed by RunPostInit.
+func run(name string, autoCompile *bool, isPackage bool) error {
+	result, err := RunCore(name, autoCompile, isPackage)
+	if err != nil {
+		return err
+	}
+
+	RunPostInit(result.Config)
 	return nil
 }
 
@@ -257,9 +309,9 @@ func formatBool(b *bool) string {
 	return "false"
 }
 
-// ensureGit initializes a git repository and writes a .gitignore
+// EnsureGit initializes a git repository and writes a .gitignore
 // if no .git directory exists in the current directory.
-func ensureGit() error {
+func EnsureGit() error {
 	if _, err := os.Stat(".git"); err == nil {
 		// Git already initialized; ensure .gitignore has .codectx/ entry.
 		return ensureGitignore()
@@ -309,10 +361,8 @@ func ensureGitignore() error {
 	return os.WriteFile(path, []byte(gitignoreContent), 0o644)
 }
 
-// autoCompileAfterInit compiles the initial documentation using the inline
-// spinner pattern. Since default foundation documents always exist after init,
-// there is always content to compile.
-func autoCompileAfterInit(cfg *config.Config) error {
+// AutoCompile compiles the documentation using the inline spinner pattern.
+func AutoCompile(cfg *config.Config) error {
 	ui.Blank()
 	var result *compile.Result
 	err := ui.SpinErr("Compiling...", func() error {
@@ -334,9 +384,9 @@ func autoCompileAfterInit(cfg *config.Config) error {
 	return nil
 }
 
-// promptLink offers to set up AI tool integration by creating entry point files.
+// PromptLink offers to set up AI tool integration by creating entry point files.
 // If the user declines, a hint is printed.
-func promptLink(outputDir string) error {
+func PromptLink(outputDir string) error {
 	ui.Blank()
 	var confirm bool
 	form := huh.NewForm(

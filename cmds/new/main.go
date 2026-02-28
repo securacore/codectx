@@ -29,6 +29,7 @@ var Command = &cli.Command{
 		promptCommand,
 		planCommand,
 		applicationCommand,
+		packageCommand,
 	},
 }
 

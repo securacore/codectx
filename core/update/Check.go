@@ -124,7 +124,12 @@ func splitVersion(v string) [3]int {
 }
 
 // cachePath returns the full path to the cache file.
+// It respects XDG_CONFIG_HOME when set, falling back to the
+// platform-specific user config directory.
 func cachePath() string {
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		return filepath.Join(xdg, cacheName)
+	}
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		dir = filepath.Join(os.Getenv("HOME"), ".config")

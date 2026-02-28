@@ -36,6 +36,21 @@ func TestEntries_loadValues(t *testing.T) {
 	assert.Equal(t, "documentation", byID["markdown"])
 	assert.Equal(t, "documentation", byID["specs"])
 	assert.Equal(t, "documentation", byID["ai-authoring"])
+	assert.Equal(t, "documentation", byID["prompts"])
+	assert.Equal(t, "documentation", byID["plans"])
+}
+
+func TestEntries_allExpectedIDs(t *testing.T) {
+	entries := Entries()
+	ids := make([]string, len(entries))
+	for i, e := range entries {
+		ids[i] = e.ID
+	}
+
+	expected := []string{"philosophy", "documentation", "markdown", "specs", "ai-authoring", "prompts", "plans"}
+	for _, id := range expected {
+		assert.Contains(t, ids, id, "Entries should contain %q", id)
+	}
 }
 
 func TestEntries_pathFormat(t *testing.T) {

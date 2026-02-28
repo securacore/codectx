@@ -55,6 +55,18 @@ var docs = []defaultDoc{
 		Load:        "documentation",
 		Description: "Cross-model AI authoring conventions",
 	},
+	{
+		ID:          "prompts",
+		Dir:         "prompts",
+		Load:        "documentation",
+		Description: "Prompt lifecycle management",
+	},
+	{
+		ID:          "plans",
+		Dir:         "plans",
+		Load:        "documentation",
+		Description: "Plan lifecycle management",
+	},
 }
 
 // files lists the relative paths within each default document directory.

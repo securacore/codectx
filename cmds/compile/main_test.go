@@ -362,6 +362,45 @@ func TestCompileModel_viewDone(t *testing.T) {
 	assert.Empty(t, view)
 }
 
+func TestRun_cleansGitkeepDuringCompile(t *testing.T) {
+	dir := setupProject(t)
+	docsDir := filepath.Join(dir, "docs")
+
+	// Place .gitkeep in docs/topics/ AND add real content.
+	topicsDir := filepath.Join(docsDir, "topics")
+	require.NoError(t, os.WriteFile(filepath.Join(topicsDir, ".gitkeep"), nil, 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(topicsDir, "react"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(topicsDir, "react", "README.md"),
+		[]byte("# React\n"), 0o644))
+
+	// Place .gitkeep in docs/prompts/ with NO other content.
+	promptsDir := filepath.Join(docsDir, "prompts")
+	require.NoError(t, os.MkdirAll(promptsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(promptsDir, ".gitkeep"), nil, 0o644))
+
+	// Update manifest to include the topic.
+	m := &manifest.Manifest{
+		Name:    "test-project",
+		Version: "1.0.0",
+		Topics: []manifest.TopicEntry{
+			{ID: "react", Path: "topics/react/README.md", Description: "React topic"},
+		},
+	}
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
+
+	err := run()
+	require.NoError(t, err)
+
+	// topics/.gitkeep should be removed (has content).
+	_, err = os.Stat(filepath.Join(topicsDir, ".gitkeep"))
+	assert.True(t, os.IsNotExist(err), "topics/.gitkeep should be removed after compile")
+
+	// prompts/.gitkeep should be preserved (no content).
+	_, err = os.Stat(filepath.Join(promptsDir, ".gitkeep"))
+	assert.NoError(t, err, "prompts/.gitkeep should be preserved (still empty)")
+}
+
 func TestRun_customOutputDir(t *testing.T) {
 	dir := t.TempDir()
 

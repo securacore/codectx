@@ -12,4 +12,6 @@ import "embed"
 //go:embed content/markdown/README.md content/markdown/spec/README.md
 //go:embed content/specs/README.md content/specs/spec/README.md
 //go:embed content/ai-authoring/README.md content/ai-authoring/spec/README.md
+//go:embed content/prompts/README.md content/prompts/spec/README.md
+//go:embed content/plans/README.md content/plans/spec/README.md
 var content embed.FS

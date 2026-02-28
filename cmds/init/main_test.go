@@ -196,7 +196,7 @@ func TestEnsureGit_initializesRepo(t *testing.T) {
 	defer func() { _ = os.Chdir(origDir) }()
 	require.NoError(t, os.Chdir(dir))
 
-	err = ensureGit()
+	err = EnsureGit()
 	require.NoError(t, err)
 
 	// Verify .git directory was created.
@@ -219,7 +219,7 @@ func TestEnsureGit_skipsIfGitExists(t *testing.T) {
 	// Pre-create .git directory.
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".git"), 0o755))
 
-	err = ensureGit()
+	err = EnsureGit()
 	require.NoError(t, err)
 
 	// Should still create .gitignore.
@@ -355,10 +355,10 @@ func TestRun_initDiscoversExistingDocs(t *testing.T) {
 	require.NoError(t, err)
 
 	// Read back the manifest — it should contain the pre-existing entry
-	// plus the other default foundation entries (5 total minimum).
+	// plus the other default foundation entries (7 total minimum).
 	m, err := manifest.Load(filepath.Join(projectDir, "docs", "manifest.yml"))
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, len(m.Foundation), 5)
+	require.GreaterOrEqual(t, len(m.Foundation), 7)
 
 	byID := map[string]manifest.FoundationEntry{}
 	for _, e := range m.Foundation {
@@ -395,7 +395,7 @@ func TestRun_initInfersRelationships(t *testing.T) {
 	// Read back the manifest — should have default entries plus alpha and beta.
 	m, err := manifest.Load(filepath.Join(projectDir, "docs", "manifest.yml"))
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, len(m.Foundation), 7) // 5 defaults + alpha + beta
+	require.GreaterOrEqual(t, len(m.Foundation), 9) // 7 defaults + alpha + beta
 
 	byID := map[string]manifest.FoundationEntry{}
 	for _, e := range m.Foundation {
@@ -451,7 +451,7 @@ func TestRun_writesDefaultFoundationFiles(t *testing.T) {
 	projectDir := filepath.Join(dir, "defaults-test")
 
 	// Verify all default foundation files were written.
-	expectedDocs := []string{"philosophy", "documentation", "markdown", "specs", "ai-authoring"}
+	expectedDocs := []string{"philosophy", "documentation", "markdown", "specs", "ai-authoring", "prompts", "plans"}
 	for _, doc := range expectedDocs {
 		readme := filepath.Join(projectDir, "docs", "foundation", doc, "README.md")
 		info, err := os.Stat(readme)
@@ -480,8 +480,8 @@ func TestRun_manifestContainsDefaultFoundationEntries(t *testing.T) {
 	m, err := manifest.Load(filepath.Join(projectDir, "docs", "manifest.yml"))
 	require.NoError(t, err)
 
-	// Should have at least the 5 default foundation entries.
-	require.GreaterOrEqual(t, len(m.Foundation), 5)
+	// Should have at least the 7 default foundation entries.
+	require.GreaterOrEqual(t, len(m.Foundation), 7)
 
 	byID := map[string]manifest.FoundationEntry{}
 	for _, e := range m.Foundation {
@@ -493,13 +493,13 @@ func TestRun_manifestContainsDefaultFoundationEntries(t *testing.T) {
 	assert.Equal(t, "always", byID["philosophy"].Load)
 
 	// Verify the rest have load: documentation.
-	for _, id := range []string{"documentation", "markdown", "specs", "ai-authoring"} {
+	for _, id := range []string{"documentation", "markdown", "specs", "ai-authoring", "prompts", "plans"} {
 		require.Contains(t, byID, id)
 		assert.Equal(t, "documentation", byID[id].Load, "entry %s should have load: documentation", id)
 	}
 
 	// Verify spec paths are set.
-	for _, id := range []string{"philosophy", "documentation", "markdown", "specs", "ai-authoring"} {
+	for _, id := range []string{"philosophy", "documentation", "markdown", "specs", "ai-authoring", "prompts", "plans"} {
 		assert.Contains(t, byID[id].Spec, "spec/README.md", "entry %s should have spec path", id)
 	}
 }
@@ -701,15 +701,46 @@ func TestRun_nilAutoCompile_defaultsToTrue(t *testing.T) {
 	assert.True(t, *prefs.Compression)
 }
 
+func TestRun_writesGitkeepInEmptyDirs(t *testing.T) {
+	dir := t.TempDir()
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origDir) }()
+	require.NoError(t, os.Chdir(dir))
+
+	err = run("gitkeep-test", preferences.BoolPtr(true), false)
+	require.NoError(t, err)
+
+	projectDir := filepath.Join(dir, "gitkeep-test")
+
+	// These directories start empty and should have .gitkeep files.
+	gitkeepDirs := []string{
+		"docs/topics",
+		"docs/prompts",
+		"docs/plans",
+		"docs/packages",
+	}
+	for _, d := range gitkeepDirs {
+		path := filepath.Join(projectDir, d, ".gitkeep")
+		_, err := os.Stat(path)
+		assert.NoError(t, err, "%s/.gitkeep should exist after init", d)
+	}
+
+	// foundation has content (defaults written) so no .gitkeep expected.
+	_, err = os.Stat(filepath.Join(projectDir, "docs", "foundation", ".gitkeep"))
+	assert.True(t, os.IsNotExist(err), "docs/foundation/.gitkeep should NOT exist (has content)")
+}
+
 func TestFormatBool(t *testing.T) {
 	assert.Equal(t, "true", formatBool(preferences.BoolPtr(true)))
 	assert.Equal(t, "false", formatBool(preferences.BoolPtr(false)))
 	assert.Equal(t, "(unset)", formatBool(nil))
 }
 
-// --- autoCompileAfterInit ---
+// --- AutoCompile ---
 
-func TestAutoCompileAfterInit_success(t *testing.T) {
+func TestAutoCompile_success(t *testing.T) {
 	dir := t.TempDir()
 	origDir, err := os.Getwd()
 	require.NoError(t, err)
@@ -742,8 +773,8 @@ func TestAutoCompileAfterInit_success(t *testing.T) {
 	}
 	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
 
-	// autoCompileAfterInit should succeed.
-	err = autoCompileAfterInit(cfg)
+	// AutoCompile should succeed.
+	err = AutoCompile(cfg)
 	require.NoError(t, err)
 
 	// Verify compiled output was produced.
@@ -756,7 +787,7 @@ func TestAutoCompileAfterInit_success(t *testing.T) {
 	assert.NotEmpty(t, entries)
 }
 
-func TestAutoCompileAfterInit_emptyProject(t *testing.T) {
+func TestAutoCompile_emptyProject(t *testing.T) {
 	dir := t.TempDir()
 	origDir, err := os.Getwd()
 	require.NoError(t, err)
@@ -781,11 +812,11 @@ func TestAutoCompileAfterInit_emptyProject(t *testing.T) {
 	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
 
 	// Should succeed even with no entries.
-	err = autoCompileAfterInit(cfg)
+	err = AutoCompile(cfg)
 	require.NoError(t, err)
 }
 
-func TestAutoCompileAfterInit_missingManifest(t *testing.T) {
+func TestAutoCompile_missingManifest(t *testing.T) {
 	dir := t.TempDir()
 	origDir, err := os.Getwd()
 	require.NoError(t, err)
@@ -799,6 +830,6 @@ func TestAutoCompileAfterInit_missingManifest(t *testing.T) {
 	require.NoError(t, config.Write(filepath.Join(dir, configFile), cfg))
 
 	// No docs/ dir or manifest — compile should fail.
-	err = autoCompileAfterInit(cfg)
+	err = AutoCompile(cfg)
 	require.Error(t, err)
 }
