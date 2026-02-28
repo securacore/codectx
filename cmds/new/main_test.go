@@ -33,6 +33,36 @@ func TestSubcommand_names(t *testing.T) {
 	assert.Contains(t, names, "package")
 }
 
+func TestSubcommands_havePackageFlag(t *testing.T) {
+	// All section subcommands (not package) should have the --package flag.
+	sectionCommands := []string{"foundation", "topic", "prompt", "plan", "application"}
+	for _, cmd := range Command.Commands {
+		if cmd.Name == "package" {
+			continue
+		}
+		found := false
+		for _, f := range cmd.Flags {
+			for _, name := range f.Names() {
+				if name == "package" {
+					found = true
+				}
+			}
+		}
+		if contains(sectionCommands, cmd.Name) {
+			assert.True(t, found, "subcommand %q should have --package flag", cmd.Name)
+		}
+	}
+}
+
+func contains(ss []string, s string) bool {
+	for _, v := range ss {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
 // --- setupProject ---
 
 // setupProject creates a minimal project in a temp directory and
@@ -363,4 +393,123 @@ func TestScaffold_preservesExistingEntries(t *testing.T) {
 	ids := []string{result.Foundation[0].ID, result.Foundation[1].ID}
 	assert.Contains(t, ids, "existing")
 	assert.Contains(t, ids, "new-entry")
+}
+
+// --- scaffold: --package flag ---
+
+// setupPackageProject creates a minimal package project (type: package) with
+// a package/ directory structure.
+func setupPackageProject(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+	require.NoError(t, os.Chdir(dir))
+
+	// Create docs/ structure.
+	docsDir := filepath.Join(dir, "docs")
+	for _, sub := range []string{"foundation", "application", "topics", "prompts", "plans"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(docsDir, sub), 0o755))
+	}
+
+	// Create package/ structure.
+	pkgDir := filepath.Join(dir, "package")
+	for _, sub := range []string{"foundation", "application", "topics", "prompts", "plans"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(pkgDir, sub), 0o755))
+	}
+
+	// Write codectx.yml with type: package.
+	cfg := &config.Config{
+		Name:     "test-package",
+		Type:     "package",
+		Packages: []config.PackageDep{},
+	}
+	require.NoError(t, config.Write(filepath.Join(dir, configFile), cfg))
+
+	// Write docs/manifest.yml.
+	docsManifest := &manifest.Manifest{
+		Name:        "test-package",
+		Author:      "tester",
+		Version:     "1.0.0",
+		Description: "Test package",
+	}
+	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), docsManifest))
+
+	// Write package/manifest.yml.
+	pkgManifest := &manifest.Manifest{
+		Name:        "test-package",
+		Author:      "tester",
+		Version:     "1.0.0",
+		Description: "Test package (published)",
+	}
+	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "manifest.yml"), pkgManifest))
+
+	return dir
+}
+
+func TestScaffold_packageFlag_createsInPackageDir(t *testing.T) {
+	dir := setupPackageProject(t)
+
+	err := scaffold(kindTopic, "react-hooks", true)
+	require.NoError(t, err)
+
+	// Should exist in package/, not docs/.
+	pkgReadme := filepath.Join(dir, "package", "topics", "react-hooks", "README.md")
+	data, err := os.ReadFile(pkgReadme)
+	require.NoError(t, err)
+	assert.Equal(t, "# React Hooks\n", string(data))
+
+	// Should NOT exist in docs/.
+	docsReadme := filepath.Join(dir, "docs", "topics", "react-hooks", "README.md")
+	_, err = os.Stat(docsReadme)
+	assert.True(t, os.IsNotExist(err))
+}
+
+func TestScaffold_packageFlag_syncsPackageManifest(t *testing.T) {
+	dir := setupPackageProject(t)
+
+	err := scaffold(kindFoundation, "my-rules", true)
+	require.NoError(t, err)
+
+	// package/manifest.yml should contain the new entry.
+	m, err := manifest.Load(filepath.Join(dir, "package", "manifest.yml"))
+	require.NoError(t, err)
+	require.Len(t, m.Foundation, 1)
+	assert.Equal(t, "my-rules", m.Foundation[0].ID)
+}
+
+func TestScaffold_packageFlag_errorOnNonPackageProject(t *testing.T) {
+	setupProject(t) // Regular project, no type: package
+
+	err := scaffold(kindTopic, "react", true)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--package requires a package project")
+}
+
+func TestScaffold_packageFlag_topicWithSpec(t *testing.T) {
+	dir := setupPackageProject(t)
+
+	err := scaffold(kindTopic, "go-patterns", true)
+	require.NoError(t, err)
+
+	// spec/README.md should exist in package/.
+	specReadme := filepath.Join(dir, "package", "topics", "go-patterns", "spec", "README.md")
+	data, err := os.ReadFile(specReadme)
+	require.NoError(t, err)
+	assert.Equal(t, "# Go Patterns Spec\n", string(data))
+}
+
+func TestScaffold_packageFlag_planWithPlanYml(t *testing.T) {
+	dir := setupPackageProject(t)
+
+	err := scaffold(kindPlan, "migrate-v2", true)
+	require.NoError(t, err)
+
+	planYML := filepath.Join(dir, "package", "plans", "migrate-v2", "plan.yml")
+	data, err := os.ReadFile(planYML)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "plan: migrate-v2")
+	assert.Contains(t, string(data), "status: not_started")
 }

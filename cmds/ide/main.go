@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -295,9 +296,10 @@ func pickOrCreateSession(outputDir string, l launcher.Launcher) (*coreide.Sessio
 
 func assemblePrompt(cfg *config.Config) (string, error) {
 	docsDir := cfg.DocsDir()
+	manifestPath := filepath.Join(docsDir, "manifest.yml")
 
 	// Load manifest for context.
-	m, err := manifest.Load(docsDir)
+	m, err := manifest.Load(manifestPath)
 	if err != nil {
 		// Manifest might not exist yet; that's OK.
 		m = &manifest.Manifest{}
@@ -306,7 +308,7 @@ func assemblePrompt(cfg *config.Config) (string, error) {
 	// For package projects, also load the package manifest and merge its
 	// entries into the summary so the AI sees the full picture.
 	if cfg.IsPackage() {
-		pkgManifest, pkgErr := manifest.Load("package")
+		pkgManifest, pkgErr := manifest.Load(filepath.Join("package", "manifest.yml"))
 		if pkgErr == nil {
 			m = mergeManifests(m, pkgManifest)
 		}

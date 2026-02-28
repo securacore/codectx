@@ -166,7 +166,12 @@ func promptPackageInfo(name string) (author, description string, err error) {
 
 	// Try to detect the authenticated GitHub username so we can pre-fill
 	// the author field. If detected, the user can press Enter to accept.
+	// The value must be set BEFORE creating the input so huh initializes
+	// its internal text model with the detected value.
 	detected := detectGitHubUser()
+	if detected != "" {
+		author = detected
+	}
 
 	authorInput := huh.NewInput().
 		Title("GitHub username or organization").
@@ -183,7 +188,6 @@ func promptPackageInfo(name string) (author, description string, err error) {
 		})
 
 	if detected != "" {
-		author = detected
 		authorInput.Description("Detected: " + detected + " (press Enter to accept)")
 	} else {
 		authorInput.Description("Used for package identification (" + name + "@author)")

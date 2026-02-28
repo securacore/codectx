@@ -3,6 +3,7 @@ package new
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/securacore/codectx/core/manifest"
@@ -396,6 +397,179 @@ func TestScaffoldPackageDir_writesSchemas(t *testing.T) {
 		_, err := os.Stat(filepath.Join(dir, s))
 		assert.NoError(t, err, "%s should exist", s)
 	}
+}
+
+// --- writeReadme ---
+
+func TestWriteReadme_fullContent(t *testing.T) {
+	dir := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+	require.NoError(t, os.Chdir(dir))
+
+	err = writeReadme("my-pkg", "securacore", "An AI documentation package for testing.")
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(filepath.Join(dir, "README.md"))
+	require.NoError(t, err)
+
+	content := string(data)
+	assert.Contains(t, content, "# my-pkg@securacore")
+	assert.Contains(t, content, "An AI documentation package for testing.")
+	assert.Contains(t, content, "codectx add my-pkg@securacore")
+	assert.Contains(t, content, "```bash")
+}
+
+func TestWriteReadme_emptyDescription(t *testing.T) {
+	dir := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+	require.NoError(t, os.Chdir(dir))
+
+	err = writeReadme("test", "myorg", "")
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(filepath.Join(dir, "README.md"))
+	require.NoError(t, err)
+
+	content := string(data)
+	assert.Contains(t, content, "# test@myorg")
+	assert.Contains(t, content, "codectx add test@myorg")
+	// Should not have a blank description line between title and code block.
+	assert.NotContains(t, content, "\n\n\n")
+}
+
+// --- appendGitignoreEntries ---
+
+func TestAppendGitignoreEntries_createsNew(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".gitignore")
+
+	err := appendGitignoreEntries(path, ".devbox/", "tui.json")
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), ".devbox/")
+	assert.Contains(t, string(data), "tui.json")
+}
+
+func TestAppendGitignoreEntries_appendsToExisting(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".gitignore")
+	require.NoError(t, os.WriteFile(path, []byte(".codectx/\n"), 0o644))
+
+	err := appendGitignoreEntries(path, ".devbox/", "tui.json")
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	content := string(data)
+	assert.Contains(t, content, ".codectx/")
+	assert.Contains(t, content, ".devbox/")
+	assert.Contains(t, content, "tui.json")
+}
+
+func TestAppendGitignoreEntries_skipsExisting(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".gitignore")
+	require.NoError(t, os.WriteFile(path, []byte(".codectx/\n.devbox/\n"), 0o644))
+
+	err := appendGitignoreEntries(path, ".devbox/", "tui.json")
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	content := string(data)
+	// .devbox/ should appear exactly once (not duplicated).
+	assert.Equal(t, 1, strings.Count(content, ".devbox/"))
+	assert.Contains(t, content, "tui.json")
+}
+
+func TestAppendGitignoreEntries_allAlreadyPresent(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".gitignore")
+	original := ".codectx/\n.devbox/\ntui.json\n"
+	require.NoError(t, os.WriteFile(path, []byte(original), 0o644))
+
+	err := appendGitignoreEntries(path, ".devbox/", "tui.json")
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	// File should be unchanged.
+	assert.Equal(t, original, string(data))
+}
+
+func TestAppendGitignoreEntries_noTrailingNewline(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".gitignore")
+	require.NoError(t, os.WriteFile(path, []byte(".codectx/"), 0o644))
+
+	err := appendGitignoreEntries(path, ".devbox/")
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	content := string(data)
+	assert.Contains(t, content, ".codectx/\n.devbox/\n")
+}
+
+// --- githubSlug ---
+
+func TestGithubSlug_valid(t *testing.T) {
+	valid := []string{"securacore", "my-org", "user123", "a", "A-B-C", "test-1-2"}
+	for _, v := range valid {
+		assert.True(t, githubSlug.MatchString(v), "expected %q to be a valid GitHub slug", v)
+	}
+}
+
+func TestGithubSlug_invalid(t *testing.T) {
+	invalid := []string{"", "my org", "-leading", "trailing-", "has space", "under_score"}
+	for _, v := range invalid {
+		assert.False(t, githubSlug.MatchString(v), "expected %q to be an invalid GitHub slug", v)
+	}
+}
+
+// --- runPackage: type:package in config ---
+
+func TestRunPackage_setsTypePackageInConfig(t *testing.T) {
+	dir := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+	require.NoError(t, os.Chdir(dir))
+
+	err = runPackage("test-type")
+	require.NoError(t, err)
+
+	projectDir := filepath.Join(dir, "codectx-test-type")
+	data, err := os.ReadFile(filepath.Join(projectDir, "codectx.yml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "type: package")
+}
+
+// --- runPackage: .gitignore entries ---
+
+func TestRunPackage_gitignoreHasPackageEntries(t *testing.T) {
+	dir := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+	require.NoError(t, os.Chdir(dir))
+
+	err = runPackage("test-gi")
+	require.NoError(t, err)
+
+	projectDir := filepath.Join(dir, "codectx-test-gi")
+	data, err := os.ReadFile(filepath.Join(projectDir, ".gitignore"))
+	require.NoError(t, err)
+	content := string(data)
+	assert.Contains(t, content, ".codectx/")
+	assert.Contains(t, content, ".devbox/")
+	assert.Contains(t, content, "tui.json")
 }
 
 func TestScaffoldPackageDir_gitkeepInEmptyDirs(t *testing.T) {

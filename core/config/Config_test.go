@@ -45,3 +45,25 @@ func TestOutputDir_custom(t *testing.T) {
 	cfg := &Config{Config: &BuildConfig{OutputDir: "dist"}}
 	assert.Equal(t, "dist", cfg.OutputDir())
 }
+
+// --- IsPackage ---
+
+func TestIsPackage_true(t *testing.T) {
+	cfg := &Config{Type: "package"}
+	assert.True(t, cfg.IsPackage())
+}
+
+func TestIsPackage_project(t *testing.T) {
+	cfg := &Config{Type: "project"}
+	assert.False(t, cfg.IsPackage())
+}
+
+func TestIsPackage_empty(t *testing.T) {
+	cfg := &Config{Type: ""}
+	assert.False(t, cfg.IsPackage())
+}
+
+func TestIsPackage_zeroValue(t *testing.T) {
+	cfg := &Config{}
+	assert.False(t, cfg.IsPackage())
+}

@@ -88,3 +88,19 @@ func TestBuildPreferencesContext_empty(t *testing.T) {
 	ctx := BuildPreferencesContext(p)
 	assert.Empty(t, ctx)
 }
+
+// --- BuildPackageContext ---
+
+func TestBuildPackageContext_isPackage(t *testing.T) {
+	ctx := BuildPackageContext(true)
+	assert.Contains(t, ctx, "package project")
+	assert.Contains(t, ctx, "package/")
+	assert.Contains(t, ctx, "docs/")
+	assert.Contains(t, ctx, "codectx add")
+	assert.Contains(t, ctx, "package/manifest.yml")
+}
+
+func TestBuildPackageContext_notPackage(t *testing.T) {
+	ctx := BuildPackageContext(false)
+	assert.Empty(t, ctx)
+}

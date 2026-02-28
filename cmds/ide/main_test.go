@@ -8,6 +8,7 @@ import (
 	"github.com/securacore/codectx/core/config"
 	coreide "github.com/securacore/codectx/core/ide"
 	"github.com/securacore/codectx/core/ide/launcher"
+	"github.com/securacore/codectx/core/manifest"
 	"github.com/securacore/codectx/core/preferences"
 
 	"github.com/stretchr/testify/assert"
@@ -282,4 +283,134 @@ func TestAssemblePrompt(t *testing.T) {
 			}
 		})
 	}
+}
+
+// --- mergeManifests ---
+
+func TestMergeManifests_mergesNonOverlapping(t *testing.T) {
+	dst := &manifest.Manifest{
+		Foundation: []manifest.FoundationEntry{
+			{ID: "philosophy", Description: "Guiding principles"},
+		},
+		Topics: []manifest.TopicEntry{
+			{ID: "go", Description: "Go conventions"},
+		},
+	}
+	src := &manifest.Manifest{
+		Foundation: []manifest.FoundationEntry{
+			{ID: "markdown", Description: "Markdown rules"},
+		},
+		Topics: []manifest.TopicEntry{
+			{ID: "react", Description: "React patterns"},
+		},
+	}
+
+	result := mergeManifests(dst, src)
+	require.Len(t, result.Foundation, 2)
+	require.Len(t, result.Topics, 2)
+
+	foundationIDs := []string{result.Foundation[0].ID, result.Foundation[1].ID}
+	assert.Contains(t, foundationIDs, "philosophy")
+	assert.Contains(t, foundationIDs, "markdown")
+
+	topicIDs := []string{result.Topics[0].ID, result.Topics[1].ID}
+	assert.Contains(t, topicIDs, "go")
+	assert.Contains(t, topicIDs, "react")
+}
+
+func TestMergeManifests_deduplicatesOverlapping(t *testing.T) {
+	dst := &manifest.Manifest{
+		Foundation: []manifest.FoundationEntry{
+			{ID: "philosophy", Description: "Guiding principles"},
+		},
+	}
+	src := &manifest.Manifest{
+		Foundation: []manifest.FoundationEntry{
+			{ID: "philosophy", Description: "Duplicate"},
+			{ID: "markdown", Description: "New entry"},
+		},
+	}
+
+	result := mergeManifests(dst, src)
+	require.Len(t, result.Foundation, 2)
+	// The original entry should be preserved (not overwritten by src).
+	assert.Equal(t, "Guiding principles", result.Foundation[0].Description)
+}
+
+func TestMergeManifests_nilSrc(t *testing.T) {
+	dst := &manifest.Manifest{
+		Foundation: []manifest.FoundationEntry{
+			{ID: "philosophy", Description: "Guiding principles"},
+		},
+	}
+
+	result := mergeManifests(dst, nil)
+	require.Len(t, result.Foundation, 1)
+	assert.Equal(t, "philosophy", result.Foundation[0].ID)
+}
+
+func TestMergeManifests_mergesAllSections(t *testing.T) {
+	dst := &manifest.Manifest{}
+	src := &manifest.Manifest{
+		Foundation:  []manifest.FoundationEntry{{ID: "f1"}},
+		Topics:      []manifest.TopicEntry{{ID: "t1"}},
+		Application: []manifest.ApplicationEntry{{ID: "a1"}},
+		Prompts:     []manifest.PromptEntry{{ID: "p1"}},
+	}
+
+	result := mergeManifests(dst, src)
+	assert.Len(t, result.Foundation, 1)
+	assert.Len(t, result.Topics, 1)
+	assert.Len(t, result.Application, 1)
+	assert.Len(t, result.Prompts, 1)
+}
+
+// --- assemblePrompt: package project ---
+
+func TestAssemblePrompt_packageProject(t *testing.T) {
+	dir := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+	require.NoError(t, os.Chdir(dir))
+
+	cfg := &config.Config{
+		Name:     "codectx-test-pkg",
+		Type:     "package",
+		Packages: []config.PackageDep{},
+	}
+	require.NoError(t, config.Write(filepath.Join(dir, configFile), cfg))
+
+	docsDir := cfg.DocsDir()
+	require.NoError(t, os.MkdirAll(docsDir, 0o755))
+	require.NoError(t, os.MkdirAll(cfg.OutputDir(), 0o755))
+
+	// Create package/ with a manifest.
+	pkgDir := filepath.Join(dir, "package")
+	require.NoError(t, os.MkdirAll(pkgDir, 0o755))
+	pkgManifest := &manifest.Manifest{
+		Name:    "codectx-test-pkg",
+		Version: "1.0.0",
+		Topics: []manifest.TopicEntry{
+			{ID: "react", Description: "React conventions"},
+		},
+	}
+	require.NoError(t, manifest.Write(filepath.Join(pkgDir, "manifest.yml"), pkgManifest))
+
+	prompt, err := assemblePrompt(cfg)
+	require.NoError(t, err)
+
+	assert.Contains(t, prompt, "Package Authoring")
+	assert.Contains(t, prompt, "package project")
+	// Package manifest entries should be included.
+	assert.Contains(t, prompt, "react")
+}
+
+func TestAssemblePrompt_regularProjectNoPackageSection(t *testing.T) {
+	cfg := setupProject(t, nil)
+
+	prompt, err := assemblePrompt(cfg)
+	require.NoError(t, err)
+
+	assert.NotContains(t, prompt, "Package Authoring")
 }
