@@ -376,5 +376,15 @@ func mergeManifests(dst, src *manifest.Manifest) *manifest.Manifest {
 		}
 	}
 
+	planIDs := make(map[string]bool)
+	for _, e := range dst.Plans {
+		planIDs[e.ID] = true
+	}
+	for _, e := range src.Plans {
+		if !planIDs[e.ID] {
+			dst.Plans = append(dst.Plans, e)
+		}
+	}
+
 	return dst
 }

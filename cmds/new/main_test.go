@@ -34,22 +34,28 @@ func TestSubcommand_names(t *testing.T) {
 }
 
 func TestSubcommands_havePackageFlag(t *testing.T) {
-	// All section subcommands (not package) should have the --package flag.
+	// All section subcommands (not package) should have the --package flag
+	// with the -p alias.
 	sectionCommands := []string{"foundation", "topic", "prompt", "plan", "application"}
 	for _, cmd := range Command.Commands {
 		if cmd.Name == "package" {
 			continue
 		}
-		found := false
+		foundLong := false
+		foundShort := false
 		for _, f := range cmd.Flags {
 			for _, name := range f.Names() {
 				if name == "package" {
-					found = true
+					foundLong = true
+				}
+				if name == "p" {
+					foundShort = true
 				}
 			}
 		}
 		if contains(sectionCommands, cmd.Name) {
-			assert.True(t, found, "subcommand %q should have --package flag", cmd.Name)
+			assert.True(t, foundLong, "subcommand %q should have --package flag", cmd.Name)
+			assert.True(t, foundShort, "subcommand %q should have -p alias", cmd.Name)
 		}
 	}
 }

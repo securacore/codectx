@@ -83,3 +83,11 @@ func TestGenerate_emptyBinary(t *testing.T) {
 	_, err := Generate("", "test prompt")
 	require.Error(t, err)
 }
+
+func TestGenerate_existsOnPathButUnsupported(t *testing.T) {
+	// "bash" exists on PATH but is not a supported AI binary.
+	// This should hit the default case in the switch, not LookPath.
+	_, err := Generate("bash", "test prompt")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported AI binary")
+}

@@ -25,8 +25,8 @@ import (
 )
 
 // githubSlug matches valid GitHub usernames and organization slugs:
-// alphanumeric and hyphens, no leading/trailing hyphens, no consecutive hyphens.
-var githubSlug = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$`)
+// alphanumeric, hyphens, and underscores. Covers GitHub.com and Enterprise.
+var githubSlug = regexp.MustCompile(`^[a-zA-Z0-9_]([a-zA-Z0-9_-]*[a-zA-Z0-9_])?$`)
 
 var packageCommand = &cli.Command{
 	Name:      "package",

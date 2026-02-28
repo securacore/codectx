@@ -520,14 +520,14 @@ func TestAppendGitignoreEntries_noTrailingNewline(t *testing.T) {
 // --- githubSlug ---
 
 func TestGithubSlug_valid(t *testing.T) {
-	valid := []string{"securacore", "my-org", "user123", "a", "A-B-C", "test-1-2"}
+	valid := []string{"securacore", "my-org", "user123", "a", "A-B-C", "test-1-2", "59492_icfcorp", "my_org", "_leading"}
 	for _, v := range valid {
 		assert.True(t, githubSlug.MatchString(v), "expected %q to be a valid GitHub slug", v)
 	}
 }
 
 func TestGithubSlug_invalid(t *testing.T) {
-	invalid := []string{"", "my org", "-leading", "trailing-", "has space", "under_score"}
+	invalid := []string{"", "my org", "-leading", "trailing-", "has space"}
 	for _, v := range invalid {
 		assert.False(t, githubSlug.MatchString(v), "expected %q to be an invalid GitHub slug", v)
 	}
