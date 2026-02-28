@@ -60,10 +60,17 @@ func sectionDir(kind sectionKind) string {
 	}
 }
 
+// packageFlag is the shared --package flag definition for all codectx new subcommands.
+var packageFlag = &cli.BoolFlag{
+	Name:    "package",
+	Aliases: []string{"p"},
+	Usage:   "Create in the package/ directory instead of docs/",
+}
+
 // scaffold validates the name, creates directories and template files, runs
 // manifest sync, and prints a summary. It is the shared logic for all
 // subcommands.
-func scaffold(kind sectionKind, name string) error {
+func scaffold(kind sectionKind, name string, usePackageDir bool) error {
 	if !kebabCase.MatchString(name) {
 		return fmt.Errorf("invalid name %q: must be lowercase kebab-case (e.g. my-entry)", name)
 	}
@@ -73,8 +80,18 @@ func scaffold(kind sectionKind, name string) error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	docsDir := cfg.DocsDir()
-	entryDir := filepath.Join(docsDir, sectionDir(kind), name)
+	// Resolve target directory: package/ when --package is used, docs/ otherwise.
+	var targetDir string
+	if usePackageDir {
+		if !cfg.IsPackage() {
+			return fmt.Errorf("--package requires a package project (add type: package to codectx.yml)")
+		}
+		targetDir = "package"
+	} else {
+		targetDir = cfg.DocsDir()
+	}
+
+	entryDir := filepath.Join(targetDir, sectionDir(kind), name)
 
 	// Check for duplicates.
 	if _, err := os.Stat(entryDir); err == nil {
@@ -119,13 +136,13 @@ func scaffold(kind sectionKind, name string) error {
 	}
 
 	// Run manifest sync.
-	manifestPath := filepath.Join(docsDir, "manifest.yml")
+	manifestPath := filepath.Join(targetDir, "manifest.yml")
 	existing, err := manifest.Load(manifestPath)
 	if err != nil {
 		existing = &manifest.Manifest{Name: cfg.Name}
 	}
 
-	result := manifest.Sync(docsDir, existing)
+	result := manifest.Sync(targetDir, existing)
 	if err := manifest.Write(manifestPath, result); err != nil {
 		return fmt.Errorf("write manifest: %w", err)
 	}

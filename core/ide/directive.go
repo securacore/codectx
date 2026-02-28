@@ -14,10 +14,16 @@ func Directive() string {
 }
 
 // AssemblePrompt builds the full system prompt by combining the embedded
-// directive with dynamic context (manifest summary and preferences).
-func AssemblePrompt(manifestSummary, prefsContext string) string {
+// directive with dynamic context (package mode, manifest summary, and preferences).
+func AssemblePrompt(manifestSummary, prefsContext, packageContext string) string {
 	var b strings.Builder
 	b.WriteString(directive)
+
+	if packageContext != "" {
+		b.WriteString("\n\n---\n\n")
+		b.WriteString("## Package Authoring\n\n")
+		b.WriteString(packageContext)
+	}
 
 	if manifestSummary != "" {
 		b.WriteString("\n\n---\n\n")

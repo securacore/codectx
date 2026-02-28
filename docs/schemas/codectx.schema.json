@@ -10,6 +10,12 @@
       "type": "string",
       "description": "Project name."
     },
+    "type": {
+      "type": "string",
+      "enum": ["project", "package"],
+      "default": "project",
+      "description": "Project type. 'package' enables package authoring mode where the package/ directory is the primary target for publishable documentation."
+    },
     "config": {
       "type": "object",
       "additionalProperties": false,

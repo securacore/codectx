@@ -71,6 +71,27 @@ func BuildManifestSummary(m *manifest.Manifest) string {
 	return b.String()
 }
 
+// BuildPackageContext returns package-authoring context for the system prompt
+// when the project is a documentation package. Returns empty string for
+// regular projects.
+func BuildPackageContext(isPackage bool) string {
+	if !isPackage {
+		return ""
+	}
+
+	return "This is a **package project**. It has two documentation directories:\n\n" +
+		"- **`package/`** — Publishable documentation distributed to consumers via `codectx add`. " +
+		"This is the primary authoring target. Topics, foundation docs, and other content intended " +
+		"for package consumers go here.\n" +
+		"- **`docs/`** — Repo-local infrastructure documentation. Prompts, repo-specific conventions, " +
+		"and other content used only when working on this repository.\n\n" +
+		"When authoring new documentation for this package, target the **`package/`** directory. " +
+		"Use document paths starting with `package/` (e.g., `package/topics/my-topic/README.md`). " +
+		"Use `docs/` only for repo-local content that should not be published.\n\n" +
+		"The `package/manifest.yml` is the authoritative manifest for publishable content. " +
+		"The `docs/manifest.yml` tracks repo-local documentation."
+}
+
 // BuildPreferencesContext formats preferences into a string for the system prompt.
 func BuildPreferencesContext(p *preferences.Preferences) string {
 	if p == nil {

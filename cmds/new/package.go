@@ -15,6 +15,7 @@ import (
 
 	initialize "github.com/securacore/codectx/cmds/init"
 	"github.com/securacore/codectx/core/ai"
+	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/defaults"
 	"github.com/securacore/codectx/core/gitkeep"
 	"github.com/securacore/codectx/core/manifest"
@@ -53,6 +54,13 @@ func runPackage(name string) error {
 	result, err := initialize.RunCore(fullName, nil, false)
 	if err != nil {
 		return err
+	}
+
+	// Mark this project as a package in codectx.yml so tools and the AI
+	// directive know the package/ directory is the authoring target.
+	result.Config.Type = "package"
+	if err := config.Write(configFile, result.Config); err != nil {
+		return fmt.Errorf("update config with package type: %w", err)
 	}
 
 	// Append package-specific entries to .gitignore (devbox, opencode).
@@ -156,26 +164,34 @@ func runPackage(name string) error {
 func promptPackageInfo(name string) (author, description string, err error) {
 	ui.Blank()
 
-	// Try to suggest a default from the authenticated GitHub account.
-	placeholder := detectGitHubUser()
+	// Try to detect the authenticated GitHub username so we can pre-fill
+	// the author field. If detected, the user can press Enter to accept.
+	detected := detectGitHubUser()
+
+	authorInput := huh.NewInput().
+		Title("GitHub username or organization").
+		Value(&author).
+		Validate(func(s string) error {
+			v := strings.TrimSpace(s)
+			if v == "" {
+				return fmt.Errorf("author is required")
+			}
+			if !githubSlug.MatchString(v) {
+				return fmt.Errorf("must be a GitHub username or organization (no spaces)")
+			}
+			return nil
+		})
+
+	if detected != "" {
+		author = detected
+		authorInput.Description("Detected: " + detected + " (press Enter to accept)")
+	} else {
+		authorInput.Description("Used for package identification (" + name + "@author)")
+	}
 
 	form := huh.NewForm(
 		huh.NewGroup(
-			huh.NewInput().
-				Title("GitHub username or organization").
-				Description("Used for package identification ("+name+"@author)").
-				Placeholder(placeholder).
-				Value(&author).
-				Validate(func(s string) error {
-					v := strings.TrimSpace(s)
-					if v == "" {
-						return fmt.Errorf("author is required")
-					}
-					if !githubSlug.MatchString(v) {
-						return fmt.Errorf("must be a GitHub username or organization (no spaces)")
-					}
-					return nil
-				}),
+			authorInput,
 			huh.NewInput().
 				Title("Package description").
 				Description("What does this documentation package cover?").
@@ -195,11 +211,6 @@ func promptPackageInfo(name string) (author, description string, err error) {
 
 	author = strings.TrimSpace(author)
 	description = strings.TrimSpace(description)
-
-	// Use placeholder if author left empty but placeholder was available.
-	if author == "" && placeholder != "" {
-		author = placeholder
-	}
 
 	return author, description, nil
 }

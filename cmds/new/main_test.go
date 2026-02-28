@@ -118,7 +118,7 @@ func TestSectionDir(t *testing.T) {
 func TestScaffold_invalidName(t *testing.T) {
 	setupProject(t)
 
-	err := scaffold(kindFoundation, "INVALID")
+	err := scaffold(kindFoundation, "INVALID", false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid name")
 }
@@ -126,7 +126,7 @@ func TestScaffold_invalidName(t *testing.T) {
 func TestScaffold_invalidNameUnderscore(t *testing.T) {
 	setupProject(t)
 
-	err := scaffold(kindFoundation, "hello_world")
+	err := scaffold(kindFoundation, "hello_world", false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid name")
 }
@@ -140,7 +140,7 @@ func TestScaffold_missingConfig(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
 	require.NoError(t, os.Chdir(dir))
 
-	err = scaffold(kindFoundation, "test")
+	err = scaffold(kindFoundation, "test", false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "load config")
 }
@@ -157,7 +157,7 @@ func TestScaffold_duplicate(t *testing.T) {
 		filepath.Join(docsDir, "foundation", "existing", "README.md"),
 		[]byte("# Existing\n"), 0o644))
 
-	err := scaffold(kindFoundation, "existing")
+	err := scaffold(kindFoundation, "existing", false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "already exists")
 }
@@ -168,7 +168,7 @@ func TestScaffold_foundation(t *testing.T) {
 	dir := setupProject(t)
 	docsDir := filepath.Join(dir, "docs")
 
-	err := scaffold(kindFoundation, "philosophy")
+	err := scaffold(kindFoundation, "philosophy", false)
 	require.NoError(t, err)
 
 	// README.md should exist.
@@ -197,7 +197,7 @@ func TestScaffold_topic(t *testing.T) {
 	dir := setupProject(t)
 	docsDir := filepath.Join(dir, "docs")
 
-	err := scaffold(kindTopic, "react")
+	err := scaffold(kindTopic, "react", false)
 	require.NoError(t, err)
 
 	// README.md should exist.
@@ -227,7 +227,7 @@ func TestScaffold_prompt(t *testing.T) {
 	dir := setupProject(t)
 	docsDir := filepath.Join(dir, "docs")
 
-	err := scaffold(kindPrompt, "audit")
+	err := scaffold(kindPrompt, "audit", false)
 	require.NoError(t, err)
 
 	// README.md should exist.
@@ -254,7 +254,7 @@ func TestScaffold_plan(t *testing.T) {
 	dir := setupProject(t)
 	docsDir := filepath.Join(dir, "docs")
 
-	err := scaffold(kindPlan, "migrate")
+	err := scaffold(kindPlan, "migrate", false)
 	require.NoError(t, err)
 
 	// README.md should exist.
@@ -285,7 +285,7 @@ func TestScaffold_application(t *testing.T) {
 	dir := setupProject(t)
 	docsDir := filepath.Join(dir, "docs")
 
-	err := scaffold(kindApplication, "architecture")
+	err := scaffold(kindApplication, "architecture", false)
 	require.NoError(t, err)
 
 	// README.md should exist.
@@ -315,7 +315,7 @@ func TestScaffold_multiWordName(t *testing.T) {
 	dir := setupProject(t)
 	docsDir := filepath.Join(dir, "docs")
 
-	err := scaffold(kindFoundation, "coding-standards")
+	err := scaffold(kindFoundation, "coding-standards", false)
 	require.NoError(t, err)
 
 	readme := filepath.Join(docsDir, "foundation", "coding-standards", "README.md")
@@ -352,7 +352,7 @@ func TestScaffold_preservesExistingEntries(t *testing.T) {
 	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
 
 	// Scaffold a new foundation entry.
-	err := scaffold(kindFoundation, "new-entry")
+	err := scaffold(kindFoundation, "new-entry", false)
 	require.NoError(t, err)
 
 	// Both entries should be in the manifest.

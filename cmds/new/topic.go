@@ -11,11 +11,12 @@ var topicCommand = &cli.Command{
 	Name:      "topic",
 	Usage:     "Create a new topic document",
 	ArgsUsage: "<name>",
+	Flags:     []cli.Flag{packageFlag},
 	Action: func(ctx context.Context, c *cli.Command) error {
 		args := c.Args()
 		if args.Len() == 0 {
 			return fmt.Errorf("missing required argument: name")
 		}
-		return scaffold(kindTopic, args.First())
+		return scaffold(kindTopic, args.First(), c.Bool("package"))
 	},
 }

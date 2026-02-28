@@ -303,6 +303,15 @@ func assemblePrompt(cfg *config.Config) (string, error) {
 		m = &manifest.Manifest{}
 	}
 
+	// For package projects, also load the package manifest and merge its
+	// entries into the summary so the AI sees the full picture.
+	if cfg.IsPackage() {
+		pkgManifest, pkgErr := manifest.Load("package")
+		if pkgErr == nil {
+			m = mergeManifests(m, pkgManifest)
+		}
+	}
+
 	summary := coreide.BuildManifestSummary(m)
 
 	// Load preferences for context.
@@ -312,6 +321,58 @@ func assemblePrompt(cfg *config.Config) (string, error) {
 	}
 
 	prefsCtx := coreide.BuildPreferencesContext(prefs)
+	pkgCtx := coreide.BuildPackageContext(cfg.IsPackage())
 
-	return coreide.AssemblePrompt(summary, prefsCtx), nil
+	return coreide.AssemblePrompt(summary, prefsCtx, pkgCtx), nil
+}
+
+// mergeManifests combines entries from src into dst, appending any entries
+// from src that don't already exist in dst (by ID). This ensures the AI
+// sees both docs/ and package/ documentation in package projects.
+func mergeManifests(dst, src *manifest.Manifest) *manifest.Manifest {
+	if src == nil {
+		return dst
+	}
+
+	foundationIDs := make(map[string]bool)
+	for _, e := range dst.Foundation {
+		foundationIDs[e.ID] = true
+	}
+	for _, e := range src.Foundation {
+		if !foundationIDs[e.ID] {
+			dst.Foundation = append(dst.Foundation, e)
+		}
+	}
+
+	topicIDs := make(map[string]bool)
+	for _, e := range dst.Topics {
+		topicIDs[e.ID] = true
+	}
+	for _, e := range src.Topics {
+		if !topicIDs[e.ID] {
+			dst.Topics = append(dst.Topics, e)
+		}
+	}
+
+	appIDs := make(map[string]bool)
+	for _, e := range dst.Application {
+		appIDs[e.ID] = true
+	}
+	for _, e := range src.Application {
+		if !appIDs[e.ID] {
+			dst.Application = append(dst.Application, e)
+		}
+	}
+
+	promptIDs := make(map[string]bool)
+	for _, e := range dst.Prompts {
+		promptIDs[e.ID] = true
+	}
+	for _, e := range src.Prompts {
+		if !promptIDs[e.ID] {
+			dst.Prompts = append(dst.Prompts, e)
+		}
+	}
+
+	return dst
 }
