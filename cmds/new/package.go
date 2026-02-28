@@ -6,7 +6,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/huh"
 	"github.com/urfave/cli/v3"
@@ -20,6 +22,10 @@ import (
 	"github.com/securacore/codectx/core/schema"
 	"github.com/securacore/codectx/ui"
 )
+
+// githubSlug matches valid GitHub usernames and organization slugs:
+// alphanumeric and hyphens, no leading/trailing hyphens, no consecutive hyphens.
+var githubSlug = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$`)
 
 var packageCommand = &cli.Command{
 	Name:      "package",
@@ -47,6 +53,11 @@ func runPackage(name string) error {
 	result, err := initialize.RunCore(fullName, nil, false)
 	if err != nil {
 		return err
+	}
+
+	// Append package-specific entries to .gitignore (devbox, opencode).
+	if err := appendGitignoreEntries(".gitignore", ".devbox/", "tui.json"); err != nil {
+		return fmt.Errorf("update .gitignore: %w", err)
 	}
 
 	// Prompt for author (org/username) and description (interactive only).
@@ -145,8 +156,8 @@ func runPackage(name string) error {
 func promptPackageInfo(name string) (author, description string, err error) {
 	ui.Blank()
 
-	// Try to suggest a default from git config.
-	placeholder := detectGitUser()
+	// Try to suggest a default from the authenticated GitHub account.
+	placeholder := detectGitHubUser()
 
 	form := huh.NewForm(
 		huh.NewGroup(
@@ -156,8 +167,12 @@ func promptPackageInfo(name string) (author, description string, err error) {
 				Placeholder(placeholder).
 				Value(&author).
 				Validate(func(s string) error {
-					if strings.TrimSpace(s) == "" {
+					v := strings.TrimSpace(s)
+					if v == "" {
 						return fmt.Errorf("author is required")
+					}
+					if !githubSlug.MatchString(v) {
+						return fmt.Errorf("must be a GitHub username or organization (no spaces)")
 					}
 					return nil
 				}),
@@ -244,15 +259,67 @@ func writeReadme(name, author, description string) error {
 	return os.WriteFile("README.md", []byte(buf.String()), 0o644)
 }
 
-// detectGitUser attempts to read the user.name from git config to use as
-// a default placeholder for the author prompt. Returns empty string on failure.
-func detectGitUser() string {
-	cmd := exec.Command("git", "config", "user.name")
+// detectGitHubUser attempts to resolve the authenticated GitHub username via
+// the gh CLI. Returns empty string if gh is not installed or not authenticated.
+func detectGitHubUser() string {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "gh", "api", "user", "--jq", ".login")
 	out, err := cmd.Output()
 	if err != nil {
 		return ""
 	}
 	return strings.TrimSpace(string(out))
+}
+
+// appendGitignoreEntries appends entries to a .gitignore file if they are not
+// already present. This is used to add package-specific ignores (e.g., .devbox/,
+// tui.json) after RunCore creates the initial .gitignore with .codectx/.
+func appendGitignoreEntries(path string, entries ...string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		// No .gitignore to append to; write a new one.
+		content := strings.Join(entries, "\n") + "\n"
+		return os.WriteFile(path, []byte(content), 0o644)
+	}
+
+	existing := make(map[string]bool)
+	for _, line := range strings.Split(string(data), "\n") {
+		existing[strings.TrimSpace(line)] = true
+	}
+
+	var toAdd []string
+	for _, entry := range entries {
+		if !existing[entry] {
+			toAdd = append(toAdd, entry)
+		}
+	}
+
+	if len(toAdd) == 0 {
+		return nil
+	}
+
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return fmt.Errorf("open %s: %w", path, err)
+	}
+	defer func() { _ = f.Close() }()
+
+	// Ensure a trailing newline before appending.
+	if len(data) > 0 && data[len(data)-1] != '\n' {
+		if _, err := f.WriteString("\n"); err != nil {
+			return err
+		}
+	}
+
+	for _, entry := range toAdd {
+		if _, err := f.WriteString(entry + "\n"); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // scaffoldPackageDir creates the package/ directory structure. This is the

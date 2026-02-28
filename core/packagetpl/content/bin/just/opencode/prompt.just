@@ -19,7 +19,7 @@ prompt directory context="Run the prompt against the entire repo.":
 
   cd "{{invocation_directory()}}"
 
-  if ! opencode run "$prompt" -f "prompts/{{directory}}/README.md"; then
+  if ! opencode run "$prompt" -f "docs/prompts/{{directory}}/README.md"; then
     echo ""
     echo "Error: OpenCode failed to generate commit."
     echo "Unstaging changes..."

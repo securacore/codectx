@@ -15,7 +15,7 @@ prompt directory context="Run the prompt against the entire repo.":
   fi
 
   prompt="{{context}} "
-  prompt+="@prompts/{{directory}}/README.md "
+  prompt+="@docs/prompts/{{directory}}/README.md "
   prompt+="Do NOT add AI signatures or co-author attributions."
 
   if ! claude -p --verbose --output-format stream-json "$prompt" --allowedTools "Bash,Read,Edit,Write" \
