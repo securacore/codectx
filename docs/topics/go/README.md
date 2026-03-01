@@ -154,7 +154,7 @@ Testing uses `testify` for assertions.
 - `gofmt` is non-negotiable. All Go code is formatted with `gofmt`.
 - Use `goimports` for import group ordering: standard library, then external packages, then internal packages.
 - Use `golangci-lint` for comprehensive linting. Install it via devbox.
-- Compiler and tooling configuration is source of truth. Per [philosophy.md](../../foundation/philosophy.md), when this document and configuration conflict, configuration wins.
+- Compiler and tooling configuration is source of truth. Per [philosophy.md](../../foundation/philosophy/README.md), when this document and configuration conflict, configuration wins.
 
 </rules>
 

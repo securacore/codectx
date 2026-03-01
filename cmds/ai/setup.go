@@ -12,8 +12,6 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-const configFile = "codectx.yml"
-
 var setupCommand = &cli.Command{
 	Name:  "setup",
 	Usage: "Detect and configure AI tool integration",
@@ -24,7 +22,7 @@ var setupCommand = &cli.Command{
 
 func runSetup() error {
 	// Load config to determine output directory.
-	cfg, err := config.Load(configFile)
+	cfg, err := config.Load(shared.ConfigFile)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}

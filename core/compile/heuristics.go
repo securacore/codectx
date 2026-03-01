@@ -301,8 +301,8 @@ func WriteHeuristics(path string, h *Heuristics) error {
 	return nil
 }
 
-// LoadHeuristics reads heuristics from a file.
-func LoadHeuristics(path string) (*Heuristics, error) {
+// loadHeuristics reads heuristics from a file.
+func loadHeuristics(path string) (*Heuristics, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read heuristics: %w", err)

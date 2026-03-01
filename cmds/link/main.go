@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/config"
 	corelink "github.com/securacore/codectx/core/link"
 	"github.com/securacore/codectx/ui"
@@ -14,8 +15,6 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/urfave/cli/v3"
 )
-
-const configFile = "codectx.yml"
 
 var Command = &cli.Command{
 	Name:  "link",
@@ -27,7 +26,7 @@ var Command = &cli.Command{
 
 func run() error {
 	// Load config.
-	cfg, err := config.Load(configFile)
+	cfg, err := config.Load(shared.ConfigFile)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}

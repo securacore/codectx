@@ -7,7 +7,7 @@ import (
 func TestDebugTilde3(t *testing.T) {
 	input := []byte("~~0~0~")
 
-	a, _ := DumpAST(input)
+	a, _ := dumpAST(input)
 	t.Logf("AST A:\n%s", a)
 
 	encoded, err := Encode(input)
@@ -22,6 +22,6 @@ func TestDebugTilde3(t *testing.T) {
 	}
 	t.Logf("DECODED:\n%q", string(decoded))
 
-	b, _ := DumpAST(decoded)
+	b, _ := dumpAST(decoded)
 	t.Logf("AST B:\n%s", b)
 }

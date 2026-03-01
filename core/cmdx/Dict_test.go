@@ -13,7 +13,7 @@ func defaultDictOpts() EncoderOptions {
 
 func TestBuildDictionary_noRepeats(t *testing.T) {
 	segments := []string{"hello world", "foo bar baz", "unique string here"}
-	dict := BuildDictionary(segments, defaultDictOpts())
+	dict := buildDictionary(segments, defaultDictOpts())
 	assert.Nil(t, dict, "no repeated strings should produce nil dictionary")
 }
 
@@ -24,7 +24,7 @@ func TestBuildDictionary_singleRepeat(t *testing.T) {
 		"other " + repeated + " end",
 		"also " + repeated + " here",
 	}
-	dict := BuildDictionary(segments, defaultDictOpts())
+	dict := buildDictionary(segments, defaultDictOpts())
 	require.NotNil(t, dict)
 	require.GreaterOrEqual(t, len(dict.Entries), 1)
 	// The repeated string should be in the dictionary.
@@ -46,7 +46,7 @@ func TestBuildDictionary_multipleRepeats(t *testing.T) {
 		a + " plus " + b,
 		a + " with " + b,
 	}
-	dict := BuildDictionary(segments, defaultDictOpts())
+	dict := buildDictionary(segments, defaultDictOpts())
 	require.NotNil(t, dict)
 	assert.GreaterOrEqual(t, len(dict.Entries), 1, "should have at least one entry")
 }
@@ -54,7 +54,7 @@ func TestBuildDictionary_multipleRepeats(t *testing.T) {
 func TestBuildDictionary_minFrequency(t *testing.T) {
 	// String appearing only once should be excluded.
 	segments := []string{"this appears only once in the segment list and is long enough"}
-	dict := BuildDictionary(segments, defaultDictOpts())
+	dict := buildDictionary(segments, defaultDictOpts())
 	assert.Nil(t, dict)
 }
 
@@ -63,7 +63,7 @@ func TestBuildDictionary_minLength(t *testing.T) {
 	opts := defaultDictOpts()
 	opts.MinStringLength = 10
 	segments := []string{"short", "short", "short"}
-	dict := BuildDictionary(segments, opts)
+	dict := buildDictionary(segments, opts)
 	assert.Nil(t, dict)
 }
 
@@ -71,7 +71,7 @@ func TestBuildDictionary_scoringPositive(t *testing.T) {
 	// A string with positive savings should be included.
 	repeated := "this is a long enough string for dictionary"
 	segments := []string{repeated, repeated, repeated, repeated, repeated}
-	dict := BuildDictionary(segments, defaultDictOpts())
+	dict := buildDictionary(segments, defaultDictOpts())
 	require.NotNil(t, dict)
 	assert.GreaterOrEqual(t, len(dict.Entries), 1)
 }
@@ -84,7 +84,7 @@ func TestBuildDictionary_scoringNegative(t *testing.T) {
 	opts.MinFrequency = 2
 	repeated := "exactly 10" // exactly 10 chars
 	segments := []string{repeated, repeated}
-	dict := BuildDictionary(segments, opts)
+	dict := buildDictionary(segments, opts)
 	// With only 2 occurrences of a 10-char string, savings = 10 - (10+4+4) = -8. Negative.
 	if dict != nil {
 		for _, e := range dict.Entries {
@@ -105,7 +105,7 @@ func TestBuildDictionary_maxEntries(t *testing.T) {
 		segments = append(segments, "repeated string number four thousand")
 		segments = append(segments, "repeated string number five thousand")
 	}
-	dict := BuildDictionary(segments, opts)
+	dict := buildDictionary(segments, opts)
 	require.NotNil(t, dict)
 	assert.LessOrEqual(t, len(dict.Entries), 3, "should cap at MaxDictEntries")
 }
@@ -117,8 +117,8 @@ func TestBuildDictionary_deterministic(t *testing.T) {
 		"Documentation at https://api.example.com/v2/docs",
 	}
 	opts := defaultDictOpts()
-	dict1 := BuildDictionary(segments, opts)
-	dict2 := BuildDictionary(segments, opts)
+	dict1 := buildDictionary(segments, opts)
+	dict2 := buildDictionary(segments, opts)
 
 	if dict1 == nil && dict2 == nil {
 		return
@@ -141,7 +141,7 @@ func TestBuildDictionary_tieBreaking(t *testing.T) {
 		a + " plus " + b,
 		a + " with " + b,
 	}
-	dict := BuildDictionary(segments, defaultDictOpts())
+	dict := buildDictionary(segments, defaultDictOpts())
 	require.NotNil(t, dict)
 	if len(dict.Entries) >= 2 {
 		// Entry 0 should be the one appearing first in the text.
@@ -244,7 +244,7 @@ func TestBuildDictionary_overlapHandling(t *testing.T) {
 	}
 	opts := defaultDictOpts()
 	opts.MinStringLength = 8
-	dict := BuildDictionary(segments, opts)
+	dict := buildDictionary(segments, opts)
 	require.NotNil(t, dict)
 
 	// The longer candidate should be selected.

@@ -1,6 +1,7 @@
 package compile
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -141,6 +142,31 @@ func TestCopyFile_failsMkdirAll(t *testing.T) {
 	err := copyFile(src, dst)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "create directory")
+}
+
+// copyManifestFiles copies all files referenced by a manifest's entries
+// from srcRoot to dstRoot. Returns the number of files copied.
+func copyManifestFiles(m *manifest.Manifest, srcRoot, dstRoot string) (int, error) {
+	paths := collectFilePaths(m)
+	copied := 0
+
+	for _, p := range paths {
+		src := filepath.Join(srcRoot, p)
+		dst := filepath.Join(dstRoot, p)
+
+		// Skip files that do not exist on disk. Entries may reference
+		// files that have not been created yet (e.g., empty plan dirs).
+		if _, err := os.Stat(src); os.IsNotExist(err) {
+			continue
+		}
+
+		if err := copyFile(src, dst); err != nil {
+			return copied, fmt.Errorf("copy %s: %w", p, err)
+		}
+		copied++
+	}
+
+	return copied, nil
 }
 
 // --- copyManifestFiles ---

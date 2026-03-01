@@ -12,8 +12,8 @@ type TagParser struct {
 	pos   int
 }
 
-// NewTagParser creates a parser from CMDX body text (after header/dict/meta).
-func NewTagParser(input string) *TagParser {
+// newTagParser creates a parser from CMDX body text (after header/dict/meta).
+func newTagParser(input string) *TagParser {
 	return &TagParser{
 		lines: strings.Split(input, "\n"),
 		pos:   0,
@@ -63,7 +63,7 @@ func (p *TagParser) parseTag() (Node, error) {
 		if strings.HasPrefix(line, prefix) {
 			content := line[len(prefix):]
 			p.advance()
-			children := ParseInline(content)
+			children := parseInline(content)
 			return Node{Tag: TagH1 + TagType(level-1), Children: children}, nil
 		}
 	}
@@ -84,7 +84,7 @@ func (p *TagParser) parseTag() (Node, error) {
 	if strings.HasPrefix(line, "@P ") {
 		content := line[3:]
 		p.advance()
-		children := ParseInline(content)
+		children := parseInline(content)
 		return Node{Tag: TagP, Children: children}, nil
 	}
 
@@ -96,7 +96,7 @@ func (p *TagParser) parseTag() (Node, error) {
 	if strings.HasPrefix(line, "@BQ ") {
 		content := line[4:]
 		p.advance()
-		children := ParseInline(content)
+		children := parseInline(content)
 		return Node{
 			Tag:      TagBQ,
 			Children: []Node{{Tag: TagP, Children: children}},
@@ -190,7 +190,7 @@ func (p *TagParser) parseBlockquoteBlock() (Node, error) {
 	if err != nil {
 		return Node{}, err
 	}
-	subParser := NewTagParser(strings.Join(lines, "\n"))
+	subParser := newTagParser(strings.Join(lines, "\n"))
 	children, err := subParser.ParseBody()
 	if err != nil {
 		return Node{}, fmt.Errorf("blockquote body: %w", err)
@@ -243,7 +243,7 @@ func parseListItems(lines []string, tag TagType) []Node {
 		}
 
 		if isItem {
-			children := ParseInline(itemText)
+			children := parseInline(itemText)
 			item := Node{Tag: TagP, Children: children}
 			i++
 			// Check for nested lists.
@@ -573,8 +573,8 @@ func extractBracedContent(line, prefix string) string {
 
 // --- Inline parser ---
 
-// ParseInline parses inline CMDX content into AST nodes.
-func ParseInline(s string) []Node {
+// parseInline parses inline CMDX content into AST nodes.
+func parseInline(s string) []Node {
 	p := &inlineParser{input: s, pos: 0}
 	return p.parse()
 }
@@ -683,7 +683,7 @@ func (p *inlineParser) tryInlineTag() (Node, bool) {
 
 	switch tag {
 	case TagBold, TagItalic, TagBoldItalic, TagStrikethrough:
-		children := ParseInline(content)
+		children := parseInline(content)
 		return Node{Tag: tag, Children: children}, true
 	case TagCode:
 		// Unescape \{ \} \\ in code span content (escaped by encoder).
@@ -692,7 +692,7 @@ func (p *inlineParser) tryInlineTag() (Node, bool) {
 	case TagLink:
 		display, url := splitLinkContent(content)
 		url = UnescapeURL(url)
-		displayNodes := ParseInline(display)
+		displayNodes := parseInline(display)
 		return Node{
 			Tag:      tag,
 			Attrs:    NodeAttrs{URL: url, Display: flattenText(displayNodes)},
@@ -701,7 +701,7 @@ func (p *inlineParser) tryInlineTag() (Node, bool) {
 	case TagImage:
 		alt, url := splitLinkContent(content)
 		url = UnescapeURL(url)
-		altNodes := ParseInline(alt)
+		altNodes := parseInline(alt)
 		return Node{
 			Tag:      tag,
 			Attrs:    NodeAttrs{URL: url, Display: flattenText(altNodes)},

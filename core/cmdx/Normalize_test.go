@@ -9,7 +9,7 @@ import (
 
 func TestDumpAST_stripsPositions(t *testing.T) {
 	input := []byte("# Hello\n\nWorld\n")
-	dump, err := DumpAST(input)
+	dump, err := dumpAST(input)
 	require.NoError(t, err)
 	// Should contain structural info but no source positions.
 	assert.Contains(t, dump, "Heading[level=1]")
@@ -23,7 +23,7 @@ func TestDumpAST_stripsPositions(t *testing.T) {
 
 func TestDumpAST_stripsAlignment(t *testing.T) {
 	input := []byte("| a | b |\n|:--|---:|\n| 1 | 2 |\n")
-	dump, err := DumpAST(input)
+	dump, err := dumpAST(input)
 	require.NoError(t, err)
 	// Should contain table structure.
 	assert.Contains(t, dump, "Table")

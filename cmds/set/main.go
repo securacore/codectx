@@ -15,8 +15,6 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-const configFile = "codectx.yml"
-
 // preferenceKey describes a single settable preference.
 type preferenceKey struct {
 	Key         string
@@ -36,20 +34,9 @@ var registry = []preferenceKey{
 var Command = &cli.Command{
 	Name:      "set",
 	Usage:     "View or change project preferences",
+	Category:  "Content Authoring",
 	ArgsUsage: "[key=value]",
-	Flags: []cli.Flag{
-		&cli.BoolFlag{
-			Name:    "interactive",
-			Aliases: []string{"i"},
-			Usage:   "Select preferences interactively (coming soon)",
-		},
-	},
 	Action: func(ctx context.Context, c *cli.Command) error {
-		if c.Bool("interactive") {
-			ui.Warn("Interactive mode is not yet implemented.")
-			ui.Item("Use: codectx set key=value")
-			return nil
-		}
 		if c.NArg() == 0 {
 			return showAll()
 		}
@@ -59,7 +46,7 @@ var Command = &cli.Command{
 
 // showAll lists every known preference with its current value.
 func showAll() error {
-	cfg, err := config.Load(configFile)
+	cfg, err := config.Load(shared.ConfigFile)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
@@ -106,7 +93,7 @@ func setKeyValue(arg string) error {
 		return fmt.Errorf("unknown preference %q — run codectx set to see available keys", key)
 	}
 
-	cfg, err := config.Load(configFile)
+	cfg, err := config.Load(shared.ConfigFile)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}

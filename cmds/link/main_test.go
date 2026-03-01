@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/config"
 	corelink "github.com/securacore/codectx/core/link"
 
@@ -43,7 +44,7 @@ func TestRun_invalidConfig(t *testing.T) {
 
 	// Write invalid YAML.
 	require.NoError(t, os.WriteFile(
-		filepath.Join(dir, configFile),
+		filepath.Join(dir, shared.ConfigFile),
 		[]byte("{{{{not valid"), 0o644))
 
 	err = run()
@@ -64,7 +65,7 @@ func TestRun_missingCompiledOutput(t *testing.T) {
 		Name:     "test-project",
 		Packages: []config.PackageDep{},
 	}
-	require.NoError(t, config.Write(filepath.Join(dir, configFile), cfg))
+	require.NoError(t, config.Write(filepath.Join(dir, shared.ConfigFile), cfg))
 
 	err = run()
 	require.Error(t, err)
@@ -88,7 +89,7 @@ func TestRun_missingCompiledOutputCustomDir(t *testing.T) {
 		},
 		Packages: []config.PackageDep{},
 	}
-	require.NoError(t, config.Write(filepath.Join(dir, configFile), cfg))
+	require.NoError(t, config.Write(filepath.Join(dir, shared.ConfigFile), cfg))
 
 	err = run()
 	require.Error(t, err)

@@ -26,12 +26,12 @@ The application needs a data-layer API that handles business logic, data operati
 
 - **Derived type export exception.** `type App = typeof app` is a derived type (it is `typeof` the primary export) that exists solely for Eden Treaty. It is an acceptable exception to one-export-per-module because it carries no independent semantic meaning; it is a mechanical type alias of the value export. Separating it into its own file would add a file with one line of derived type for no practical benefit.
 
-- **Plugin evaluation per Leverage Before Building.** Elysia's plugin system is first-class (`@elysiajs/*` ecosystem). Custom cross-cutting concerns (auth, logging, rate limiting) are common plugin candidates. Applying the [Leverage Before Building](../../../foundation/philosophy.md) principle here means searching for existing plugins before writing custom ones, with the same critical evaluation criteria: maintenance activity, community adoption, bundle size, API quality, security posture.
+- **Plugin evaluation per Leverage Before Building.** Elysia's plugin system is first-class (`@elysiajs/*` ecosystem). Custom cross-cutting concerns (auth, logging, rate limiting) are common plugin candidates. Applying the [Leverage Before Building](../../../foundation/philosophy/README.md) principle here means searching for existing plugins before writing custom ones, with the same critical evaluation criteria: maintenance activity, community adoption, bundle size, API quality, security posture.
 
 ## Dependencies
 
-- [docs/foundation/philosophy.md](../../../foundation/philosophy.md): Leverage Before Building, Abstractions Must Earn Their Place
-- [docs/foundation/specs.md](../../../foundation/specs.md): spec template this document follows
+- [docs/foundation/philosophy](../../../foundation/philosophy/README.md): Leverage Before Building, Abstractions Must Earn Their Place
+- [docs/foundation/specs](../../../foundation/specs/README.md): spec template this document follows
 - [docs/topics/typescript/README.md](../../typescript/README.md): one-export-per-module, named exports, file naming conventions
 - [docs/topics/nextjs/README.md](../../nextjs/README.md): App Router route handlers, server actions boundary
 - [docs/topics/nextjs/server-actions.md](../../nextjs/server-actions.md): server action role relative to ElysiaJS

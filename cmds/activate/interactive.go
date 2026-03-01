@@ -610,7 +610,7 @@ func runInteractive() error {
 		return fmt.Errorf("interactive activation requires a terminal; use: codectx activate <package@author>")
 	}
 
-	cfg, err := config.Load(configFile)
+	cfg, err := config.Load(shared.ConfigFile)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
@@ -637,7 +637,7 @@ func runInteractive() error {
 		cfg.Packages[i].Active = pkg.activation
 	}
 
-	if err := config.Write(configFile, cfg); err != nil {
+	if err := config.Write(shared.ConfigFile, cfg); err != nil {
 		return fmt.Errorf("write config: %w", err)
 	}
 

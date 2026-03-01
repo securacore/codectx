@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/manifest"
 
@@ -44,7 +45,7 @@ func setupProject(t *testing.T) string {
 		Name:     "test-project",
 		Packages: []config.PackageDep{},
 	}
-	require.NoError(t, config.Write(filepath.Join(dir, configFile), cfg))
+	require.NoError(t, config.Write(filepath.Join(dir, shared.ConfigFile), cfg))
 
 	// Write docs/manifest.yml.
 	m := &manifest.Manifest{
@@ -353,7 +354,7 @@ func TestRun_missingManifestCreatesOne(t *testing.T) {
 		Name:     "new-project",
 		Packages: []config.PackageDep{},
 	}
-	require.NoError(t, config.Write(filepath.Join(dir, configFile), cfg))
+	require.NoError(t, config.Write(filepath.Join(dir, shared.ConfigFile), cfg))
 
 	// Create a foundation file on disk.
 	require.NoError(t, os.MkdirAll(filepath.Join(docsDir, "foundation", "philosophy"), 0o755))
@@ -420,7 +421,7 @@ func TestRun_customDocsDir(t *testing.T) {
 		},
 		Packages: []config.PackageDep{},
 	}
-	require.NoError(t, config.Write(filepath.Join(dir, configFile), cfg))
+	require.NoError(t, config.Write(filepath.Join(dir, shared.ConfigFile), cfg))
 
 	// Write manifest and a foundation doc.
 	m := &manifest.Manifest{Name: "test-project", Version: "1.0.0"}
@@ -570,7 +571,7 @@ func TestRun_corruptManifestRecovery(t *testing.T) {
 		Name:     "recovery-project",
 		Packages: []config.PackageDep{},
 	}
-	require.NoError(t, config.Write(filepath.Join(dir, configFile), cfg))
+	require.NoError(t, config.Write(filepath.Join(dir, shared.ConfigFile), cfg))
 
 	// Write a corrupt manifest.yml.
 	require.NoError(t, os.WriteFile(

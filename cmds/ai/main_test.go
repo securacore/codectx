@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/preferences"
 
@@ -15,7 +16,7 @@ import (
 func TestCommand_structure(t *testing.T) {
 	assert.Equal(t, "ai", Command.Name)
 	assert.Equal(t, "Manage AI tool integration", Command.Usage)
-	require.Len(t, Command.Commands, 3)
+	require.Len(t, Command.Commands, 4)
 }
 
 func TestCommand_subcommands(t *testing.T) {
@@ -25,9 +26,11 @@ func TestCommand_subcommands(t *testing.T) {
 	}
 
 	assert.Contains(t, names, "ide")
+	assert.Contains(t, names, "link")
 	assert.Contains(t, names, "setup")
 	assert.Contains(t, names, "status")
 	assert.Equal(t, "Launch an AI documentation authoring session", names["ide"])
+	assert.Equal(t, "Create AI tool entry point files", names["link"])
 	assert.Equal(t, "Detect and configure AI tool integration", names["setup"])
 	assert.Equal(t, "Show AI integration status and detected tools", names["status"])
 }
@@ -59,7 +62,7 @@ func setupAIProject(t *testing.T) string {
 		Name:     "test-project",
 		Packages: []config.PackageDep{},
 	}
-	require.NoError(t, config.Write(filepath.Join(dir, configFile), cfg))
+	require.NoError(t, config.Write(filepath.Join(dir, shared.ConfigFile), cfg))
 
 	outputDir := cfg.OutputDir()
 	require.NoError(t, os.MkdirAll(outputDir, 0o755))
@@ -158,7 +161,7 @@ func TestRunStatus_preferencesLoadError(t *testing.T) {
 		},
 		Packages: []config.PackageDep{},
 	}
-	require.NoError(t, config.Write(filepath.Join(dir, configFile), cfg))
+	require.NoError(t, config.Write(filepath.Join(dir, shared.ConfigFile), cfg))
 
 	// Preferences load should fail because the output dir doesn't exist
 	// with a valid preferences file. However, preferences.Load creates

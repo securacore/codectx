@@ -187,9 +187,9 @@ type Stats struct {
 	CompressedBytes int
 	ByteSavings     float64 // percentage
 	DictEntries     int
-	DictSavings     int // bytes saved by dictionary alone
-	DomainSavings   int // bytes saved by domain blocks alone
-	EstTokensBefore int // rough estimate: bytes / 4
-	EstTokensAfter  int
+	DictSavings     int     // bytes saved by dictionary alone
+	DomainSavings   int     // bytes saved by domain blocks alone
+	EstTokensBefore int     // token count via o200k_base BPE tokenizer
+	EstTokensAfter  int     // token count via o200k_base BPE tokenizer
 	TokenSavings    float64 // percentage
 }

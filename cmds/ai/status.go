@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/ai"
 	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/preferences"
@@ -22,7 +23,7 @@ var statusCommand = &cli.Command{
 
 func runStatus() error {
 	// Load config to determine output directory.
-	cfg, err := config.Load(configFile)
+	cfg, err := config.Load(shared.ConfigFile)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/config"
 	coreide "github.com/securacore/codectx/core/ide"
 	"github.com/securacore/codectx/core/ide/launcher"
@@ -211,7 +212,7 @@ func setupProject(t *testing.T, prefs *preferences.Preferences) *config.Config {
 		Name:     "test-project",
 		Packages: []config.PackageDep{},
 	}
-	require.NoError(t, config.Write(filepath.Join(dir, configFile), cfg))
+	require.NoError(t, config.Write(filepath.Join(dir, shared.ConfigFile), cfg))
 
 	docsDir := cfg.DocsDir()
 	require.NoError(t, os.MkdirAll(docsDir, 0o755))
@@ -401,7 +402,7 @@ func TestAssemblePrompt_packageProject(t *testing.T) {
 		Type:     "package",
 		Packages: []config.PackageDep{},
 	}
-	require.NoError(t, config.Write(filepath.Join(dir, configFile), cfg))
+	require.NoError(t, config.Write(filepath.Join(dir, shared.ConfigFile), cfg))
 
 	docsDir := cfg.DocsDir()
 	require.NoError(t, os.MkdirAll(docsDir, 0o755))
@@ -440,7 +441,7 @@ func TestAssemblePrompt_packageMergesDocsAndPkgManifest(t *testing.T) {
 		Type:     "package",
 		Packages: []config.PackageDep{},
 	}
-	require.NoError(t, config.Write(filepath.Join(dir, configFile), cfg))
+	require.NoError(t, config.Write(filepath.Join(dir, shared.ConfigFile), cfg))
 
 	docsDir := cfg.DocsDir()
 	require.NoError(t, os.MkdirAll(docsDir, 0o755))

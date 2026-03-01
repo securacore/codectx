@@ -16,7 +16,7 @@ Tailwind is the styling system for the application. These conventions establish 
 
 - **Class-based dark mode.** Runtime theme switching requires programmatic control via JavaScript, independent of the operating system's color scheme preference. Alternative considered: media-query-based dark mode (rejected; the application needs explicit theme control, not just OS preference detection).
 
-- **Utility-first with rigorous exception policy.** Direct application of the [Abstractions Must Earn Their Place](../../../foundation/philosophy.md) principle. The design system's token set and Tailwind's utility library cover virtually all styling needs; the exception bar is intentionally high to prevent erosion over time. Alternative considered: strict zero-exception policy (rejected; acknowledging that edge cases exist while making the bar extremely high is more durable than an absolute ban that eventually gets violated without documentation).
+- **Utility-first with rigorous exception policy.** Direct application of the [Abstractions Must Earn Their Place](../../../foundation/philosophy/README.md) principle. The design system's token set and Tailwind's utility library cover virtually all styling needs; the exception bar is intentionally high to prevent erosion over time. Alternative considered: strict zero-exception policy (rejected; acknowledging that edge cases exist while making the bar extremely high is more durable than an absolute ban that eventually gets violated without documentation).
 
 - **`cn()` and `cva()` as the class composition stack.** `cn()` (`clsx` + `tailwind-merge`) handles conditional class merging with intelligent deduplication. `cva()` (`class-variance-authority`) handles component variant APIs with type safety. Both are project standards. Alternative considered: manual template literals and conditional logic (rejected; template literals don't handle class conflicts, and conditional logic becomes unreadable at scale. `cn()` and `cva()` solve distinct problems and compose cleanly together).
 
@@ -28,8 +28,8 @@ Tailwind is the styling system for the application. These conventions establish 
 
 ## Dependencies
 
-- [docs/foundation/philosophy.md](../../../foundation/philosophy.md): Abstractions Must Earn Their Place principle (governs the exception policy)
-- [docs/foundation/specs.md](../../../foundation/specs.md): spec template this document follows
+- [docs/foundation/philosophy](../../../foundation/philosophy/README.md): Abstractions Must Earn Their Place principle (governs the exception policy)
+- [docs/foundation/specs](../../../foundation/specs/README.md): spec template this document follows
 - `src/app/globals.css`: design token definitions, theme configuration, base layer styles
 - `src/lib/utils.ts`: `cn()` utility implementation
 - `postcss.config.mjs`: Tailwind 4 PostCSS plugin configuration

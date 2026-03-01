@@ -7,10 +7,10 @@ import (
 	"unicode"
 )
 
-// BuildDictionary analyzes text segments and returns optimal dictionary entries.
+// buildDictionary analyzes text segments and returns optimal dictionary entries.
 // Algorithm per plan spec: sliding window candidates, frequency analysis,
 // greedy selection with overlap handling, deterministic output.
-func BuildDictionary(segments []string, opts EncoderOptions) *Dictionary {
+func buildDictionary(segments []string, opts EncoderOptions) *Dictionary {
 	if len(segments) == 0 {
 		return nil
 	}

@@ -180,7 +180,7 @@ func TestWriteAndLoadHeuristics(t *testing.T) {
 	err := WriteHeuristics(path, h)
 	require.NoError(t, err)
 
-	loaded, err := LoadHeuristics(path)
+	loaded, err := loadHeuristics(path)
 	require.NoError(t, err)
 
 	assert.Equal(t, h.CompiledAt, loaded.CompiledAt)
@@ -206,7 +206,7 @@ func TestWriteAndLoadHeuristics(t *testing.T) {
 }
 
 func TestLoadHeuristics_missingFile(t *testing.T) {
-	_, err := LoadHeuristics("/nonexistent/heuristics.yml")
+	_, err := loadHeuristics("/nonexistent/heuristics.yml")
 	assert.Error(t, err)
 }
 
@@ -309,7 +309,7 @@ func TestLoadHeuristics_invalidYAML(t *testing.T) {
 	path := filepath.Join(dir, "heuristics.yml")
 	require.NoError(t, os.WriteFile(path, []byte("{{invalid"), 0o644))
 
-	_, err := LoadHeuristics(path)
+	_, err := loadHeuristics(path)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "parse heuristics")
 }

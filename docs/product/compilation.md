@@ -2,7 +2,7 @@
 
 Running `codectx compile` builds a compiled documentation set from everything you've activated. The compiled output lives in `.codectx/` and is optimized for AI consumption: flat file layout, content-addressed filenames, rewritten cross-references, optional CMDX compression, and a single data map that indexes everything.
 
-The compiled format is validated by [compiled.schema.json](../schemas/compiled.schema.json).
+The compiled format is validated by `compiled.schema.json` (not yet created).
 
 ## What Happens When You Compile
 
@@ -104,7 +104,7 @@ Compilation uses fingerprint-based change detection. The fingerprint incorporate
 
 ## Heuristics
 
-The `heuristics.yml` sidecar provides aggregate metadata about the compiled documentation set. It is generated during compilation and is not loaded by AI. Validated by [heuristics.schema.json](../schemas/heuristics.schema.json).
+The `heuristics.yml` sidecar provides aggregate metadata about the compiled documentation set. It is generated during compilation and is not loaded by AI. Validated by `heuristics.schema.json` (not yet created).
 
 Contents:
 

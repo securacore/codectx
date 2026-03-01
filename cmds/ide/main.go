@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/huh"
+	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/compile"
 	"github.com/securacore/codectx/core/config"
 	coreide "github.com/securacore/codectx/core/ide"
@@ -21,8 +22,6 @@ import (
 	"github.com/securacore/codectx/ui"
 	"github.com/urfave/cli/v3"
 )
-
-const configFile = "codectx.yml"
 
 // Command is the codectx ai ide command.
 var Command = &cli.Command{
@@ -47,7 +46,7 @@ func run(_ context.Context, c *cli.Command) error {
 	}
 
 	// Load project config.
-	cfg, err := config.Load(configFile)
+	cfg, err := config.Load(shared.ConfigFile)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
@@ -138,7 +137,7 @@ func run(_ context.Context, c *cli.Command) error {
 	watchCtx, watchCancel := context.WithCancel(context.Background())
 	defer watchCancel()
 
-	w := corewatch.New(configFile)
+	w := corewatch.New(shared.ConfigFile)
 	go func() {
 		_ = w.Run(watchCtx)
 	}()

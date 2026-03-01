@@ -138,6 +138,6 @@ For installed packages: the package repository may or may not ship a `manifest.y
 |---|---|
 | [codectx.schema.json](../schemas/codectx.schema.json) | `codectx.yml` |
 | [manifest.schema.json](../schemas/manifest.schema.json) | Source `manifest.yml` (in `docs/` and packages) |
-| [compiled.schema.json](../schemas/compiled.schema.json) | Compiled `.codectx/manifest.yml` |
-| [heuristics.schema.json](../schemas/heuristics.schema.json) | `heuristics.yml` |
+| `compiled.schema.json` (not yet created) | Compiled `.codectx/manifest.yml` |
+| `heuristics.schema.json` (not yet created) | `heuristics.yml` |
 | [plan.schema.json](../schemas/plan.schema.json) | `plan.yml` (plan state) |

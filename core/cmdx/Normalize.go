@@ -12,11 +12,11 @@ import (
 // CompareASTs parses two markdown documents and returns whether they are
 // semantically equivalent (ignoring presentational metadata per D1).
 func CompareASTs(a, b []byte) (bool, string, error) {
-	dumpA, err := DumpAST(a)
+	dumpA, err := dumpAST(a)
 	if err != nil {
 		return false, "", fmt.Errorf("dump A: %w", err)
 	}
-	dumpB, err := DumpAST(b)
+	dumpB, err := dumpAST(b)
 	if err != nil {
 		return false, "", fmt.Errorf("dump B: %w", err)
 	}
@@ -49,10 +49,10 @@ func CompareASTs(a, b []byte) (bool, string, error) {
 	return false, "dumps differ but no line difference found", nil
 }
 
-// DumpAST parses markdown with goldmark and produces a canonical tree dump.
+// dumpAST parses markdown with goldmark and produces a canonical tree dump.
 // Per D1: strips source positions, table alignment, link/image titles.
 // Per D2: merges adjacent text nodes to normalize soft line breaks.
-func DumpAST(markdown []byte) (string, error) {
+func dumpAST(markdown []byte) (string, error) {
 	md := newGoldmark()
 	reader := text.NewReader(markdown)
 	doc := md.Parser().Parse(reader)

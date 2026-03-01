@@ -58,7 +58,7 @@ func Parse(cmdx []byte) (*Document, error) {
 
 	// Body
 	bodyText := strings.Join(lines[pos:], "\n")
-	parser := NewTagParser(bodyText)
+	parser := newTagParser(bodyText)
 	body, err := parser.ParseBody()
 	if err != nil {
 		return nil, fmt.Errorf("parse body: %w", err)

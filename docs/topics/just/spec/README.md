@@ -33,9 +33,9 @@ The Just configuration has a non-obvious architecture: a four-layer dispatch sys
 - `Justfile`: root entry point
 - `bin/just/settings.just`: shared configuration
 - `devbox.json`: environment definition
-- [docs/foundation/philosophy.md](../../../foundation/philosophy.md): guiding principles (one logical unit per file, Configuration is Truth)
+- [docs/foundation/philosophy](../../../foundation/philosophy/README.md): guiding principles (one logical unit per file, Configuration is Truth)
 - [docs/topics/typescript/README.md](../../typescript/README.md): one-export-per-module pattern that this architecture mirrors
-- [docs/foundation/specs.md](../../../foundation/specs.md): spec template this document follows
+- [docs/foundation/specs](../../../foundation/specs/README.md): spec template this document follows
 
 ## Structure
 

@@ -36,10 +36,10 @@ func TestContentHash_empty(t *testing.T) {
 	assert.NotEmpty(t, h)
 }
 
-// --- ObjectPath ---
+// --- objectPath ---
 
 func TestObjectPath(t *testing.T) {
-	assert.Equal(t, "objects/a1b2c3d4e5f67890.md", ObjectPath("a1b2c3d4e5f67890"))
+	assert.Equal(t, "objects/a1b2c3d4e5f67890.md", objectPath("a1b2c3d4e5f67890"))
 }
 
 // --- ObjectStore.Store ---
@@ -353,10 +353,10 @@ func TestPrune_allActive(t *testing.T) {
 	assert.Len(t, hashes, 2)
 }
 
-// --- ObjectPathCompressed ---
+// --- objectPathCompressed ---
 
 func TestObjectPathCompressed(t *testing.T) {
-	assert.Equal(t, "objects/a1b2c3d4e5f67890.cmdx", ObjectPathCompressed("a1b2c3d4e5f67890"))
+	assert.Equal(t, "objects/a1b2c3d4e5f67890.cmdx", objectPathCompressed("a1b2c3d4e5f67890"))
 }
 
 // --- stripObjectExt with .cmdx ---

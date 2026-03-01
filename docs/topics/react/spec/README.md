@@ -60,8 +60,8 @@ React has a vast surface area of patterns, and AI agents will default to whateve
 - `react-error-boundary`: functional Error Boundary component and hooks
 - [docs/topics/typescript/README.md](../../typescript/README.md): type system conventions, global types, module design
 - [docs/topics/just/README.md](../../just/README.md): operational directive and abstraction pattern
-- [docs/foundation/philosophy.md](../../../foundation/philosophy.md): guiding principles (SOLID, one unit per file, abstractions must earn their place)
-- [docs/foundation/specs.md](../../../foundation/specs.md): spec template this document follows
+- [docs/foundation/philosophy](../../../foundation/philosophy/README.md): guiding principles (SOLID, one unit per file, abstractions must earn their place)
+- [docs/foundation/specs](../../../foundation/specs/README.md): spec template this document follows
 
 ## Structure
 

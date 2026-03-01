@@ -79,7 +79,7 @@ func doSearch(reqURL string) ([]SearchResult, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("GitHub API returned %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("github API returned %d: %s", resp.StatusCode, string(body))
 	}
 
 	return parseSearchResponse(resp.Body)

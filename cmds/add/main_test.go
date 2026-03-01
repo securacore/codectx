@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/manifest"
 	"github.com/securacore/codectx/core/resolve"
@@ -41,7 +42,7 @@ func TestCommand_flags(t *testing.T) {
 // --- parseActivateFlag ---
 
 func TestParseActivateFlag_all(t *testing.T) {
-	a, err := parseActivateFlag("all")
+	a, err := shared.ParseActivateFlag("all")
 	require.NoError(t, err)
 	assert.Equal(t, "all", a.Mode)
 	assert.True(t, a.IsAll())
@@ -49,21 +50,21 @@ func TestParseActivateFlag_all(t *testing.T) {
 }
 
 func TestParseActivateFlag_none(t *testing.T) {
-	a, err := parseActivateFlag("none")
+	a, err := shared.ParseActivateFlag("none")
 	require.NoError(t, err)
 	assert.Equal(t, "none", a.Mode)
 	assert.True(t, a.IsNone())
 }
 
 func TestParseActivateFlag_singleGranular(t *testing.T) {
-	a, err := parseActivateFlag("topics:react")
+	a, err := shared.ParseActivateFlag("topics:react")
 	require.NoError(t, err)
 	require.NotNil(t, a.Map)
 	assert.Equal(t, []string{"react"}, a.Map.Topics)
 }
 
 func TestParseActivateFlag_multipleGranular(t *testing.T) {
-	a, err := parseActivateFlag("foundation:philosophy,topics:react,topics:go,plans:migration")
+	a, err := shared.ParseActivateFlag("foundation:philosophy,topics:react,topics:go,plans:migration")
 	require.NoError(t, err)
 	require.NotNil(t, a.Map)
 	assert.Equal(t, []string{"philosophy"}, a.Map.Foundation)
@@ -73,14 +74,14 @@ func TestParseActivateFlag_multipleGranular(t *testing.T) {
 }
 
 func TestParseActivateFlag_application(t *testing.T) {
-	a, err := parseActivateFlag("application:architecture")
+	a, err := shared.ParseActivateFlag("application:architecture")
 	require.NoError(t, err)
 	require.NotNil(t, a.Map)
 	assert.Equal(t, []string{"architecture"}, a.Map.Application)
 }
 
 func TestParseActivateFlag_allSections(t *testing.T) {
-	a, err := parseActivateFlag("foundation:a,application:arch,topics:b,prompts:c,plans:d")
+	a, err := shared.ParseActivateFlag("foundation:a,application:arch,topics:b,prompts:c,plans:d")
 	require.NoError(t, err)
 	require.NotNil(t, a.Map)
 	assert.Equal(t, []string{"a"}, a.Map.Foundation)
@@ -103,7 +104,7 @@ func TestParseActivateFlag_errors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := parseActivateFlag(tt.input)
+			_, err := shared.ParseActivateFlag(tt.input)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.msg)
 		})
@@ -298,7 +299,7 @@ func TestDetectCollisions_noCollisions(t *testing.T) {
 		},
 	}
 
-	collisions := detectCollisions(cfg, newManifest, config.Activation{Mode: "all"})
+	collisions := shared.DetectCollisions(cfg, -1, newManifest, config.Activation{Mode: "all"})
 	assert.Empty(t, collisions)
 }
 
@@ -311,11 +312,11 @@ func TestDetectCollisions_foundationCollision(t *testing.T) {
 		},
 	}
 
-	collisions := detectCollisions(cfg, newManifest, config.Activation{Mode: "all"})
+	collisions := shared.DetectCollisions(cfg, -1, newManifest, config.Activation{Mode: "all"})
 	require.Len(t, collisions, 1)
-	assert.Equal(t, "foundation", collisions[0].section)
-	assert.Equal(t, "philosophy", collisions[0].id)
-	assert.Equal(t, "local", collisions[0].pkg)
+	assert.Equal(t, "foundation", collisions[0].Section)
+	assert.Equal(t, "philosophy", collisions[0].ID)
+	assert.Equal(t, "local", collisions[0].Pkg)
 }
 
 func TestDetectCollisions_topicCollision(t *testing.T) {
@@ -327,10 +328,10 @@ func TestDetectCollisions_topicCollision(t *testing.T) {
 		},
 	}
 
-	collisions := detectCollisions(cfg, newManifest, config.Activation{Mode: "all"})
+	collisions := shared.DetectCollisions(cfg, -1, newManifest, config.Activation{Mode: "all"})
 	require.Len(t, collisions, 1)
-	assert.Equal(t, "topics", collisions[0].section)
-	assert.Equal(t, "react", collisions[0].id)
+	assert.Equal(t, "topics", collisions[0].Section)
+	assert.Equal(t, "react", collisions[0].ID)
 }
 
 func TestDetectCollisions_applicationCollision(t *testing.T) {
@@ -342,11 +343,11 @@ func TestDetectCollisions_applicationCollision(t *testing.T) {
 		},
 	}
 
-	collisions := detectCollisions(cfg, newManifest, config.Activation{Mode: "all"})
+	collisions := shared.DetectCollisions(cfg, -1, newManifest, config.Activation{Mode: "all"})
 	require.Len(t, collisions, 1)
-	assert.Equal(t, "application", collisions[0].section)
-	assert.Equal(t, "architecture", collisions[0].id)
-	assert.Equal(t, "local", collisions[0].pkg)
+	assert.Equal(t, "application", collisions[0].Section)
+	assert.Equal(t, "architecture", collisions[0].ID)
+	assert.Equal(t, "local", collisions[0].Pkg)
 }
 
 func TestDetectCollisions_granularActivationNoCollision(t *testing.T) {
@@ -367,7 +368,7 @@ func TestDetectCollisions_granularActivationNoCollision(t *testing.T) {
 		},
 	}
 
-	collisions := detectCollisions(cfg, newManifest, activation)
+	collisions := shared.DetectCollisions(cfg, -1, newManifest, activation)
 	assert.Empty(t, collisions)
 }
 
@@ -401,11 +402,11 @@ func TestDetectCollisions_withExistingPackage(t *testing.T) {
 		},
 	}
 
-	collisions := detectCollisions(cfg, newManifest, config.Activation{Mode: "all"})
+	collisions := shared.DetectCollisions(cfg, -1, newManifest, config.Activation{Mode: "all"})
 	require.Len(t, collisions, 1)
-	assert.Equal(t, "topics", collisions[0].section)
-	assert.Equal(t, "go", collisions[0].id)
-	assert.Equal(t, "go@org", collisions[0].pkg)
+	assert.Equal(t, "topics", collisions[0].Section)
+	assert.Equal(t, "go", collisions[0].ID)
+	assert.Equal(t, "go@org", collisions[0].Pkg)
 
 	_ = dir // keep for clarity
 }
@@ -448,17 +449,17 @@ func TestDetectCollisions_granularActivationOnInstalledPackage(t *testing.T) {
 		},
 	}
 
-	collisions := detectCollisions(cfg, newManifest, config.Activation{Mode: "all"})
+	collisions := shared.DetectCollisions(cfg, -1, newManifest, config.Activation{Mode: "all"})
 
 	// Only "go" should collide (from multi@org). "python" should not because it's
 	// not activated in the installed package.
 	goCollision := false
 	pythonCollision := false
 	for _, c := range collisions {
-		if c.id == "go" && c.pkg == "multi@org" {
+		if c.ID == "go" && c.Pkg == "multi@org" {
 			goCollision = true
 		}
-		if c.id == "python" && c.pkg == "multi@org" {
+		if c.ID == "python" && c.Pkg == "multi@org" {
 			pythonCollision = true
 		}
 	}
@@ -472,7 +473,7 @@ func TestFilterManifestForIDs_all(t *testing.T) {
 	m := &manifest.Manifest{
 		Foundation: []manifest.FoundationEntry{{ID: "a"}},
 	}
-	filtered := filterManifestForIDs(m, config.Activation{Mode: "all"})
+	filtered := shared.FilterManifestForIDs(m, config.Activation{Mode: "all"})
 	assert.Equal(t, m, filtered)
 }
 
@@ -480,7 +481,7 @@ func TestFilterManifestForIDs_none(t *testing.T) {
 	m := &manifest.Manifest{
 		Foundation: []manifest.FoundationEntry{{ID: "a"}},
 	}
-	filtered := filterManifestForIDs(m, config.Activation{Mode: "none"})
+	filtered := shared.FilterManifestForIDs(m, config.Activation{Mode: "none"})
 	assert.Empty(t, filtered.Foundation)
 }
 
@@ -499,7 +500,7 @@ func TestFilterManifestForIDs_granular(t *testing.T) {
 			Topics:     []string{"d"},
 		},
 	}
-	filtered := filterManifestForIDs(m, activation)
+	filtered := shared.FilterManifestForIDs(m, activation)
 	require.Len(t, filtered.Foundation, 1)
 	assert.Equal(t, "a", filtered.Foundation[0].ID)
 	require.Len(t, filtered.Topics, 1)
@@ -520,7 +521,7 @@ func TestFilterManifestForIDs_application(t *testing.T) {
 			Application: []string{"architecture"},
 		},
 	}
-	filtered := filterManifestForIDs(m, activation)
+	filtered := shared.FilterManifestForIDs(m, activation)
 	require.Len(t, filtered.Application, 1)
 	assert.Equal(t, "architecture", filtered.Application[0].ID)
 	assert.Empty(t, filtered.Topics)
@@ -529,13 +530,13 @@ func TestFilterManifestForIDs_application(t *testing.T) {
 // --- splitKey ---
 
 func TestSplitKey(t *testing.T) {
-	section, id := splitKey("foundation:philosophy")
+	section, id := shared.SplitKey("foundation:philosophy")
 	assert.Equal(t, "foundation", section)
 	assert.Equal(t, "philosophy", id)
 }
 
 func TestSplitKey_noColon(t *testing.T) {
-	section, id := splitKey("noprefix")
+	section, id := shared.SplitKey("noprefix")
 	assert.Equal(t, "noprefix", section)
 	assert.Equal(t, "", id)
 }
@@ -543,13 +544,13 @@ func TestSplitKey_noColon(t *testing.T) {
 // --- parseActivateFlag edge cases ---
 
 func TestParseActivateFlag_emptyString(t *testing.T) {
-	_, err := parseActivateFlag("")
+	_, err := shared.ParseActivateFlag("")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "expected section:id")
 }
 
 func TestParseActivateFlag_whitespace(t *testing.T) {
-	a, err := parseActivateFlag("topics:react , foundation:philosophy")
+	a, err := shared.ParseActivateFlag("topics:react , foundation:philosophy")
 	require.NoError(t, err)
 	require.NotNil(t, a.Map)
 	assert.Equal(t, []string{"react"}, a.Map.Topics)
@@ -557,14 +558,14 @@ func TestParseActivateFlag_whitespace(t *testing.T) {
 }
 
 func TestParseActivateFlag_duplicateEntries(t *testing.T) {
-	a, err := parseActivateFlag("topics:react,topics:react")
+	a, err := shared.ParseActivateFlag("topics:react,topics:react")
 	require.NoError(t, err)
 	require.NotNil(t, a.Map)
 	assert.Equal(t, []string{"react", "react"}, a.Map.Topics)
 }
 
 func TestParseActivateFlag_colonInID(t *testing.T) {
-	a, err := parseActivateFlag("topics:my:id")
+	a, err := shared.ParseActivateFlag("topics:my:id")
 	require.NoError(t, err)
 	require.NotNil(t, a.Map)
 	assert.Equal(t, []string{"my:id"}, a.Map.Topics)
@@ -592,7 +593,7 @@ func TestDetectCollisions_noLocalManifest(t *testing.T) {
 		},
 	}
 
-	collisions := detectCollisions(cfg, newManifest, config.Activation{Mode: "all"})
+	collisions := shared.DetectCollisions(cfg, -1, newManifest, config.Activation{Mode: "all"})
 	assert.Empty(t, collisions)
 }
 
@@ -635,7 +636,7 @@ func TestDetectCollisions_inactivePackageSkipped(t *testing.T) {
 		},
 	}
 
-	collisions := detectCollisions(cfg, newManifest, config.Activation{Mode: "all"})
+	collisions := shared.DetectCollisions(cfg, -1, newManifest, config.Activation{Mode: "all"})
 	assert.Empty(t, collisions)
 }
 
@@ -652,7 +653,7 @@ func TestDetectCollisions_noneActivation(t *testing.T) {
 		},
 	}
 
-	collisions := detectCollisions(cfg, newManifest, config.Activation{Mode: "none"})
+	collisions := shared.DetectCollisions(cfg, -1, newManifest, config.Activation{Mode: "none"})
 	assert.Empty(t, collisions)
 }
 
@@ -677,7 +678,7 @@ func TestFilterManifestForIDs_promptsAndPlans(t *testing.T) {
 		},
 	}
 
-	filtered := filterManifestForIDs(m, activation)
+	filtered := shared.FilterManifestForIDs(m, activation)
 	require.Len(t, filtered.Prompts, 1)
 	assert.Equal(t, "review", filtered.Prompts[0].ID)
 	require.Len(t, filtered.Plans, 1)
@@ -699,7 +700,7 @@ func TestFilterManifestForIDs_emptyActivationSlice(t *testing.T) {
 		},
 	}
 
-	filtered := filterManifestForIDs(m, activation)
+	filtered := shared.FilterManifestForIDs(m, activation)
 	assert.Empty(t, filtered.Foundation)
 }
 
@@ -720,7 +721,7 @@ func TestFilterManifestForIDs_nonexistentIDs(t *testing.T) {
 		},
 	}
 
-	filtered := filterManifestForIDs(m, activation)
+	filtered := shared.FilterManifestForIDs(m, activation)
 	assert.Empty(t, filtered.Foundation)
 	assert.Empty(t, filtered.Topics)
 }
@@ -728,25 +729,25 @@ func TestFilterManifestForIDs_nonexistentIDs(t *testing.T) {
 // --- splitKey edge cases ---
 
 func TestSplitKey_emptyString(t *testing.T) {
-	section, id := splitKey("")
+	section, id := shared.SplitKey("")
 	assert.Equal(t, "", section)
 	assert.Equal(t, "", id)
 }
 
 func TestSplitKey_multipleColons(t *testing.T) {
-	section, id := splitKey("a:b:c")
+	section, id := shared.SplitKey("a:b:c")
 	assert.Equal(t, "a", section)
 	assert.Equal(t, "b:c", id)
 }
 
 func TestSplitKey_colonAtStart(t *testing.T) {
-	section, id := splitKey(":foo")
+	section, id := shared.SplitKey(":foo")
 	assert.Equal(t, "", section)
 	assert.Equal(t, "foo", id)
 }
 
 func TestSplitKey_colonAtEnd(t *testing.T) {
-	section, id := splitKey("foo:")
+	section, id := shared.SplitKey("foo:")
 	assert.Equal(t, "foo", section)
 	assert.Equal(t, "", id)
 }
@@ -865,7 +866,7 @@ func TestDetectCollisions_corruptInstalledPackageManifest(t *testing.T) {
 	}
 
 	// Corrupt installed manifest should be silently skipped (no collision, no error).
-	collisions := detectCollisions(cfg, newManifest, config.Activation{Mode: "all"})
+	collisions := shared.DetectCollisions(cfg, -1, newManifest, config.Activation{Mode: "all"})
 	assert.Empty(t, collisions)
 }
 
@@ -891,7 +892,7 @@ func TestPrintActivation_granularEmpty(t *testing.T) {
 // --- toSetLocal ---
 
 func TestToSetLocal_normal(t *testing.T) {
-	s := toSetLocal([]string{"a", "b", "c"})
+	s := shared.ToSet([]string{"a", "b", "c"})
 	assert.Len(t, s, 3)
 	assert.True(t, s["a"])
 	assert.True(t, s["b"])
@@ -900,12 +901,12 @@ func TestToSetLocal_normal(t *testing.T) {
 }
 
 func TestToSetLocal_empty(t *testing.T) {
-	s := toSetLocal([]string{})
+	s := shared.ToSet([]string{})
 	assert.Len(t, s, 0)
 }
 
 func TestToSetLocal_nil(t *testing.T) {
-	s := toSetLocal(nil)
+	s := shared.ToSet(nil)
 	assert.Len(t, s, 0)
 }
 
@@ -932,7 +933,7 @@ func setupAddProject(t *testing.T) string {
 		Name:     "test-project",
 		Packages: []config.PackageDep{},
 	}
-	require.NoError(t, config.Write(filepath.Join(dir, configFile), cfg))
+	require.NoError(t, config.Write(filepath.Join(dir, shared.ConfigFile), cfg))
 
 	// Write local manifest.yml.
 	m := &manifest.Manifest{
@@ -1005,7 +1006,7 @@ func TestRun_addPackageSuccess(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify config was updated with the package.
-	cfg, err := config.Load(configFile)
+	cfg, err := config.Load(shared.ConfigFile)
 	require.NoError(t, err)
 	require.Len(t, cfg.Packages, 1)
 	assert.Equal(t, "test-pkg", cfg.Packages[0].Name)
@@ -1025,7 +1026,7 @@ func TestRun_addPackageActivateNone(t *testing.T) {
 	err := Run([]string{"test-pkg@test-author"}, bareDir, "none")
 	require.NoError(t, err)
 
-	cfg, err := config.Load(configFile)
+	cfg, err := config.Load(shared.ConfigFile)
 	require.NoError(t, err)
 	require.Len(t, cfg.Packages, 1)
 	assert.True(t, cfg.Packages[0].Active.IsNone())
@@ -1039,7 +1040,7 @@ func TestRun_addPackageVersionPinning(t *testing.T) {
 	err := Run([]string{"test-pkg@test-author"}, bareDir, "all")
 	require.NoError(t, err)
 
-	cfg, err := config.Load(configFile)
+	cfg, err := config.Load(shared.ConfigFile)
 	require.NoError(t, err)
 	require.Len(t, cfg.Packages, 1)
 	assert.Equal(t, "^1.1.0", cfg.Packages[0].Version)
@@ -1053,7 +1054,7 @@ func TestRun_addPackageWithExplicitVersion(t *testing.T) {
 	err := Run([]string{"test-pkg@test-author:^1.0.0"}, bareDir, "all")
 	require.NoError(t, err)
 
-	cfg, err := config.Load(configFile)
+	cfg, err := config.Load(shared.ConfigFile)
 	require.NoError(t, err)
 	require.Len(t, cfg.Packages, 1)
 	assert.Equal(t, "^1.0.0", cfg.Packages[0].Version)
@@ -1123,7 +1124,7 @@ func TestRun_multiplePackagesSuccess(t *testing.T) {
 	err = Run([]string{"pkg-b@org-b"}, bareDir2, "all")
 	require.NoError(t, err)
 
-	cfg, err := config.Load(configFile)
+	cfg, err := config.Load(shared.ConfigFile)
 	require.NoError(t, err)
 	require.Len(t, cfg.Packages, 2)
 	assert.Equal(t, "pkg-a", cfg.Packages[0].Name)
@@ -1147,7 +1148,7 @@ func TestRun_multiplePackagesPartialFailure(t *testing.T) {
 	assert.Error(t, err)
 
 	// Verify only the good package is in config.
-	cfg, err := config.Load(configFile)
+	cfg, err := config.Load(shared.ConfigFile)
 	require.NoError(t, err)
 	require.Len(t, cfg.Packages, 1)
 	assert.Equal(t, "good-pkg", cfg.Packages[0].Name)
@@ -1158,7 +1159,7 @@ func TestRun_multiplePackagesPartialFailure(t *testing.T) {
 func TestParseAndResolve_duplicatePackage(t *testing.T) {
 	setupAddProject(t)
 
-	cfg, err := config.Load(configFile)
+	cfg, err := config.Load(shared.ConfigFile)
 	require.NoError(t, err)
 
 	// Add a package to config manually.
@@ -1166,8 +1167,8 @@ func TestParseAndResolve_duplicatePackage(t *testing.T) {
 		Name:   "existing",
 		Author: "org",
 	})
-	require.NoError(t, config.Write(configFile, cfg))
-	cfg, _ = config.Load(configFile)
+	require.NoError(t, config.Write(shared.ConfigFile, cfg))
+	cfg, _ = config.Load(shared.ConfigFile)
 
 	_, err = parseAndResolve("existing@org", "", cfg, cfg.DocsDir())
 	assert.Error(t, err)
@@ -1177,7 +1178,7 @@ func TestParseAndResolve_duplicatePackage(t *testing.T) {
 func TestParseAndResolve_missingAuthorNoSource(t *testing.T) {
 	setupAddProject(t)
 
-	cfg, err := config.Load(configFile)
+	cfg, err := config.Load(shared.ConfigFile)
 	require.NoError(t, err)
 
 	_, err = parseAndResolve("pkgname", "", cfg, cfg.DocsDir())
@@ -1233,7 +1234,7 @@ func TestDetectCollisions_multipleCollisions(t *testing.T) {
 		},
 	}
 
-	collisions := detectCollisions(cfg, newManifest, config.Activation{Mode: "all"})
+	collisions := shared.DetectCollisions(cfg, -1, newManifest, config.Activation{Mode: "all"})
 	assert.Len(t, collisions, 2)
 }
 
@@ -1294,6 +1295,6 @@ func TestDetectCollisions_staleLocalEntryNotCollision(t *testing.T) {
 		},
 	}
 
-	collisions := detectCollisions(cfg, newManifest, config.Activation{Mode: "all"})
+	collisions := shared.DetectCollisions(cfg, -1, newManifest, config.Activation{Mode: "all"})
 	assert.Empty(t, collisions, "stale local entry (missing file) should not cause collision")
 }

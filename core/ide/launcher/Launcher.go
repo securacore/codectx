@@ -54,19 +54,19 @@ func Resolve(prefs *preferences.Preferences) (Launcher, error) {
 		}
 	}
 
-	return nil, fmt.Errorf("no supported AI binary found — install claude or opencode, or run: codectx set ai.bin=<binary>")
+	return nil, fmt.Errorf("no supported ai binary found — install claude or opencode, or run: codectx set ai.bin=<binary>")
 }
 
 // resolveByID resolves a launcher by provider ID, verifying the binary exists.
 func resolveByID(id string) (Launcher, error) {
 	provider, ok := ai.ProviderByID(id)
 	if !ok {
-		return nil, fmt.Errorf("unknown AI binary %q", id)
+		return nil, fmt.Errorf("unknown ai binary %q", id)
 	}
 
 	path, err := exec.LookPath(provider.Binary)
 	if err != nil {
-		return nil, fmt.Errorf("AI binary %q not found on PATH", provider.Binary)
+		return nil, fmt.Errorf("launch binary %q not found on PATH", provider.Binary)
 	}
 
 	switch id {
@@ -75,6 +75,6 @@ func resolveByID(id string) (Launcher, error) {
 	case "opencode":
 		return NewOpenCode(path), nil
 	default:
-		return nil, fmt.Errorf("AI binary %q is not supported for interactive sessions", id)
+		return nil, fmt.Errorf("ai binary %q is not supported for interactive sessions", id)
 	}
 }

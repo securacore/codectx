@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/manifest"
 
@@ -92,7 +93,7 @@ func setupProject(t *testing.T) string {
 		Name:     "test-project",
 		Packages: []config.PackageDep{},
 	}
-	require.NoError(t, config.Write(filepath.Join(dir, configFile), cfg))
+	require.NoError(t, config.Write(filepath.Join(dir, shared.ConfigFile), cfg))
 
 	// Write docs/manifest.yml.
 	m := &manifest.Manifest{
@@ -432,7 +433,7 @@ func setupPackageProject(t *testing.T) string {
 		Type:     "package",
 		Packages: []config.PackageDep{},
 	}
-	require.NoError(t, config.Write(filepath.Join(dir, configFile), cfg))
+	require.NoError(t, config.Write(filepath.Join(dir, shared.ConfigFile), cfg))
 
 	// Write docs/manifest.yml.
 	docsManifest := &manifest.Manifest{

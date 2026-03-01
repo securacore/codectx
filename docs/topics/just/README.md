@@ -108,4 +108,4 @@ Example flow for `just save`:
 
 ## Configuration Reference
 
-All runtime configuration is defined in `bin/just/settings.just`. Per [philosophy.md](../../foundation/philosophy.md), when this document and configuration conflict, configuration wins.
+All runtime configuration is defined in `bin/just/settings.just`. Per [philosophy.md](../../foundation/philosophy/README.md), when this document and configuration conflict, configuration wins.

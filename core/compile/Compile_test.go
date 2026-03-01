@@ -73,12 +73,12 @@ func TestCompile_emptyProject(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Verify compiled manifest is loadable.
-	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
+	cm, err := loadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
 	require.NoError(t, err)
 	assert.Equal(t, "test-project", cm.Name)
 
 	// Verify heuristics.yml was generated.
-	h, err := LoadHeuristics(filepath.Join(result.OutputDir, "heuristics.yml"))
+	h, err := loadHeuristics(filepath.Join(result.OutputDir, "heuristics.yml"))
 	require.NoError(t, err)
 	assert.Equal(t, 0, h.Totals.Entries)
 	assert.Equal(t, 0, h.Totals.Objects)
@@ -112,21 +112,21 @@ func TestCompile_withLocalFiles(t *testing.T) {
 
 	// Verify the file was stored as a content-addressed object.
 	hash := ContentHash([]byte("# Philosophy\n"))
-	objectPath := filepath.Join(result.OutputDir, "objects", hash+".md")
-	data, err := os.ReadFile(objectPath)
+	objFilePath := filepath.Join(result.OutputDir, "objects", hash+".md")
+	data, err := os.ReadFile(objFilePath)
 	require.NoError(t, err)
 	assert.Equal(t, "# Philosophy\n", string(data))
 
 	// Verify the compiled manifest references the object.
-	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
+	cm, err := loadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
 	require.NoError(t, err)
 	require.Len(t, cm.Foundation, 1)
-	assert.Equal(t, ObjectPath(hash), cm.Foundation[0].Object)
+	assert.Equal(t, objectPath(hash), cm.Foundation[0].Object)
 	assert.Equal(t, "local", cm.Foundation[0].Source)
 	assert.Equal(t, "always", cm.Foundation[0].Load)
 
 	// Verify heuristics.yml has correct stats.
-	h, err := LoadHeuristics(filepath.Join(result.OutputDir, "heuristics.yml"))
+	h, err := loadHeuristics(filepath.Join(result.OutputDir, "heuristics.yml"))
 	require.NoError(t, err)
 	assert.Equal(t, 1, h.Totals.Entries)
 	assert.Equal(t, 1, h.Totals.AlwaysLoad)
@@ -456,7 +456,7 @@ func TestCompile_multiplePackages(t *testing.T) {
 	assert.Equal(t, 2, result.ObjectsStored)
 
 	// Verify the compiled manifest contains entries from both packages.
-	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
+	cm, err := loadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
 	require.NoError(t, err)
 
 	assert.Len(t, cm.Topics, 1)
@@ -678,7 +678,7 @@ func TestCompile_granularActivation(t *testing.T) {
 	assert.Equal(t, 2, result.ObjectsStored)
 
 	// Verify the compiled manifest only has the activated entries.
-	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
+	cm, err := loadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
 	require.NoError(t, err)
 
 	require.Len(t, cm.Foundation, 1)
@@ -779,7 +779,7 @@ func TestCompile_contentAddressedDedup(t *testing.T) {
 	assert.Equal(t, 2, result.ObjectsStored)
 
 	// Both entries in the compiled manifest reference the same object.
-	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
+	cm, err := loadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
 	require.NoError(t, err)
 	require.Len(t, cm.Foundation, 2)
 	assert.Equal(t, cm.Foundation[0].Object, cm.Foundation[1].Object)
@@ -828,7 +828,7 @@ func TestCompile_topicWithSpecAndFiles(t *testing.T) {
 	assert.Equal(t, 3, result.ObjectsStored)
 
 	// Verify compiled manifest has spec and files references.
-	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
+	cm, err := loadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
 	require.NoError(t, err)
 	require.Len(t, cm.Topics, 1)
 	assert.Equal(t, "go", cm.Topics[0].ID)
@@ -844,7 +844,7 @@ func TestCompile_topicWithSpecAndFiles(t *testing.T) {
 	assert.Len(t, objectEntries, 3)
 
 	// Verify heuristics counts spec and files sizes.
-	h, err := LoadHeuristics(filepath.Join(result.OutputDir, "heuristics.yml"))
+	h, err := loadHeuristics(filepath.Join(result.OutputDir, "heuristics.yml"))
 	require.NoError(t, err)
 	require.NotNil(t, h.Sections.Topics)
 	assert.Equal(t, 1, h.Sections.Topics.Entries)
@@ -896,7 +896,7 @@ func TestCompile_planWithStateFile(t *testing.T) {
 	assert.Contains(t, string(data), "phase: planning")
 
 	// Verify compiled manifest references state path.
-	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
+	cm, err := loadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
 	require.NoError(t, err)
 	require.Len(t, cm.Plans, 1)
 	assert.Equal(t, "state/migrate.yml", cm.Plans[0].PlanState)
@@ -996,7 +996,7 @@ func TestCompile_decompositionTriggered(t *testing.T) {
 
 	// Load root manifest: should have always-load entry inlined
 	// and a manifests reference for foundation.
-	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
+	cm, err := loadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
 	require.NoError(t, err)
 
 	// Only the always-load entry should be inlined in root.
@@ -1017,7 +1017,7 @@ func TestCompile_decompositionTriggered(t *testing.T) {
 	assert.True(t, foundRef, "should have foundation manifest reference")
 
 	// Verify the sub-manifest file exists and is loadable.
-	subCm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifests", "foundation.yml"))
+	subCm, err := loadCompiledManifest(filepath.Join(result.OutputDir, "manifests", "foundation.yml"))
 	require.NoError(t, err)
 	assert.Len(t, subCm.Foundation, 59)
 }
@@ -1084,7 +1084,7 @@ func TestCompile_discoversLocalEntries(t *testing.T) {
 	assert.Equal(t, 3, result.ObjectsStored)
 
 	// Verify the compiled manifest has the discovered entries.
-	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
+	cm, err := loadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
 	require.NoError(t, err)
 	require.Len(t, cm.Foundation, 1)
 	assert.Equal(t, "philosophy", cm.Foundation[0].ID)
@@ -1094,7 +1094,7 @@ func TestCompile_discoversLocalEntries(t *testing.T) {
 	require.Len(t, cm.Topics[0].Files, 1)
 
 	// Verify heuristics reflect the discovered entries.
-	h, err := LoadHeuristics(filepath.Join(result.OutputDir, "heuristics.yml"))
+	h, err := loadHeuristics(filepath.Join(result.OutputDir, "heuristics.yml"))
 	require.NoError(t, err)
 	assert.Equal(t, 2, h.Totals.Entries) // 1 foundation + 1 topic
 	assert.Equal(t, 3, h.Totals.Objects) // 3 unique files
@@ -1139,7 +1139,7 @@ func TestCompile_discoversInstalledPackageEntries(t *testing.T) {
 	assert.Equal(t, 3, result.ObjectsStored)
 
 	// Verify the compiled manifest has the discovered topic.
-	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
+	cm, err := loadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
 	require.NoError(t, err)
 	require.Len(t, cm.Topics, 1)
 	assert.Equal(t, "react", cm.Topics[0].ID)
@@ -1148,7 +1148,7 @@ func TestCompile_discoversInstalledPackageEntries(t *testing.T) {
 	require.Len(t, cm.Topics[0].Files, 2) // hooks.md + state.md
 
 	// Verify heuristics reflect the discovered entries.
-	h, err := LoadHeuristics(filepath.Join(result.OutputDir, "heuristics.yml"))
+	h, err := loadHeuristics(filepath.Join(result.OutputDir, "heuristics.yml"))
 	require.NoError(t, err)
 	assert.Equal(t, 1, h.Totals.Entries)
 	assert.Equal(t, 3, h.Totals.Objects)
@@ -1199,7 +1199,7 @@ func TestCompile_discoveryWithGranularActivation(t *testing.T) {
 	// Only 2 objects: react/README.md + go/README.md (typescript excluded).
 	assert.Equal(t, 2, result.ObjectsStored)
 
-	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
+	cm, err := loadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
 	require.NoError(t, err)
 
 	require.Len(t, cm.Topics, 2)
@@ -1239,7 +1239,7 @@ func TestCompile_syncRemovesStaleLocalEntries(t *testing.T) {
 
 	// Only the alive entry should appear in compiled output.
 	assert.Equal(t, 1, result.ObjectsStored)
-	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
+	cm, err := loadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
 	require.NoError(t, err)
 	require.Len(t, cm.Foundation, 1)
 	assert.Equal(t, "alive", cm.Foundation[0].ID)
@@ -1301,7 +1301,7 @@ func TestCompile_syncInfersRelationshipsInCompiledOutput(t *testing.T) {
 	assert.Equal(t, 2, result.ObjectsStored)
 
 	// Verify the compiled manifest carries the inferred relationships.
-	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
+	cm, err := loadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
 	require.NoError(t, err)
 	require.Len(t, cm.Foundation, 2)
 
@@ -1590,7 +1590,7 @@ func TestCompile_withCompression_storesCmdxFiles(t *testing.T) {
 	assert.Contains(t, string(data), "@CMDX v1", "stored content should be CMDX-encoded")
 
 	// Verify compiled manifest references .cmdx paths.
-	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
+	cm, err := loadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
 	require.NoError(t, err)
 	require.NotEmpty(t, cm.Foundation)
 	assert.Contains(t, cm.Foundation[0].Object, ".cmdx",

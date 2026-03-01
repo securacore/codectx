@@ -4,8 +4,9 @@ import "github.com/urfave/cli/v3"
 
 // Command is the parent command for CLI self-management operations.
 var Command = &cli.Command{
-	Name:  "self",
-	Usage: "Manage the codectx CLI",
+	Name:     "self",
+	Usage:    "Manage the codectx CLI",
+	Category: "System",
 	Commands: []*cli.Command{
 		upgradeCommand,
 	},

@@ -8,14 +8,14 @@ import (
 )
 
 func TestParseInline_plainText(t *testing.T) {
-	nodes := ParseInline("hello world")
+	nodes := parseInline("hello world")
 	require.Len(t, nodes, 1)
 	assert.Equal(t, TagRaw, nodes[0].Tag)
 	assert.Equal(t, "hello world", nodes[0].Content)
 }
 
 func TestParseInline_bold(t *testing.T) {
-	nodes := ParseInline("before @B{bold} after")
+	nodes := parseInline("before @B{bold} after")
 	require.Len(t, nodes, 3)
 	assert.Equal(t, TagRaw, nodes[0].Tag)
 	assert.Equal(t, "before ", nodes[0].Content)
@@ -27,7 +27,7 @@ func TestParseInline_bold(t *testing.T) {
 }
 
 func TestParseInline_nested(t *testing.T) {
-	nodes := ParseInline("@B{some @I{italic} text}")
+	nodes := parseInline("@B{some @I{italic} text}")
 	require.Len(t, nodes, 1)
 	bold := nodes[0]
 	assert.Equal(t, TagBold, bold.Tag)
@@ -38,14 +38,14 @@ func TestParseInline_nested(t *testing.T) {
 }
 
 func TestParseInline_code(t *testing.T) {
-	nodes := ParseInline("use @C{fmt.Println} here")
+	nodes := parseInline("use @C{fmt.Println} here")
 	require.Len(t, nodes, 3)
 	assert.Equal(t, TagCode, nodes[1].Tag)
 	assert.Equal(t, "fmt.Println", nodes[1].Content)
 }
 
 func TestParseInline_link(t *testing.T) {
-	nodes := ParseInline("see @LINK{Example>https://example.com} now")
+	nodes := parseInline("see @LINK{Example>https://example.com} now")
 	require.Len(t, nodes, 3)
 	link := nodes[1]
 	assert.Equal(t, TagLink, link.Tag)
@@ -55,7 +55,7 @@ func TestParseInline_link(t *testing.T) {
 }
 
 func TestParseInline_image(t *testing.T) {
-	nodes := ParseInline("@IMG{alt text>https://img.png}")
+	nodes := parseInline("@IMG{alt text>https://img.png}")
 	require.Len(t, nodes, 1)
 	img := nodes[0]
 	assert.Equal(t, TagImage, img.Tag)
@@ -64,25 +64,25 @@ func TestParseInline_image(t *testing.T) {
 }
 
 func TestParseInline_escapedAt(t *testing.T) {
-	nodes := ParseInline("hello @@ world")
+	nodes := parseInline("hello @@ world")
 	require.Len(t, nodes, 1)
 	assert.Equal(t, "hello @@ world", nodes[0].Content)
 }
 
 func TestParseInline_escapedDollar(t *testing.T) {
-	nodes := ParseInline("cost $$5")
+	nodes := parseInline("cost $$5")
 	require.Len(t, nodes, 1)
 	assert.Equal(t, "cost $$5", nodes[0].Content)
 }
 
 func TestParseInline_strikethrough(t *testing.T) {
-	nodes := ParseInline("@S{deleted}")
+	nodes := parseInline("@S{deleted}")
 	require.Len(t, nodes, 1)
 	assert.Equal(t, TagStrikethrough, nodes[0].Tag)
 }
 
 func TestTagParser_heading(t *testing.T) {
-	p := NewTagParser("@H1 Hello World")
+	p := newTagParser("@H1 Hello World")
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -92,7 +92,7 @@ func TestTagParser_heading(t *testing.T) {
 }
 
 func TestTagParser_paragraph(t *testing.T) {
-	p := NewTagParser("@P Some text here")
+	p := newTagParser("@P Some text here")
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -101,7 +101,7 @@ func TestTagParser_paragraph(t *testing.T) {
 
 func TestTagParser_codeBlock(t *testing.T) {
 	input := "@CODE:go\nfunc main() {}\n@/CODE"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -112,7 +112,7 @@ func TestTagParser_codeBlock(t *testing.T) {
 
 func TestTagParser_codeBlockEscapedAt(t *testing.T) {
 	input := "@CODE:go\n\\@SomeAnnotation\nfunc main() {}\n@/CODE"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -121,7 +121,7 @@ func TestTagParser_codeBlockEscapedAt(t *testing.T) {
 
 func TestTagParser_unorderedList(t *testing.T) {
 	input := "@UL{\n- Item one\n- Item two\n- Item three\n}"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -131,7 +131,7 @@ func TestTagParser_unorderedList(t *testing.T) {
 
 func TestTagParser_orderedList(t *testing.T) {
 	input := "@OL{\n1. First\n2. Second\n3. Third\n}"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -141,7 +141,7 @@ func TestTagParser_orderedList(t *testing.T) {
 
 func TestTagParser_table(t *testing.T) {
 	input := "@TABLE{\n@THEAD{Name|Value}\nfoo|bar\nbaz|qux\n}"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -152,7 +152,7 @@ func TestTagParser_table(t *testing.T) {
 
 func TestTagParser_blockquoteSingleLine(t *testing.T) {
 	input := "@BQ Some quoted text"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -163,7 +163,7 @@ func TestTagParser_blockquoteSingleLine(t *testing.T) {
 
 func TestTagParser_blockquoteBlock(t *testing.T) {
 	input := "@BQ{\n@P Line one\n@P Line two\n}"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -172,7 +172,7 @@ func TestTagParser_blockquoteBlock(t *testing.T) {
 }
 
 func TestTagParser_horizontalRule(t *testing.T) {
-	p := NewTagParser("@HR")
+	p := newTagParser("@HR")
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -180,7 +180,7 @@ func TestTagParser_horizontalRule(t *testing.T) {
 }
 
 func TestTagParser_unknownTag(t *testing.T) {
-	p := NewTagParser("@FOO bar")
+	p := newTagParser("@FOO bar")
 	_, err := p.ParseBody()
 	assert.Error(t, err)
 }
@@ -207,7 +207,7 @@ func TestSplitLinkContent_nestedBraces(t *testing.T) {
 
 func TestReadBracedBlock_singleLineClose(t *testing.T) {
 	// Opening and closing brace on same line: @TAG{content}
-	p := NewTagParser("@NOTE{hello world}")
+	p := newTagParser("@NOTE{hello world}")
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -218,7 +218,7 @@ func TestReadBracedBlock_singleLineClose(t *testing.T) {
 func TestReadBracedBlock_escapedBraces(t *testing.T) {
 	// Escaped braces should not count for nesting.
 	input := "@UL{\n- item with \\{ braces \\}\n}"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -228,7 +228,7 @@ func TestReadBracedBlock_escapedBraces(t *testing.T) {
 func TestReadBracedBlock_nestedBraces(t *testing.T) {
 	// Nested braces should be handled correctly.
 	input := "@BQ{\n@UL{\n- inner item\n}\n}"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -238,7 +238,7 @@ func TestReadBracedBlock_nestedBraces(t *testing.T) {
 func TestReadBracedBlock_unclosed(t *testing.T) {
 	// Unclosed brace should return error.
 	input := "@UL{\n- item one\n- item two"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	_, err := p.ParseBody()
 	assert.Error(t, err)
 }
@@ -246,7 +246,7 @@ func TestReadBracedBlock_unclosed(t *testing.T) {
 func TestReadBracedBlock_contentOnCloseLine(t *testing.T) {
 	// Content before closing brace on the same line.
 	input := "@UL{\n- item one\n- last item}"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -264,7 +264,7 @@ func TestReadBracedBlock_noBrace(t *testing.T) {
 func TestReadBracedBlock_emptyContent(t *testing.T) {
 	// Empty braced block: @BQ{}
 	input := "@BQ{\n}"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -275,7 +275,7 @@ func TestReadBracedBlock_singleLineWithContent(t *testing.T) {
 	// Single-line braced block: @TABLE{...} on one line (multi-line body normally)
 	// Exercise same-line close with content.
 	input := "@TABLE{\n@THEAD{A|B}\nx|y}\n"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -285,7 +285,7 @@ func TestReadBracedBlock_singleLineWithContent(t *testing.T) {
 func TestReadBracedBlock_multiLineEscapedBraces(t *testing.T) {
 	// Escaped braces in multi-line content should not affect depth counting.
 	input := "@TABLE{\n@THEAD{A|B}\nfoo \\{ \\}|bar\n}"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -295,7 +295,7 @@ func TestReadBracedBlock_multiLineEscapedBraces(t *testing.T) {
 func TestReadBracedBlock_nestedBracesMultiLine(t *testing.T) {
 	// Nested braces in multi-line content.
 	input := "@BQ{\n@UL{\n- item\n}\n}"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -307,7 +307,7 @@ func TestReadBracedBlock_nestedBracesMultiLine(t *testing.T) {
 func TestReadBracedBlock_sameLineEscaped(t *testing.T) {
 	// Escaped brace on the opening line.
 	input := "@TABLE{\n@THEAD{A\\{|B}\nx|y\n}"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -317,7 +317,7 @@ func TestReadBracedBlock_sameLineEscaped(t *testing.T) {
 func TestReadBracedBlock_contentAfterOpenBrace(t *testing.T) {
 	// Content on the same line as the opening brace.
 	input := "@UL{- item one\n- item two\n}"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -358,7 +358,7 @@ func TestCollectNestedBraced_contentOnCloseLine(t *testing.T) {
 
 func TestTagParser_defBlockEmpty(t *testing.T) {
 	input := "@DEF{\n}"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -368,7 +368,7 @@ func TestTagParser_defBlockEmpty(t *testing.T) {
 
 func TestTagParser_defBlockEmptyLines(t *testing.T) {
 	input := "@DEF{\n\n  API~Application\n\n  URL~Locator\n\n}"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -378,7 +378,7 @@ func TestTagParser_defBlockEmptyLines(t *testing.T) {
 func TestTagParser_defBlockKeyOnly(t *testing.T) {
 	// Key without ~description: parsed as KVItem with empty description.
 	input := "@DEF{\n  API\n  URL~Locator\n}"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -394,7 +394,7 @@ func TestTagParser_defBlockKeyOnly(t *testing.T) {
 
 func TestTagParser_kvBlockEmpty(t *testing.T) {
 	input := "@KV{\n}"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -404,7 +404,7 @@ func TestTagParser_kvBlockEmpty(t *testing.T) {
 
 func TestTagParser_kvBlockEmptyLines(t *testing.T) {
 	input := "@KV{\n\n  id:string~ID\n\n  name:string~Name\n\n}"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -414,7 +414,7 @@ func TestTagParser_kvBlockEmptyLines(t *testing.T) {
 func TestTagParser_kvBlockTypeOnly(t *testing.T) {
 	// key:type without ~description
 	input := "@KV{\n  id:string\n}"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -427,7 +427,7 @@ func TestTagParser_kvBlockTypeOnly(t *testing.T) {
 func TestTagParser_kvBlockNoColon(t *testing.T) {
 	// Lines without colon should be skipped
 	input := "@KV{\n  invalid line\n  id:string~ID\n}"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -438,7 +438,7 @@ func TestTagParser_kvBlockNoColon(t *testing.T) {
 
 func TestTagParser_paramsBlockEmpty(t *testing.T) {
 	input := "@PARAMS{\n}"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -448,7 +448,7 @@ func TestTagParser_paramsBlockEmpty(t *testing.T) {
 
 func TestTagParser_paramsBlockEmptyLines(t *testing.T) {
 	input := "@PARAMS{\n\n  id:string:R~ID\n\n  name:string:O~Name\n\n}"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -458,7 +458,7 @@ func TestTagParser_paramsBlockEmptyLines(t *testing.T) {
 func TestTagParser_paramsBlockNoTilde(t *testing.T) {
 	// Params without ~ description
 	input := "@PARAMS{\n  id:string:R\n}"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -471,7 +471,7 @@ func TestTagParser_paramsBlockNoTilde(t *testing.T) {
 func TestTagParser_paramsBlockFewerThan3Colons(t *testing.T) {
 	// Lines with fewer than 3 colon-separated parts should be skipped
 	input := "@PARAMS{\n  onlytwo:parts\n  id:string:R~ID\n}"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -483,7 +483,7 @@ func TestTagParser_paramsBlockFewerThan3Colons(t *testing.T) {
 
 func TestTagParser_endpointMethodOnly(t *testing.T) {
 	input := "@ENDPOINT{GET}"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -496,7 +496,7 @@ func TestTagParser_endpointMethodOnly(t *testing.T) {
 
 func TestTagParser_returnsMultiple(t *testing.T) {
 	input := "@RETURNS{200:OK|404:Not Found|500:Error}"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -507,7 +507,7 @@ func TestTagParser_returnsMultiple(t *testing.T) {
 
 func TestTagParser_returnsStatusOnly(t *testing.T) {
 	input := "@RETURNS{204}"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	nodes, err := p.ParseBody()
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
@@ -533,7 +533,7 @@ func TestExtractBracedContent_noClosingBrace(t *testing.T) {
 func TestTagParser_blockquoteBlockError(t *testing.T) {
 	// Blockquote block with unclosed brace should error.
 	input := "@BQ{\n@P unclosed"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	_, err := p.ParseBody()
 	assert.Error(t, err)
 }
@@ -541,7 +541,7 @@ func TestTagParser_blockquoteBlockError(t *testing.T) {
 func TestTagParser_blockquoteBlockInvalidChild(t *testing.T) {
 	// Blockquote block with invalid child tag should error.
 	input := "@BQ{\n@INVALID tag\n}"
-	p := NewTagParser(input)
+	p := newTagParser(input)
 	_, err := p.ParseBody()
 	assert.Error(t, err)
 }

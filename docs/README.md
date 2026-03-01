@@ -1,7 +1,7 @@
 # Documentation
 
 > [!NOTE]
-> Documentation is written for AI agents first and engineers second. For the full explanation of audience and approach, see [documentation.md](foundation/documentation.md). Engineers: the topic directories (`docs/topics/`) contain the conventions for writing code in this project. The foundation documents govern documentation authoring and AI session management. Start with the topics relevant to your work.
+> Documentation is written for AI agents first and engineers second. For the full explanation of audience and approach, see [documentation.md](foundation/documentation/README.md). Engineers: the topic directories (`docs/topics/`) contain the conventions for writing code in this project. The foundation documents govern documentation authoring and AI session management. Start with the topics relevant to your work.
 
 All project documentation lives here. codectx is a Go CLI application. All repository operations run through Just; do not invoke package managers, build tools, or other CLI tools directly. Read the foundational documents before making any decisions. They define how this project operates.
 
@@ -26,7 +26,9 @@ At the start of every session, load [metadata.yml](metadata.yml) and all foundat
 | [Architecture](product/README.md)                   | System architecture overview and core concepts       |
 | [Package Format](product/packages.md)               | Package structure, manifest, naming, and resolution  |
 | [Compilation](product/compilation.md)               | Compile process, content addressing, decomposition   |
+| [Compression](product/compression.md)               | CMDX codec, algorithm, tag format, and benchmarks    |
 | [Configuration](product/configuration.md)           | Settings, activation, conflicts, and directory layout|
+| [Preference Management](product/set-command.md)     | The `codectx set` command and user-local preferences |
 | [AI Integration](product/ai-integration.md)         | Entry point linking, loading protocol, watch mode    |
 | [Design Decisions](product/spec/README.md)          | Reasoning behind every architectural choice          |
 

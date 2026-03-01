@@ -46,8 +46,8 @@ Next.js provides a large surface area of features (App Router, Server Components
 - [docs/topics/react/hooks.md](../../react/hooks.md): Props/Return naming convention (applied to server actions)
 - [docs/topics/typescript/README.md](../../typescript/README.md): one-export-per-module, named exports, module design
 - [docs/topics/just/README.md](../../just/README.md): operational directive (all commands through Just)
-- [docs/foundation/philosophy.md](../../../foundation/philosophy.md): guiding principles
-- [docs/foundation/specs.md](../../../foundation/specs.md): spec template this document follows
+- [docs/foundation/philosophy](../../../foundation/philosophy/README.md): guiding principles
+- [docs/foundation/specs](../../../foundation/specs/README.md): spec template this document follows
 
 ## Structure
 

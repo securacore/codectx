@@ -22,8 +22,8 @@ func WriteCompiledManifest(path string, m *CompiledManifest) error {
 	return nil
 }
 
-// LoadCompiledManifest reads and parses a compiled manifest.yml file.
-func LoadCompiledManifest(path string) (*CompiledManifest, error) {
+// loadCompiledManifest reads and parses a compiled manifest.yml file.
+func loadCompiledManifest(path string) (*CompiledManifest, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read compiled manifest %s: %w", path, err)

@@ -37,8 +37,8 @@ Go is the implementation language for the codectx CLI. Without explicit standard
 ## Dependencies
 
 - `go.mod`: module and dependency configuration
-- [docs/foundation/philosophy.md](../../../foundation/philosophy.md): guiding principles (referenced for "Configuration is Truth" and "Abstractions Must Earn Their Place")
-- [docs/foundation/specs.md](../../../foundation/specs.md): spec template this document follows
+- [docs/foundation/philosophy](../../../foundation/philosophy/README.md): guiding principles (referenced for "Configuration is Truth" and "Abstractions Must Earn Their Place")
+- [docs/foundation/specs](../../../foundation/specs/README.md): spec template this document follows
 
 ## Structure
 

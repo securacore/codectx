@@ -31,7 +31,7 @@ func ParseURL(rawURL string) (*PackageRef, string, error) {
 	path := strings.Trim(u.Path, "/")
 	segments := strings.Split(path, "/")
 	if len(segments) < 2 {
-		return nil, "", fmt.Errorf("URL must contain owner and repository: %s", rawURL)
+		return nil, "", fmt.Errorf("url must contain owner and repository: %s", rawURL)
 	}
 
 	author := segments[0]

@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/compile"
 	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/manifest"
@@ -61,7 +62,7 @@ func setupWatchProject(t *testing.T) string {
 		Name:     "watch-test",
 		Packages: []config.PackageDep{},
 	}
-	require.NoError(t, config.Write(filepath.Join(dir, configFile), cfg))
+	require.NoError(t, config.Write(filepath.Join(dir, shared.ConfigFile), cfg))
 
 	m := &manifest.Manifest{
 		Name:    "watch-test",
@@ -108,7 +109,7 @@ func TestRun_invalidConfig(t *testing.T) {
 	require.NoError(t, os.Chdir(dir))
 
 	require.NoError(t, os.WriteFile(
-		filepath.Join(dir, configFile),
+		filepath.Join(dir, shared.ConfigFile),
 		[]byte("{{{{not valid"), 0o644))
 
 	err = run(t.Context())

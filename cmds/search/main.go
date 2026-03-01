@@ -13,7 +13,9 @@ import (
 
 var Command = &cli.Command{
 	Name:      "search",
+	Aliases:   []string{"s"},
 	Usage:     "Search for documentation packages on GitHub",
+	Category:  "Package Management",
 	ArgsUsage: "<query>",
 	Flags: []cli.Flag{
 		&cli.StringFlag{

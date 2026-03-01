@@ -42,7 +42,7 @@ func Encode(markdown []byte, opts ...EncoderOptions) ([]byte, error) {
 	// Pass 3: Dictionary compression on already-escaped text.
 	if opt.MaxDictEntries > 0 {
 		segments := collectTextSegments(doc.Body)
-		dict := BuildDictionary(segments, opt)
+		dict := buildDictionary(segments, opt)
 		if dict != nil && len(dict.Entries) > 0 {
 			doc.Dict = dict
 			applyDictionary(doc.Body, dict)

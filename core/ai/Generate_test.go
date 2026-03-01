@@ -89,5 +89,5 @@ func TestGenerate_existsOnPathButUnsupported(t *testing.T) {
 	// This should hit the default case in the switch, not LookPath.
 	_, err := Generate("bash", "test prompt")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unsupported AI binary")
+	assert.Contains(t, err.Error(), "unsupported ai binary")
 }

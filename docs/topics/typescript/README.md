@@ -114,4 +114,4 @@ Types are organized into four tiers by scope. Each tier has distinct rules for l
 
 Formatting and linting are handled by Biome (see `biome.json`). Import organization is handled by Biome's `organizeImports` assist action. The conventions in this document cover semantic patterns that tooling does not enforce.
 
-Compiler configuration is defined in `tsconfig.json`. Per [philosophy.md](../../foundation/philosophy.md), when this document and configuration conflict, configuration wins.
+Compiler configuration is defined in `tsconfig.json`. Per [philosophy.md](../../foundation/philosophy/README.md), when this document and configuration conflict, configuration wins.

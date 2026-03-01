@@ -24,8 +24,9 @@ func init() {
 }
 
 var Command = &cli.Command{
-	Name:  "version",
-	Usage: "Display the CLI version",
+	Name:     "version",
+	Usage:    "Display the CLI version",
+	Category: "System",
 	Action: func(ctx context.Context, c *cli.Command) error {
 		fmt.Println(Version)
 		return nil

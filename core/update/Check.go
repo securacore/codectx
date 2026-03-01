@@ -192,7 +192,7 @@ func fetchFromURL(url string) (string, error) {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("GitHub API returned %d", resp.StatusCode)
+		return "", fmt.Errorf("github API returned %d", resp.StatusCode)
 	}
 
 	var release releaseResponse

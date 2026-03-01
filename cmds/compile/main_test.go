@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/compile"
 	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/manifest"
@@ -35,7 +36,7 @@ func setupProject(t *testing.T) string {
 		Name:     "test-project",
 		Packages: []config.PackageDep{},
 	}
-	require.NoError(t, config.Write(filepath.Join(dir, configFile), cfg))
+	require.NoError(t, config.Write(filepath.Join(dir, shared.ConfigFile), cfg))
 
 	// Write docs/manifest.yml.
 	m := &manifest.Manifest{
@@ -134,7 +135,7 @@ func TestRun_invalidConfig(t *testing.T) {
 
 	// Write invalid YAML.
 	require.NoError(t, os.WriteFile(
-		filepath.Join(dir, configFile),
+		filepath.Join(dir, shared.ConfigFile),
 		[]byte("{{{{not valid"), 0o644))
 
 	err = run()
@@ -155,7 +156,7 @@ func TestRun_missingPackageManifest(t *testing.T) {
 		Name:     "test-project",
 		Packages: []config.PackageDep{},
 	}
-	require.NoError(t, config.Write(filepath.Join(dir, configFile), cfg))
+	require.NoError(t, config.Write(filepath.Join(dir, shared.ConfigFile), cfg))
 
 	err = run()
 	require.Error(t, err)
@@ -247,7 +248,7 @@ func TestRun_withDedupAndConflict(t *testing.T) {
 			},
 		},
 	}
-	require.NoError(t, config.Write(filepath.Join(dir, configFile), cfg))
+	require.NoError(t, config.Write(filepath.Join(dir, shared.ConfigFile), cfg))
 
 	// Run compile — exercises dedup + conflict branches in run().
 	err := run()
@@ -423,7 +424,7 @@ func TestRun_customOutputDir(t *testing.T) {
 		},
 		Packages: []config.PackageDep{},
 	}
-	require.NoError(t, config.Write(filepath.Join(dir, configFile), cfg))
+	require.NoError(t, config.Write(filepath.Join(dir, shared.ConfigFile), cfg))
 
 	m := &manifest.Manifest{
 		Name:    "test-project",

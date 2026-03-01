@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/manifest"
 	"github.com/securacore/codectx/ui"
@@ -829,7 +830,7 @@ func TestFilterManifestForIDs_promptsAndPlans(t *testing.T) {
 		Prompts: []string{"review"},
 		Plans:   []string{"migration"},
 	}}
-	filtered := filterManifestForIDs(m, a)
+	filtered := shared.FilterManifestForIDs(m, a)
 	require.Len(t, filtered.Prompts, 1)
 	assert.Equal(t, "review", filtered.Prompts[0].ID)
 	require.Len(t, filtered.Plans, 1)
@@ -845,7 +846,7 @@ func TestFilterManifestForIDs_nilSectionSlices(t *testing.T) {
 	a := config.Activation{Map: &config.ActivationMap{
 		Topics: []string{"b"},
 	}}
-	filtered := filterManifestForIDs(m, a)
+	filtered := shared.FilterManifestForIDs(m, a)
 	assert.Empty(t, filtered.Foundation)
 	require.Len(t, filtered.Topics, 1)
 }
@@ -853,7 +854,7 @@ func TestFilterManifestForIDs_nilSectionSlices(t *testing.T) {
 // --- toSet ---
 
 func TestToSet_duplicates(t *testing.T) {
-	s := toSet([]string{"a", "a", "b"})
+	s := shared.ToSet([]string{"a", "a", "b"})
 	assert.Len(t, s, 2)
 	assert.True(t, s["a"])
 	assert.True(t, s["b"])

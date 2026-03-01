@@ -1,6 +1,6 @@
 # Review Standards
 
-Every documentation update requires a review pass to ensure the content meets the project's foundational standards. This document defines the review checklist. The [docs-audit prompt](../prompts/docs-audit/README.md) automates this review.
+Every documentation update requires a review pass to ensure the content meets the project's foundational standards. This document defines the review checklist. The [docs-audit prompt](../../prompts/docs-audit/README.md) automates this review.
 
 Review is not optional. New documentation and updated documentation are both subject to the full checklist. Partial compliance creates inconsistency that degrades AI parsing reliability over time.
 

@@ -338,7 +338,7 @@ func TestToCompiledManifest_missingHash(t *testing.T) {
 	assert.Empty(t, cm.Foundation[0].Source)
 }
 
-// --- WriteCompiledManifest / LoadCompiledManifest ---
+// --- WriteCompiledManifest / loadCompiledManifest ---
 
 func TestWriteAndLoad_compiledManifest(t *testing.T) {
 	dir := t.TempDir()
@@ -403,7 +403,7 @@ func TestWriteAndLoad_compiledManifest(t *testing.T) {
 	err := WriteCompiledManifest(path, original)
 	require.NoError(t, err)
 
-	loaded, err := LoadCompiledManifest(path)
+	loaded, err := loadCompiledManifest(path)
 	require.NoError(t, err)
 
 	// Verify round-trip.
@@ -446,7 +446,7 @@ func TestWriteCompiledManifest_invalidPath(t *testing.T) {
 }
 
 func TestLoadCompiledManifest_nonexistent(t *testing.T) {
-	_, err := LoadCompiledManifest("/nonexistent/manifest.yml")
+	_, err := loadCompiledManifest("/nonexistent/manifest.yml")
 	assert.Error(t, err)
 }
 
@@ -455,7 +455,7 @@ func TestLoadCompiledManifest_invalidYAML(t *testing.T) {
 	path := filepath.Join(dir, "manifest.yml")
 	require.NoError(t, os.WriteFile(path, []byte("{invalid yaml"), 0o644))
 
-	_, err := LoadCompiledManifest(path)
+	_, err := loadCompiledManifest(path)
 	assert.Error(t, err)
 }
 
@@ -535,7 +535,7 @@ func TestWriteAndLoad_manifestRefs(t *testing.T) {
 	err := WriteCompiledManifest(path, original)
 	require.NoError(t, err)
 
-	loaded, err := LoadCompiledManifest(path)
+	loaded, err := loadCompiledManifest(path)
 	require.NoError(t, err)
 
 	// Always-load entries are inlined.
@@ -593,7 +593,7 @@ func TestWriteAndLoad_manifestRefWithSource(t *testing.T) {
 	err := WriteCompiledManifest(path, original)
 	require.NoError(t, err)
 
-	loaded, err := LoadCompiledManifest(path)
+	loaded, err := loadCompiledManifest(path)
 	require.NoError(t, err)
 
 	require.Len(t, loaded.Manifests, 2)

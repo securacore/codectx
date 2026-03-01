@@ -137,23 +137,23 @@ func TestDecompose_allSections(t *testing.T) {
 	assert.Equal(t, 1, cm.Manifests[3].Entries)
 
 	// Verify sub-manifest files exist and are loadable.
-	foundationSub, err := LoadCompiledManifest(filepath.Join(dir, "manifests", "foundation.yml"))
+	foundationSub, err := loadCompiledManifest(filepath.Join(dir, "manifests", "foundation.yml"))
 	require.NoError(t, err)
 	require.Len(t, foundationSub.Foundation, 2)
 	assert.Equal(t, "conventions", foundationSub.Foundation[0].ID)
 	assert.Equal(t, "markdown", foundationSub.Foundation[1].ID)
 
-	topicsSub, err := LoadCompiledManifest(filepath.Join(dir, "manifests", "topics.yml"))
+	topicsSub, err := loadCompiledManifest(filepath.Join(dir, "manifests", "topics.yml"))
 	require.NoError(t, err)
 	require.Len(t, topicsSub.Topics, 2)
 	assert.Equal(t, "go", topicsSub.Topics[0].ID)
 	assert.Equal(t, "react", topicsSub.Topics[1].ID)
 
-	promptsSub, err := LoadCompiledManifest(filepath.Join(dir, "manifests", "prompts.yml"))
+	promptsSub, err := loadCompiledManifest(filepath.Join(dir, "manifests", "prompts.yml"))
 	require.NoError(t, err)
 	require.Len(t, promptsSub.Prompts, 1)
 
-	plansSub, err := LoadCompiledManifest(filepath.Join(dir, "manifests", "plans.yml"))
+	plansSub, err := loadCompiledManifest(filepath.Join(dir, "manifests", "plans.yml"))
 	require.NoError(t, err)
 	require.Len(t, plansSub.Plans, 1)
 }
@@ -314,7 +314,7 @@ func TestDecompose_applicationWithAlwaysLoad(t *testing.T) {
 	assert.True(t, appRef, "should have application manifest reference")
 
 	// Verify sub-manifest file is loadable with correct entries.
-	sub, err := LoadCompiledManifest(filepath.Join(dir, "manifests", "application.yml"))
+	sub, err := loadCompiledManifest(filepath.Join(dir, "manifests", "application.yml"))
 	require.NoError(t, err)
 	require.Len(t, sub.Application, 2)
 	assert.Equal(t, "api-design", sub.Application[0].ID)
@@ -443,7 +443,7 @@ func TestDecompose_subManifestContent(t *testing.T) {
 	require.NoError(t, err)
 
 	// Load sub-manifest and verify entry details are preserved.
-	sub, err := LoadCompiledManifest(filepath.Join(dir, "manifests", "topics.yml"))
+	sub, err := loadCompiledManifest(filepath.Join(dir, "manifests", "topics.yml"))
 	require.NoError(t, err)
 
 	require.Len(t, sub.Topics, 1)

@@ -132,7 +132,7 @@ Design tokens are defined as CSS custom properties and registered with Tailwind 
 
 ## Utility-First Policy
 
-Tailwind utilities are the default for all styling. Custom CSS is a last resort, not a convenience. This convention is an application of the [Abstractions Must Earn Their Place](../../foundation/philosophy.md) principle: every deviation from the utility system must demonstrably justify its existence.
+Tailwind utilities are the default for all styling. Custom CSS is a last resort, not a convenience. This convention is an application of the [Abstractions Must Earn Their Place](../../foundation/philosophy/README.md) principle: every deviation from the utility system must demonstrably justify its existence.
 
 <rules>
 
@@ -140,7 +140,7 @@ Tailwind utilities are the default for all styling. Custom CSS is a last resort,
 - No custom CSS classes unless the utility approach is demonstrably more burdensome than a custom class would be. "More burdensome" means the utility composition is significantly harder to read, maintain, or reason about, not merely longer.
 - `@apply` is restricted to the `@layer base` block in `globals.css` for global base styles. Do not use `@apply` in component styles or in any other context.
 - Arbitrary values (`bg-[#ff0000]`, `p-[13px]`, `grid-cols-[1fr_2px_1fr]`) are permitted only when absolutely necessary for one-off situations where no design token, Tailwind utility, or Tailwind package covers the need.
-- Prefer Tailwind ecosystem packages for extending the utility set, following the [Leverage Before Building](../../foundation/philosophy.md) principle. Evaluate third-party packages critically: maintenance activity, community adoption, bundle size, API quality, and security posture. Each package adds to the design surface area and the supply chain.
+- Prefer Tailwind ecosystem packages for extending the utility set, following the [Leverage Before Building](../../foundation/philosophy/README.md) principle. Evaluate third-party packages critically: maintenance activity, community adoption, bundle size, API quality, and security posture. Each package adds to the design surface area and the supply chain.
 
 </rules>
 

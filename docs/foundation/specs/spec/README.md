@@ -38,11 +38,11 @@ Foundational documentation establishes the baseline conventions that every other
 
 ## Structure
 
-- `philosophy.md`: guiding principles for decision-making across the codebase
-- `markdown.md`: markdown formatting conventions for all documentation files
-- `documentation.md`: how documentation is managed, organized, and written
-- `specs.md`: specification template and process for all topic docs
-- `ai-authoring.md`: cross-model AI authoring conventions
-- `review-standards.md`: post-update review checklist for documentation compliance
-- `metadata.md`: metadata manifest conventions and maintenance
-- `spec/README.md`: this file; meta-documentation for the foundation
+- `philosophy/README.md`: guiding principles for decision-making across the codebase
+- `markdown/README.md`: markdown formatting conventions for all documentation files
+- `documentation/README.md`: how documentation is managed, organized, and written
+- `specs/README.md`: specification template and process for all topic docs
+- `ai-authoring/README.md`: cross-model AI authoring conventions
+- `review-standards/README.md`: post-update review checklist for documentation compliance
+- `metadata/README.md`: metadata manifest conventions and maintenance
+- `specs/spec/README.md`: this file; meta-documentation for the foundation

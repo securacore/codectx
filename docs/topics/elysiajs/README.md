@@ -187,7 +187,7 @@ const data = (await response.json()) as User[];  // WRONG: use Eden Treaty. Type
 
 ## Plugin Conventions
 
-Elysia's plugin system is first-class. Plugins are Elysia instances composed via `.use()`, the same mechanism used for route composition. Evaluate existing Elysia plugins before writing custom solutions, following the [Leverage Before Building](../../foundation/philosophy.md) principle.
+Elysia's plugin system is first-class. Plugins are Elysia instances composed via `.use()`, the same mechanism used for route composition. Evaluate existing Elysia plugins before writing custom solutions, following the [Leverage Before Building](../../foundation/philosophy/README.md) principle.
 
 <rules>
 

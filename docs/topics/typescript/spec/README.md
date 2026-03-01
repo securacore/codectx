@@ -40,7 +40,7 @@ TypeScript has configuration, tooling, and language-level conventions that must 
 
 - **Context-dependent generic naming.** Simple utility types don't benefit from verbose names. Domain generics do. Readability at the point of use governs.
 
-- **Configuration as source of truth.** The conventions doc references `tsconfig.json` and `biome.json` rather than duplicating settings. Biome handles what it handles; the docs cover what it doesn't. Follows the Configuration is Truth principle from [philosophy.md](../../../foundation/philosophy.md).
+- **Configuration as source of truth.** The conventions doc references `tsconfig.json` and `biome.json` rather than duplicating settings. Biome handles what it handles; the docs cover what it doesn't. Follows the Configuration is Truth principle from [philosophy.md](../../../foundation/philosophy/README.md).
 
 - **Strict mode as baseline.** `tsconfig.json` has `strict: true`. No documentation about enabling it. It is a given.
 
@@ -48,9 +48,9 @@ TypeScript has configuration, tooling, and language-level conventions that must 
 
 - `tsconfig.json`: compiler configuration
 - `biome.json`: linting and formatting rules
-- [docs/foundation/philosophy.md](../../../foundation/philosophy.md): guiding principles
-- [docs/foundation/ai-authoring.md](../../../foundation/ai-authoring.md): cross-model authoring conventions
-- [docs/foundation/specs.md](../../../foundation/specs.md): spec template this document follows
+- [docs/foundation/philosophy](../../../foundation/philosophy/README.md): guiding principles
+- [docs/foundation/ai-authoring](../../../foundation/ai-authoring/README.md): cross-model authoring conventions
+- [docs/foundation/specs](../../../foundation/specs/README.md): spec template this document follows
 
 ## Structure
 

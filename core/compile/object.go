@@ -108,17 +108,17 @@ func ContentHash(data []byte) string {
 	return fmt.Sprintf("%x", h)[:16]
 }
 
-// ObjectPath returns the relative path for a hash using .md extension
+// objectPath returns the relative path for a hash using .md extension
 // (e.g., "objects/a1b2c3d4e5f67890.md").
 // This is the value stored in compiled manifest entries when compression is off.
-func ObjectPath(hash string) string {
+func objectPath(hash string) string {
 	return fmt.Sprintf("objects/%s.md", hash)
 }
 
-// ObjectPathCompressed returns the relative path for a hash using .cmdx extension
+// objectPathCompressed returns the relative path for a hash using .cmdx extension
 // (e.g., "objects/a1b2c3d4e5f67890.cmdx").
 // This is the value stored in compiled manifest entries when compression is on.
-func ObjectPathCompressed(hash string) string {
+func objectPathCompressed(hash string) string {
 	return fmt.Sprintf("objects/%s.cmdx", hash)
 }
 

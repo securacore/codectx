@@ -24,9 +24,9 @@ func TestResolve_withBinPreference(t *testing.T) {
 
 func TestResolve_nilPreferences(t *testing.T) {
 	l, err := Resolve(nil)
-	// Auto-detect: either finds claude/opencode or returns "no supported AI binary".
+	// Auto-detect: either finds claude/opencode or returns "no supported ai binary".
 	if err != nil {
-		assert.Contains(t, err.Error(), "no supported AI binary")
+		assert.Contains(t, err.Error(), "no supported ai binary")
 	} else {
 		require.NotNil(t, l)
 		assert.Contains(t, []string{"claude", "opencode"}, l.ID())
@@ -40,7 +40,7 @@ func TestResolve_emptyBin(t *testing.T) {
 	l, err := Resolve(prefs)
 	// Falls through to auto-detect.
 	if err != nil {
-		assert.Contains(t, err.Error(), "no supported AI binary")
+		assert.Contains(t, err.Error(), "no supported ai binary")
 	} else {
 		require.NotNil(t, l)
 	}
@@ -52,7 +52,7 @@ func TestResolve_unknownBin(t *testing.T) {
 	}
 	_, err := Resolve(prefs)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown AI binary")
+	assert.Contains(t, err.Error(), "unknown ai binary")
 }
 
 func TestResolve_ollama(t *testing.T) {

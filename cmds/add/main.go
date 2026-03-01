@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/securacore/codectx/cmds/shared"
-	"github.com/securacore/codectx/core/compile"
 	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/manifest"
 	"github.com/securacore/codectx/core/resolve"
@@ -17,11 +16,11 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-const configFile = "codectx.yml"
-
 var Command = &cli.Command{
 	Name:      "add",
+	Aliases:   []string{"a"},
 	Usage:     "Add one or more documentation packages",
+	Category:  "Core Workflow",
 	ArgsUsage: "<package> [package...]",
 	Flags: []cli.Flag{
 		&cli.StringFlag{
@@ -61,7 +60,7 @@ type addTarget struct {
 // Exported so other commands (e.g., search) can trigger the add flow.
 func Run(inputs []string, sourceFlag, activateFlag string) error {
 	// Load config.
-	cfg, err := config.Load(configFile)
+	cfg, err := config.Load(shared.ConfigFile)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
@@ -89,7 +88,7 @@ func Run(inputs []string, sourceFlag, activateFlag string) error {
 	// Determine activation.
 	var activation config.Activation
 	if activateFlag != "" {
-		activation, err = parseActivateFlag(activateFlag)
+		activation, err = shared.ParseActivateFlag(activateFlag)
 		if err != nil {
 			return fmt.Errorf("parse --activate: %w", err)
 		}
@@ -103,12 +102,12 @@ func Run(inputs []string, sourceFlag, activateFlag string) error {
 	// Check for entry collisions against currently active entries.
 	if !activation.IsNone() {
 		for _, t := range targets {
-			collisions := detectCollisions(cfg, t.manifest, activation)
+			collisions := shared.DetectCollisions(cfg, -1, t.manifest, activation)
 			if len(collisions) > 0 {
 				ui.Blank()
 				ui.Warn(fmt.Sprintf("%d collision(s) for %s@%s:", len(collisions), t.ref.Name, t.ref.Author))
 				for _, c := range collisions {
-					ui.Item(fmt.Sprintf("[%s] %s already active from %s", c.section, c.id, c.pkg))
+					ui.Item(fmt.Sprintf("[%s] %s already active from %s", c.Section, c.ID, c.Pkg))
 				}
 
 				if activateFlag == "" {
@@ -152,7 +151,7 @@ func Run(inputs []string, sourceFlag, activateFlag string) error {
 		cfg.Packages = append(cfg.Packages, dep)
 	}
 
-	if err := config.Write(configFile, cfg); err != nil {
+	if err := config.Write(shared.ConfigFile, cfg); err != nil {
 		return fmt.Errorf("write config: %w", err)
 	}
 
@@ -353,182 +352,6 @@ func promptCombinedActivation(targets []*addTarget) (config.Activation, error) {
 	}
 
 	return resolveActivation(entries, selected), nil
-}
-
-// parseActivateFlag parses the --activate flag value into an Activation.
-// Accepted values: "all", "none", or "section:id,section:id,..."
-func parseActivateFlag(value string) (config.Activation, error) {
-	if value == "all" {
-		return config.Activation{Mode: "all"}, nil
-	}
-	if value == "none" {
-		return config.Activation{Mode: "none"}, nil
-	}
-
-	// Parse granular: "topics:react,foundation:philosophy"
-	am := &config.ActivationMap{}
-	parts := strings.Split(value, ",")
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		colonIdx := strings.Index(part, ":")
-		if colonIdx < 0 {
-			return config.Activation{}, fmt.Errorf("invalid format %q: expected section:id", part)
-		}
-		section := part[:colonIdx]
-		id := part[colonIdx+1:]
-		if id == "" {
-			return config.Activation{}, fmt.Errorf("empty id in %q", part)
-		}
-
-		switch section {
-		case "foundation":
-			am.Foundation = append(am.Foundation, id)
-		case "application":
-			am.Application = append(am.Application, id)
-		case "topics":
-			am.Topics = append(am.Topics, id)
-		case "prompts":
-			am.Prompts = append(am.Prompts, id)
-		case "plans":
-			am.Plans = append(am.Plans, id)
-		default:
-			return config.Activation{}, fmt.Errorf("unknown section %q in %q", section, part)
-		}
-	}
-
-	return config.Activation{Map: am}, nil
-}
-
-// collision represents a single entry ID that collides with an already-active entry.
-type collision struct {
-	section string
-	id      string
-	pkg     string // "local" or "name@author"
-}
-
-// detectCollisions checks if any entries in the new package would collide
-// with entries already active in the local manifest or other installed packages.
-func detectCollisions(cfg *config.Config, newManifest *manifest.Manifest, activation config.Activation) []collision {
-	// Collect all currently active entry IDs.
-	activeIDs := make(map[string]string) // "section:id" -> source package label
-
-	// Load and sync local manifest.
-	docsDir := cfg.DocsDir()
-	localManifestPath := filepath.Join(docsDir, "manifest.yml")
-	if localManifest, err := manifest.Load(localManifestPath); err == nil {
-		localManifest = manifest.Sync(docsDir, localManifest)
-		for key := range compile.CollectActiveIDs(localManifest) {
-			activeIDs[key] = "local"
-		}
-	}
-
-	// Load each active installed package manifest.
-	for _, pkg := range cfg.Packages {
-		if pkg.Active.IsNone() {
-			continue
-		}
-		pkgDir := filepath.Join(docsDir, "packages", fmt.Sprintf("%s@%s", pkg.Name, pkg.Author))
-		pkgManifestPath := filepath.Join(pkgDir, "manifest.yml")
-		pkgManifest, err := manifest.Load(pkgManifestPath)
-		if err != nil {
-			continue
-		}
-		pkgManifest = manifest.Discover(pkgDir, pkgManifest)
-		filtered := filterManifestForIDs(pkgManifest, pkg.Active)
-		pkgLabel := fmt.Sprintf("%s@%s", pkg.Name, pkg.Author)
-		for key := range compile.CollectActiveIDs(filtered) {
-			activeIDs[key] = pkgLabel
-		}
-	}
-
-	// Filter the new package manifest by its activation and check for collisions.
-	filtered := filterManifestForIDs(newManifest, activation)
-	newIDs := compile.CollectActiveIDs(filtered)
-
-	var collisions []collision
-	for key := range newIDs {
-		if pkg, exists := activeIDs[key]; exists {
-			section, id := splitKey(key)
-			collisions = append(collisions, collision{section: section, id: id, pkg: pkg})
-		}
-	}
-
-	return collisions
-}
-
-// filterManifestForIDs applies activation filtering to a manifest for ID collection.
-// This mirrors compile.filterManifest but operates locally to avoid circular deps.
-func filterManifestForIDs(m *manifest.Manifest, activation config.Activation) *manifest.Manifest {
-	if activation.IsAll() {
-		return m
-	}
-	if activation.IsNone() {
-		return &manifest.Manifest{}
-	}
-
-	am := activation.Map
-	filtered := &manifest.Manifest{}
-
-	if am.Foundation != nil {
-		ids := toSetLocal(am.Foundation)
-		for _, e := range m.Foundation {
-			if ids[e.ID] {
-				filtered.Foundation = append(filtered.Foundation, e)
-			}
-		}
-	}
-	if am.Application != nil {
-		ids := toSetLocal(am.Application)
-		for _, e := range m.Application {
-			if ids[e.ID] {
-				filtered.Application = append(filtered.Application, e)
-			}
-		}
-	}
-	if am.Topics != nil {
-		ids := toSetLocal(am.Topics)
-		for _, e := range m.Topics {
-			if ids[e.ID] {
-				filtered.Topics = append(filtered.Topics, e)
-			}
-		}
-	}
-	if am.Prompts != nil {
-		ids := toSetLocal(am.Prompts)
-		for _, e := range m.Prompts {
-			if ids[e.ID] {
-				filtered.Prompts = append(filtered.Prompts, e)
-			}
-		}
-	}
-	if am.Plans != nil {
-		ids := toSetLocal(am.Plans)
-		for _, e := range m.Plans {
-			if ids[e.ID] {
-				filtered.Plans = append(filtered.Plans, e)
-			}
-		}
-	}
-
-	return filtered
-}
-
-func toSetLocal(items []string) map[string]bool {
-	s := make(map[string]bool, len(items))
-	for _, item := range items {
-		s[item] = true
-	}
-	return s
-}
-
-// splitKey splits "section:id" into its parts.
-func splitKey(key string) (string, string) {
-	for i := 0; i < len(key); i++ {
-		if key[i] == ':' {
-			return key[:i], key[i+1:]
-		}
-	}
-	return key, ""
 }
 
 // printActivation prints a human-readable summary of the activation state.

@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/config"
 	corewatch "github.com/securacore/codectx/core/watch"
 	"github.com/securacore/codectx/ui"
@@ -15,11 +16,11 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-const configFile = "codectx.yml"
-
 var Command = &cli.Command{
-	Name:  "watch",
-	Usage: "Watch for changes and recompile automatically",
+	Name:     "watch",
+	Aliases:  []string{"w"},
+	Usage:    "Watch for changes and recompile automatically",
+	Category: "Core Workflow",
 	Action: func(ctx context.Context, c *cli.Command) error {
 		return run(ctx)
 	},
@@ -27,7 +28,7 @@ var Command = &cli.Command{
 
 func run(ctx context.Context) error {
 	// Validate config exists before starting watch loop.
-	cfg, err := config.Load(configFile)
+	cfg, err := config.Load(shared.ConfigFile)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
@@ -36,7 +37,7 @@ func run(ctx context.Context) error {
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	w := corewatch.New(configFile)
+	w := corewatch.New(shared.ConfigFile)
 
 	// Start watch loop in background.
 	errCh := make(chan error, 1)

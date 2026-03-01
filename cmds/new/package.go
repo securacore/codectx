@@ -14,6 +14,7 @@ import (
 	"github.com/urfave/cli/v3"
 
 	initialize "github.com/securacore/codectx/cmds/init"
+	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/ai"
 	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/defaults"
@@ -59,7 +60,7 @@ func runPackage(name string) error {
 	// Mark this project as a package in codectx.yml so tools and the AI
 	// directive know the package/ directory is the authoring target.
 	result.Config.Type = "package"
-	if err := config.Write(configFile, result.Config); err != nil {
+	if err := config.Write(shared.ConfigFile, result.Config); err != nil {
 		return fmt.Errorf("update config with package type: %w", err)
 	}
 

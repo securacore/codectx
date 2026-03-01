@@ -407,7 +407,7 @@ func buildAnalysisResult(
 		}
 
 		// Build per-file dictionary from the file's segments.
-		currentDict := BuildDictionary(fs.segments, opts)
+		currentDict := buildDictionary(fs.segments, opts)
 		if currentDict == nil {
 			continue
 		}
@@ -422,7 +422,7 @@ func buildAnalysisResult(
 				strippedSegments[si] = strings.ReplaceAll(seg, gc.value, "$_")
 			}
 		}
-		reducedDict := BuildDictionary(strippedSegments, opts)
+		reducedDict := buildDictionary(strippedSegments, opts)
 
 		currentSize := dictBlockSize(currentDict)
 		reducedSize := 0

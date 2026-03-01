@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/preferences"
 
@@ -117,7 +118,7 @@ func TestSetKeyValue_compression(t *testing.T) {
 
 	require.NoError(t, setKeyValue("compression=true"))
 
-	cfg, err := config.Load(configFile)
+	cfg, err := config.Load(shared.ConfigFile)
 	require.NoError(t, err)
 	prefs, err := preferences.Load(cfg.OutputDir())
 	require.NoError(t, err)
@@ -130,7 +131,7 @@ func TestSetKeyValue_autoCompile(t *testing.T) {
 
 	require.NoError(t, setKeyValue("auto_compile=false"))
 
-	cfg, err := config.Load(configFile)
+	cfg, err := config.Load(shared.ConfigFile)
 	require.NoError(t, err)
 	prefs, err := preferences.Load(cfg.OutputDir())
 	require.NoError(t, err)
@@ -143,7 +144,7 @@ func TestSetKeyValue_aiModel(t *testing.T) {
 
 	require.NoError(t, setKeyValue("ai.model=llama3"))
 
-	cfg, err := config.Load(configFile)
+	cfg, err := config.Load(shared.ConfigFile)
 	require.NoError(t, err)
 	prefs, err := preferences.Load(cfg.OutputDir())
 	require.NoError(t, err)
@@ -159,7 +160,7 @@ func TestSetKeyValue_aiBinClear(t *testing.T) {
 
 	require.NoError(t, setKeyValue("ai.bin="))
 
-	cfg, err := config.Load(configFile)
+	cfg, err := config.Load(shared.ConfigFile)
 	require.NoError(t, err)
 	loaded, err := preferences.Load(cfg.OutputDir())
 	require.NoError(t, err)
@@ -207,7 +208,7 @@ func TestSetKeyValue_preservesExisting(t *testing.T) {
 
 	require.NoError(t, setKeyValue("auto_compile=true"))
 
-	cfg, err := config.Load(configFile)
+	cfg, err := config.Load(shared.ConfigFile)
 	require.NoError(t, err)
 	loaded, err := preferences.Load(cfg.OutputDir())
 	require.NoError(t, err)
@@ -225,7 +226,7 @@ func TestSetKeyValue_overwrite(t *testing.T) {
 
 	require.NoError(t, setKeyValue("compression=false"))
 
-	cfg, err := config.Load(configFile)
+	cfg, err := config.Load(shared.ConfigFile)
 	require.NoError(t, err)
 	loaded, err := preferences.Load(cfg.OutputDir())
 	require.NoError(t, err)
@@ -379,7 +380,7 @@ func TestSetKeyValue_aiClass(t *testing.T) {
 
 	require.NoError(t, setKeyValue("ai.class=gpt-4o-class"))
 
-	cfg, err := config.Load(configFile)
+	cfg, err := config.Load(shared.ConfigFile)
 	require.NoError(t, err)
 	prefs, err := preferences.Load(cfg.OutputDir())
 	require.NoError(t, err)
@@ -403,7 +404,7 @@ func TestSetKeyValue_aiClassClear(t *testing.T) {
 
 	require.NoError(t, setKeyValue("ai.class="))
 
-	cfg, err := config.Load(configFile)
+	cfg, err := config.Load(shared.ConfigFile)
 	require.NoError(t, err)
 	loaded, err := preferences.Load(cfg.OutputDir())
 	require.NoError(t, err)
@@ -418,7 +419,7 @@ func TestSetKeyValue_aiClass_createsAIConfig(t *testing.T) {
 
 	require.NoError(t, setKeyValue("ai.class=o1-class"))
 
-	cfg, err := config.Load(configFile)
+	cfg, err := config.Load(shared.ConfigFile)
 	require.NoError(t, err)
 	prefs, err := preferences.Load(cfg.OutputDir())
 	require.NoError(t, err)

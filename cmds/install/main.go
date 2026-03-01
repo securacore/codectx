@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
+	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/compile"
 	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/lock"
@@ -23,14 +23,15 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-const configFile = "codectx.yml"
 const lockFile = "codectx.lock"
 const manifestFile = "manifest.yml"
 const defaultBackupDir = ".codectx-docs"
 
 var Command = &cli.Command{
-	Name:  "install",
-	Usage: "Install packages from codectx.yml and set up the project",
+	Name:     "install",
+	Aliases:  []string{"i"},
+	Usage:    "Install packages from codectx.yml and set up the project",
+	Category: "Core Workflow",
 	Flags: []cli.Flag{
 		&cli.StringFlag{
 			Name:  "activate",
@@ -51,7 +52,7 @@ type installedPkg struct {
 
 func run(activateFlag string) error {
 	// Load config.
-	cfg, err := config.Load(configFile)
+	cfg, err := config.Load(shared.ConfigFile)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
@@ -72,7 +73,7 @@ func run(activateFlag string) error {
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return fmt.Errorf("create output directory: %w", err)
 	}
-	if err := ensureGitignore(outputDir); err != nil {
+	if err := shared.EnsureGitignoreEntry(".gitignore", outputDir+"/"); err != nil {
 		return err
 	}
 
@@ -177,7 +178,7 @@ func run(activateFlag string) error {
 
 	if hasInactive {
 		if activateFlag != "" {
-			activation, err := parseActivateFlag(activateFlag)
+			activation, err := shared.ParseActivateFlag(activateFlag)
 			if err != nil {
 				return fmt.Errorf("parse --activate: %w", err)
 			}
@@ -193,7 +194,7 @@ func run(activateFlag string) error {
 			}
 		}
 
-		if err := config.Write(configFile, cfg); err != nil {
+		if err := config.Write(shared.ConfigFile, cfg); err != nil {
 			return fmt.Errorf("write config: %w", err)
 		}
 	}
@@ -301,7 +302,7 @@ func setupDocsDir(cfg *config.Config, docsDir *string) error {
 				cfg.Config = &config.BuildConfig{}
 			}
 			cfg.Config.DocsDir = *docsDir
-			if err := config.Write(configFile, cfg); err != nil {
+			if err := config.Write(shared.ConfigFile, cfg); err != nil {
 				return fmt.Errorf("write config: %w", err)
 			}
 		}
@@ -340,36 +341,6 @@ func setupDocsDir(cfg *config.Config, docsDir *string) error {
 	}
 
 	return nil
-}
-
-// ensureGitignore adds the output directory to .gitignore if not already present.
-func ensureGitignore(outputDir string) error {
-	entry := outputDir + "/"
-	path := ".gitignore"
-
-	if data, err := os.ReadFile(path); err == nil {
-		for _, line := range strings.Split(string(data), "\n") {
-			if strings.TrimSpace(line) == entry {
-				return nil
-			}
-		}
-		f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
-		if err != nil {
-			return fmt.Errorf("open .gitignore: %w", err)
-		}
-		defer func() { _ = f.Close() }()
-		if len(data) > 0 && data[len(data)-1] != '\n' {
-			if _, err := f.WriteString("\n"); err != nil {
-				return fmt.Errorf("write newline to .gitignore: %w", err)
-			}
-		}
-		if _, err := f.WriteString(entry + "\n"); err != nil {
-			return fmt.Errorf("append to .gitignore: %w", err)
-		}
-		return nil
-	}
-
-	return os.WriteFile(path, []byte(entry+"\n"), 0o644)
 }
 
 // promptCombinedActivation shows a single multi-select with entries from all
@@ -497,46 +468,4 @@ func promptCombinedActivation(cfg *config.Config, successes []installedPkg) erro
 
 	applyActivationSelection(cfg, successes, entries, selected)
 	return nil
-}
-
-// parseActivateFlag parses the --activate flag into an Activation.
-func parseActivateFlag(value string) (config.Activation, error) {
-	if value == "all" {
-		return config.Activation{Mode: "all"}, nil
-	}
-	if value == "none" {
-		return config.Activation{Mode: "none"}, nil
-	}
-
-	am := &config.ActivationMap{}
-	parts := strings.Split(value, ",")
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		colonIdx := strings.Index(part, ":")
-		if colonIdx < 0 {
-			return config.Activation{}, fmt.Errorf("invalid format %q: expected section:id", part)
-		}
-		section := part[:colonIdx]
-		id := part[colonIdx+1:]
-		if id == "" {
-			return config.Activation{}, fmt.Errorf("empty id in %q", part)
-		}
-
-		switch section {
-		case "foundation":
-			am.Foundation = append(am.Foundation, id)
-		case "application":
-			am.Application = append(am.Application, id)
-		case "topics":
-			am.Topics = append(am.Topics, id)
-		case "prompts":
-			am.Prompts = append(am.Prompts, id)
-		case "plans":
-			am.Plans = append(am.Plans, id)
-		default:
-			return config.Activation{}, fmt.Errorf("unknown section %q in %q", section, part)
-		}
-	}
-
-	return config.Activation{Map: am}, nil
 }

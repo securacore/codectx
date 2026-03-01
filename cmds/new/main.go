@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 
+	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/manifest"
 	"github.com/securacore/codectx/ui"
@@ -13,16 +14,15 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-const configFile = "codectx.yml"
-
 // kebabCase matches lowercase kebab-case identifiers: a-z, 0-9, hyphens,
 // starting and ending with an alphanumeric character.
 var kebabCase = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
 // Command is the parent command for scaffolding new documentation entries.
 var Command = &cli.Command{
-	Name:  "new",
-	Usage: "Scaffold a new documentation entry",
+	Name:     "new",
+	Usage:    "Scaffold a new documentation entry",
+	Category: "Content Authoring",
 	Commands: []*cli.Command{
 		foundationCommand,
 		topicCommand,
@@ -75,7 +75,7 @@ func scaffold(kind sectionKind, name string, usePackageDir bool) error {
 		return fmt.Errorf("invalid name %q: must be lowercase kebab-case (e.g. my-entry)", name)
 	}
 
-	cfg, err := config.Load(configFile)
+	cfg, err := config.Load(shared.ConfigFile)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}

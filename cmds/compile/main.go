@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/compile"
 	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/gitkeep"
@@ -14,11 +15,11 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-const configFile = "codectx.yml"
-
 var Command = &cli.Command{
-	Name:  "compile",
-	Usage: "Build compiled documentation set from all active sources",
+	Name:     "compile",
+	Aliases:  []string{"c"},
+	Usage:    "Build compiled documentation set from all active sources",
+	Category: "Core Workflow",
 	Action: func(ctx context.Context, c *cli.Command) error {
 		return run()
 	},
@@ -85,7 +86,7 @@ func (m compileModel) View() string {
 }
 
 func run() error {
-	cfg, err := config.Load(configFile)
+	cfg, err := config.Load(shared.ConfigFile)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}

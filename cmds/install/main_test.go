@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/manifest"
 
@@ -34,19 +35,19 @@ func TestCommand_flags(t *testing.T) {
 // --- parseActivateFlag ---
 
 func TestParseActivateFlag_all(t *testing.T) {
-	a, err := parseActivateFlag("all")
+	a, err := shared.ParseActivateFlag("all")
 	require.NoError(t, err)
 	assert.True(t, a.IsAll())
 }
 
 func TestParseActivateFlag_none(t *testing.T) {
-	a, err := parseActivateFlag("none")
+	a, err := shared.ParseActivateFlag("none")
 	require.NoError(t, err)
 	assert.True(t, a.IsNone())
 }
 
 func TestParseActivateFlag_granular(t *testing.T) {
-	a, err := parseActivateFlag("topics:react,prompts:commit")
+	a, err := shared.ParseActivateFlag("topics:react,prompts:commit")
 	require.NoError(t, err)
 	require.NotNil(t, a.Map)
 	assert.Equal(t, []string{"react"}, a.Map.Topics)
@@ -54,14 +55,14 @@ func TestParseActivateFlag_granular(t *testing.T) {
 }
 
 func TestParseActivateFlag_application(t *testing.T) {
-	a, err := parseActivateFlag("application:architecture")
+	a, err := shared.ParseActivateFlag("application:architecture")
 	require.NoError(t, err)
 	require.NotNil(t, a.Map)
 	assert.Equal(t, []string{"architecture"}, a.Map.Application)
 }
 
 func TestParseActivateFlag_unknownSection(t *testing.T) {
-	_, err := parseActivateFlag("bad:id")
+	_, err := shared.ParseActivateFlag("bad:id")
 	assert.Error(t, err)
 }
 
@@ -78,7 +79,7 @@ func TestSetupDocsDir_createsNewDir(t *testing.T) {
 	docsDir := "docs"
 
 	// Write a valid config so setupDocsDir can write back if needed.
-	require.NoError(t, config.Write(configFile, cfg))
+	require.NoError(t, config.Write(shared.ConfigFile, cfg))
 
 	err = setupDocsDir(cfg, &docsDir)
 	require.NoError(t, err)
@@ -108,7 +109,7 @@ description: "Test"
 	require.NoError(t, os.WriteFile(filepath.Join(docsPath, "manifest.yml"), []byte(pkgYml), 0o644))
 
 	cfg := &config.Config{Name: "test"}
-	require.NoError(t, config.Write(configFile, cfg))
+	require.NoError(t, config.Write(shared.ConfigFile, cfg))
 
 	docsDir := "docs"
 	err = setupDocsDir(cfg, &docsDir)
@@ -134,7 +135,7 @@ description: "Existing package"
 	require.NoError(t, os.WriteFile(filepath.Join(docsPath, "manifest.yml"), []byte(pkgYml), 0o644))
 
 	cfg := &config.Config{Name: "test"}
-	require.NoError(t, config.Write(configFile, cfg))
+	require.NoError(t, config.Write(shared.ConfigFile, cfg))
 
 	docsDir := "docs"
 	err = setupDocsDir(cfg, &docsDir)
@@ -155,7 +156,7 @@ func TestEnsureGitignore_createsNew(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
 	require.NoError(t, os.Chdir(dir))
 
-	err = ensureGitignore(".codectx")
+	err = shared.EnsureGitignoreEntry(".gitignore", ".codectx/")
 	require.NoError(t, err)
 
 	data, err := os.ReadFile(".gitignore")
@@ -172,7 +173,7 @@ func TestEnsureGitignore_alreadyPresent(t *testing.T) {
 
 	require.NoError(t, os.WriteFile(".gitignore", []byte(".codectx/\n"), 0o644))
 
-	err = ensureGitignore(".codectx")
+	err = shared.EnsureGitignoreEntry(".gitignore", ".codectx/")
 	require.NoError(t, err)
 
 	data, err := os.ReadFile(".gitignore")
@@ -190,7 +191,7 @@ func TestEnsureGitignore_appendsToExisting(t *testing.T) {
 
 	require.NoError(t, os.WriteFile(".gitignore", []byte("node_modules/\n"), 0o644))
 
-	err = ensureGitignore(".codectx")
+	err = shared.EnsureGitignoreEntry(".gitignore", ".codectx/")
 	require.NoError(t, err)
 
 	data, err := os.ReadFile(".gitignore")
@@ -209,7 +210,7 @@ func TestEnsureGitignore_appendsNewlineIfMissing(t *testing.T) {
 	// File without trailing newline.
 	require.NoError(t, os.WriteFile(".gitignore", []byte("node_modules/"), 0o644))
 
-	err = ensureGitignore(".codectx")
+	err = shared.EnsureGitignoreEntry(".gitignore", ".codectx/")
 	require.NoError(t, err)
 
 	data, err := os.ReadFile(".gitignore")
@@ -239,7 +240,7 @@ func TestRun_noPackages(t *testing.T) {
 	require.NoError(t, os.Chdir(dir))
 
 	cfg := &config.Config{Name: "test", Packages: []config.PackageDep{}}
-	require.NoError(t, config.Write(configFile, cfg))
+	require.NoError(t, config.Write(shared.ConfigFile, cfg))
 
 	err = run("all")
 	assert.NoError(t, err)
@@ -248,19 +249,19 @@ func TestRun_noPackages(t *testing.T) {
 // --- parseActivateFlag error branches ---
 
 func TestParseActivateFlag_missingColon(t *testing.T) {
-	_, err := parseActivateFlag("topicsreact")
+	_, err := shared.ParseActivateFlag("topicsreact")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "expected section:id")
 }
 
 func TestParseActivateFlag_emptyId(t *testing.T) {
-	_, err := parseActivateFlag("topics:")
+	_, err := shared.ParseActivateFlag("topics:")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "empty id")
 }
 
 func TestParseActivateFlag_allSections(t *testing.T) {
-	a, err := parseActivateFlag("foundation:a,application:arch,topics:b,prompts:c,plans:d")
+	a, err := shared.ParseActivateFlag("foundation:a,application:arch,topics:b,prompts:c,plans:d")
 	require.NoError(t, err)
 	require.NotNil(t, a.Map)
 	assert.Equal(t, []string{"a"}, a.Map.Foundation)
@@ -281,7 +282,7 @@ func TestEnsureGitignore_emptyExistingFile(t *testing.T) {
 
 	require.NoError(t, os.WriteFile(".gitignore", []byte(""), 0o644))
 
-	err = ensureGitignore(".codectx")
+	err = shared.EnsureGitignoreEntry(".gitignore", ".codectx/")
 	require.NoError(t, err)
 
 	data, err := os.ReadFile(".gitignore")
@@ -299,7 +300,7 @@ func TestSetupDocsDir_deeplyNestedDir(t *testing.T) {
 	require.NoError(t, os.Chdir(dir))
 
 	cfg := &config.Config{Name: "test"}
-	require.NoError(t, config.Write(configFile, cfg))
+	require.NoError(t, config.Write(shared.ConfigFile, cfg))
 
 	docsDir := filepath.Join("a", "b", "c", "docs")
 	err = setupDocsDir(cfg, &docsDir)
@@ -333,7 +334,7 @@ func setupInstallProject(t *testing.T, packages []config.PackageDep) string {
 		Name:     "test-project",
 		Packages: packages,
 	}
-	require.NoError(t, config.Write(configFile, cfg))
+	require.NoError(t, config.Write(shared.ConfigFile, cfg))
 
 	m := &manifest.Manifest{
 		Name:        "test-project",
@@ -424,7 +425,7 @@ func TestRun_installAndCompile(t *testing.T) {
 	assert.FileExists(t, filepath.Join(pkgDir, "foundation", "guide.md"))
 
 	// Verify config was updated with activation.
-	cfg, err := config.Load(configFile)
+	cfg, err := config.Load(shared.ConfigFile)
 	require.NoError(t, err)
 	require.Len(t, cfg.Packages, 1)
 	assert.True(t, cfg.Packages[0].Active.IsAll())
@@ -563,7 +564,7 @@ func TestRun_activateNoneFlagSkipsCompilation(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify activation was set to "none".
-	cfg, err := config.Load(configFile)
+	cfg, err := config.Load(shared.ConfigFile)
 	require.NoError(t, err)
 	require.Len(t, cfg.Packages, 1)
 	assert.True(t, cfg.Packages[0].Active.IsNone())
@@ -589,7 +590,7 @@ func TestRun_activateGranular(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify granular activation was applied.
-	cfg, err := config.Load(configFile)
+	cfg, err := config.Load(shared.ConfigFile)
 	require.NoError(t, err)
 	require.Len(t, cfg.Packages, 1)
 	require.True(t, cfg.Packages[0].Active.IsGranular())
@@ -908,7 +909,7 @@ func TestRun_invalidActivateFlag(t *testing.T) {
 			{Name: "pkg", Author: "org", Active: config.Activation{Mode: "none"}},
 		},
 	}
-	require.NoError(t, config.Write(configFile, cfg))
+	require.NoError(t, config.Write(shared.ConfigFile, cfg))
 
 	// Create docs directory structure for setupDocsDir.
 	docsDir := filepath.Join(dir, "docs")

@@ -658,11 +658,11 @@ func TestCompile_rewritesApplicationEntryLinks(t *testing.T) {
 	assert.Contains(t, string(decisionsData), archHash+".md")
 
 	// Verify compiled manifest has application entry with object references.
-	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
+	cm, err := loadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
 	require.NoError(t, err)
 	require.Len(t, cm.Application, 1)
 	assert.Equal(t, "arch", cm.Application[0].ID)
-	assert.Equal(t, ObjectPath(archHash), cm.Application[0].Object)
+	assert.Equal(t, objectPath(archHash), cm.Application[0].Object)
 	assert.Contains(t, cm.Application[0].Spec, specHash)
 	require.Len(t, cm.Application[0].Files, 1)
 	assert.Contains(t, cm.Application[0].Files[0], decisionsHash)
@@ -707,11 +707,11 @@ func TestCompile_rewritesPromptEntryLinks(t *testing.T) {
 	assert.NotContains(t, string(promptData), "../foundation/philosophy/README.md)")
 
 	// Verify compiled manifest has prompt entry.
-	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
+	cm, err := loadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
 	require.NoError(t, err)
 	require.Len(t, cm.Prompts, 1)
 	assert.Equal(t, "code-review", cm.Prompts[0].ID)
-	assert.Equal(t, ObjectPath(promptHash), cm.Prompts[0].Object)
+	assert.Equal(t, objectPath(promptHash), cm.Prompts[0].Object)
 }
 
 func TestCompile_rewritesPlanEntryLinks(t *testing.T) {
@@ -753,11 +753,11 @@ func TestCompile_rewritesPlanEntryLinks(t *testing.T) {
 	assert.NotContains(t, string(planData), "../../topics/db/README.md)")
 
 	// Verify compiled manifest has plan entry.
-	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
+	cm, err := loadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
 	require.NoError(t, err)
 	require.Len(t, cm.Plans, 1)
 	assert.Equal(t, "migrate", cm.Plans[0].ID)
-	assert.Equal(t, ObjectPath(planHash), cm.Plans[0].Object)
+	assert.Equal(t, objectPath(planHash), cm.Plans[0].Object)
 }
 
 func TestCompile_crossSectionLinksAllEntryTypes(t *testing.T) {
@@ -863,10 +863,10 @@ func TestCompile_hashFromRawContentStoredContentRewritten(t *testing.T) {
 	// The FILENAME should be based on the raw source content hash.
 	rawHash := ContentHash(rawContent)
 	hooksHash := ContentHash(hooksContent)
-	objectPath := filepath.Join(result.OutputDir, "objects", rawHash+".md")
+	objFilePath := filepath.Join(result.OutputDir, "objects", rawHash+".md")
 
 	// The file should exist at the raw-content-hash filename.
-	data, err := os.ReadFile(objectPath)
+	data, err := os.ReadFile(objFilePath)
 	require.NoError(t, err)
 
 	// But the STORED CONTENT should have rewritten links (different from raw).
@@ -875,10 +875,10 @@ func TestCompile_hashFromRawContentStoredContentRewritten(t *testing.T) {
 	assert.NotContains(t, string(data), "(hooks.md)", "stored content should not contain the original relative link")
 
 	// The compiled manifest should reference the raw-content hash.
-	cm, err := LoadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
+	cm, err := loadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
 	require.NoError(t, err)
 	require.Len(t, cm.Topics, 1)
-	assert.Equal(t, ObjectPath(rawHash), cm.Topics[0].Object)
+	assert.Equal(t, objectPath(rawHash), cm.Topics[0].Object)
 }
 
 func TestCompile_sourceDocsUnmodified(t *testing.T) {

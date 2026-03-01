@@ -22,13 +22,13 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-const configFile = "codectx.yml"
 const manifestFile = "manifest.yml"
 const gitignoreContent = ".codectx/\n"
 
 var Command = &cli.Command{
 	Name:      "init",
 	Usage:     "Initialize a new codectx project",
+	Category:  "Core Workflow",
 	ArgsUsage: "[name]",
 	Flags: []cli.Flag{
 		&cli.BoolFlag{
@@ -71,8 +71,8 @@ func RunCore(name string, autoCompile *bool, isPackage bool) (*CoreResult, error
 	}
 
 	// Guard: check if already initialized.
-	if _, err := os.Stat(configFile); err == nil {
-		return nil, fmt.Errorf("%s already exists: project is already initialized", configFile)
+	if _, err := os.Stat(shared.ConfigFile); err == nil {
+		return nil, fmt.Errorf("%s already exists: project is already initialized", shared.ConfigFile)
 	}
 
 	// If no name provided, prompt interactively.
@@ -166,7 +166,7 @@ func RunCore(name string, autoCompile *bool, isPackage bool) (*CoreResult, error
 		Name:     name,
 		Packages: []config.PackageDep{},
 	}
-	if err := config.Write(configFile, cfg); err != nil {
+	if err := config.Write(shared.ConfigFile, cfg); err != nil {
 		return nil, fmt.Errorf("write config: %w", err)
 	}
 
@@ -237,7 +237,7 @@ func RunCore(name string, autoCompile *bool, isPackage bool) (*CoreResult, error
 	ui.Done(fmt.Sprintf("Initialized codectx %s: %s", kind, name))
 	ui.Blank()
 	ui.Header("Created:")
-	ui.Item(configFile)
+	ui.Item(shared.ConfigFile)
 	ui.Item(packagePath)
 	ui.Item(".gitignore")
 	ui.Item(outputDir + "/preferences.yml")
@@ -395,7 +395,7 @@ func PromptLink(outputDir string) error {
 				Title("Set up AI tool integration?").
 				Description("Creates entry point files so your AI tools automatically\nload project documentation on every session.").
 				Affirmative("Yes (recommended)").
-				Negative("No, I'll run 'codectx link' later").
+				Negative("No, I'll run 'codectx ai link' later").
 				Value(&confirm),
 		),
 	).WithTheme(ui.Theme())
@@ -405,7 +405,7 @@ func PromptLink(outputDir string) error {
 	}
 
 	if !confirm {
-		ui.Step("Run 'codectx link' when you're ready.")
+		ui.Step("Run 'codectx ai link' when you're ready.")
 		return nil
 	}
 
