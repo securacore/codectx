@@ -57,7 +57,7 @@ Contents:
 - **Sections**: per-section stats (entries, bytes, tokens, always-load count for foundation)
 - **Packages**: per-package stats (entries, bytes, tokens) with local package listed first
 
-Token estimates use ~4 characters per token as a rough conversion factor. When compression is enabled, the byte and token counts reflect the compressed sizes, giving a realistic picture of actual AI token consumption.
+Token counts use real BPE tokenization via the `o200k_base` encoding (GPT-4o class), matching the [baseline model assumption](../foundation/ai-authoring/README.md#baseline-model-assumption). When compression is enabled, the byte and token counts reflect the compressed content, giving an accurate picture of actual AI context-window consumption.
 
 The compile progress display shows key heuristics after compilation completes: total objects stored, packages compiled, total bytes, and estimated tokens.
 
@@ -112,7 +112,7 @@ Contents:
 - **Sections**: per-section stats (entries, bytes, tokens, always-load count for foundation)
 - **Packages**: per-package stats (entries, bytes, tokens) with local package listed first
 
-Token estimates use ~4 characters per token as a rough conversion factor.
+Token counts are computed using `o200k_base` BPE tokenization (the encoding used by GPT-4o-class models) rather than a byte-based estimate. This gives accurate context-window predictions. The tokenizer runs offline with no network access required. See [AI Authoring: Baseline Model Assumption](../foundation/ai-authoring/README.md#baseline-model-assumption) for why this encoding was chosen.
 
 ## Manifest Decomposition
 

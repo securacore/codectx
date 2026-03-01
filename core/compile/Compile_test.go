@@ -1360,7 +1360,7 @@ func TestStoreObjects_dedupByPath(t *testing.T) {
 		"foundation:b": "local",
 	}
 
-	pathToHash, stored, err := storeObjects(store, unified, srcDirs, provenance)
+	pathToHash, _, stored, err := storeObjects(store, unified, srcDirs, provenance)
 	require.NoError(t, err)
 
 	// Only 1 object should be stored (same path deduped).
@@ -1387,7 +1387,7 @@ func TestStoreObjects_emptyProvenanceKeySkipsFile(t *testing.T) {
 	// Provenance is empty — no mapping for "foundation:orphan".
 	provenance := map[string]string{}
 
-	pathToHash, stored, err := storeObjects(store, unified, srcDirs, provenance)
+	pathToHash, _, stored, err := storeObjects(store, unified, srcDirs, provenance)
 	require.NoError(t, err)
 
 	// File should be skipped entirely.
@@ -1412,7 +1412,7 @@ func TestStoreObjects_skipsMissingFiles(t *testing.T) {
 	srcDirs := map[string]string{"local": srcDir}
 	provenance := map[string]string{"foundation:missing": "local"}
 
-	pathToHash, stored, err := storeObjects(store, unified, srcDirs, provenance)
+	pathToHash, _, stored, err := storeObjects(store, unified, srcDirs, provenance)
 	require.NoError(t, err)
 
 	assert.Equal(t, 0, stored)
@@ -1442,7 +1442,7 @@ func TestStoreObjects_readErrorNonNotExist(t *testing.T) {
 	srcDirs := map[string]string{"local": srcDir}
 	provenance := map[string]string{"foundation:secret": "local"}
 
-	_, _, err := storeObjects(store, unified, srcDirs, provenance)
+	_, _, _, err := storeObjects(store, unified, srcDirs, provenance)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "read")
 }
@@ -1468,7 +1468,7 @@ func TestStoreObjects_storeAsFailureDuringPass2(t *testing.T) {
 	srcDirs := map[string]string{"local": srcDir}
 	provenance := map[string]string{"foundation:doc": "local"}
 
-	_, stored, err := storeObjects(store, unified, srcDirs, provenance)
+	_, _, stored, err := storeObjects(store, unified, srcDirs, provenance)
 	require.Error(t, err)
 	assert.Equal(t, 0, stored)
 	assert.Contains(t, err.Error(), "create objects directory")
@@ -1502,7 +1502,7 @@ func TestStoreObjects_applicationSpecAndFiles(t *testing.T) {
 	srcDirs := map[string]string{"local": srcDir}
 	provenance := map[string]string{"application:arch": "local"}
 
-	pathToHash, stored, err := storeObjects(store, unified, srcDirs, provenance)
+	pathToHash, _, stored, err := storeObjects(store, unified, srcDirs, provenance)
 	require.NoError(t, err)
 
 	assert.Equal(t, 3, stored)
@@ -1527,7 +1527,7 @@ func TestStoreObjects_emptyRelPathSkipped(t *testing.T) {
 	srcDirs := map[string]string{"local": srcDir}
 	provenance := map[string]string{"foundation:empty": "local"}
 
-	pathToHash, stored, err := storeObjects(store, unified, srcDirs, provenance)
+	pathToHash, _, stored, err := storeObjects(store, unified, srcDirs, provenance)
 	require.NoError(t, err)
 	assert.Equal(t, 0, stored)
 	assert.Empty(t, pathToHash)

@@ -8,24 +8,23 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/securacore/codectx/core/cmdx"
 	"github.com/securacore/codectx/core/manifest"
+	"github.com/securacore/codectx/core/tokenizer"
 )
 
 const heuristicsFile = "heuristics.yml"
-
-// tokensPerByte is the rough conversion factor from bytes to tokens.
-// ~4 characters per token for English/Markdown content.
-const tokensPerByte = 0.25
 
 // Heuristics is the sidecar metadata generated during compilation.
 // It provides size and token estimates for the compiled documentation set.
 // Not part of the AI loading protocol; used by tooling and the generated
 // README for richer context.
 type Heuristics struct {
-	CompiledAt string             `yaml:"compiled_at"`
-	Totals     HeuristicsTotals   `yaml:"totals"`
-	Sections   HeuristicsSections `yaml:"sections"`
-	Packages   []PackageStats     `yaml:"packages"`
+	CompiledAt            string                   `yaml:"compiled_at"`
+	Totals                HeuristicsTotals         `yaml:"totals"`
+	Sections              HeuristicsSections       `yaml:"sections"`
+	Packages              []PackageStats           `yaml:"packages"`
+	GlobalDictOpportunity *cmdx.GlobalDictAnalysis `yaml:"global_dict_opportunity,omitempty"`
 }
 
 // HeuristicsTotals holds aggregate stats for the entire documentation set.
@@ -62,9 +61,10 @@ type PackageStats struct {
 	EstimatedTokens int    `yaml:"estimated_tokens"`
 }
 
-// estimateTokens converts byte count to estimated token count.
-func estimateTokens(bytes int) int {
-	return int(float64(bytes) * tokensPerByte)
+// countTokens returns the o200k_base token count for the given content.
+// This replaces the previous rough heuristic of bytes * 0.25.
+func countTokens(content []byte) int {
+	return tokenizer.CountTokensBytes(content)
 }
 
 // generateHeuristics builds heuristics metadata from the unified manifest
@@ -86,28 +86,36 @@ func generateHeuristics(
 		CompiledAt: time.Now().UTC().Format(time.RFC3339),
 	}
 
-	// Track unique objects and their sizes.
-	objectSizes := make(map[string]int) // hash -> byte count
-	readObjectSize := func(hash string) int {
+	// Track unique objects: byte size and real token count.
+	type objectMeasure struct {
+		size   int
+		tokens int
+	}
+	objectCache := make(map[string]objectMeasure) // hash -> measure
+	readObject := func(hash string) objectMeasure {
 		if hash == "" {
-			return 0
+			return objectMeasure{}
 		}
-		if size, ok := objectSizes[hash]; ok {
-			return size
+		if m, ok := objectCache[hash]; ok {
+			return m
 		}
 		path := filepath.Join(objectsDir, hash+objExt)
-		info, err := os.Stat(path)
+		data, err := os.ReadFile(path)
 		if err != nil {
-			return 0
+			return objectMeasure{}
 		}
-		size := int(info.Size())
-		objectSizes[hash] = size
-		return size
+		m := objectMeasure{
+			size:   len(data),
+			tokens: countTokens(data),
+		}
+		objectCache[hash] = m
+		return m
 	}
 
 	// Per-package accumulators.
 	pkgEntries := make(map[string]int)
 	pkgBytes := make(map[string]int)
+	pkgTokens := make(map[string]int)
 
 	// Per-section accumulators.
 	var foundationStats, applicationStats, topicStats, promptStats, planStats SectionStats
@@ -117,11 +125,12 @@ func generateHeuristics(
 	totalAlwaysLoad := 0
 
 	// Helper to accumulate entry stats.
-	addEntry := func(section, id, relPath string, stats *SectionStats, alwaysLoad bool) int {
+	addEntry := func(section, id, relPath string, stats *SectionStats, alwaysLoad bool) {
 		hash := pathToHash[relPath]
-		size := readObjectSize(hash)
+		m := readObject(hash)
 		stats.Entries++
-		stats.SizeBytes += size
+		stats.SizeBytes += m.size
+		stats.EstimatedTokens += m.tokens
 		if alwaysLoad {
 			stats.AlwaysLoad++
 			totalAlwaysLoad++
@@ -130,9 +139,8 @@ func generateHeuristics(
 
 		pkg := provenance[section+":"+id]
 		pkgEntries[pkg]++
-		pkgBytes[pkg] += size
-
-		return size
+		pkgBytes[pkg] += m.size
+		pkgTokens[pkg] += m.tokens
 	}
 
 	// Foundation entries.
@@ -144,47 +152,54 @@ func generateHeuristics(
 	for _, e := range unified.Application {
 		addEntry("application", e.ID, e.Path, &applicationStats, e.Load == "always")
 
-		// Add spec size.
+		// Add spec size and tokens.
 		if e.Spec != "" {
 			if hash, ok := pathToHash[e.Spec]; ok {
-				specSize := readObjectSize(hash)
-				applicationStats.SizeBytes += specSize
+				m := readObject(hash)
+				applicationStats.SizeBytes += m.size
+				applicationStats.EstimatedTokens += m.tokens
 				pkg := provenance["application:"+e.ID]
-				pkgBytes[pkg] += specSize
+				pkgBytes[pkg] += m.size
+				pkgTokens[pkg] += m.tokens
 			}
 		}
-		// Add extra files size.
+		// Add extra files size and tokens.
 		for _, f := range e.Files {
 			if hash, ok := pathToHash[f]; ok {
-				fileSize := readObjectSize(hash)
-				applicationStats.SizeBytes += fileSize
+				m := readObject(hash)
+				applicationStats.SizeBytes += m.size
+				applicationStats.EstimatedTokens += m.tokens
 				pkg := provenance["application:"+e.ID]
-				pkgBytes[pkg] += fileSize
+				pkgBytes[pkg] += m.size
+				pkgTokens[pkg] += m.tokens
 			}
 		}
 	}
 
 	// Topic entries (include spec and files in size).
 	for _, e := range unified.Topics {
-		size := addEntry("topics", e.ID, e.Path, &topicStats, false)
-		_ = size
+		addEntry("topics", e.ID, e.Path, &topicStats, false)
 
-		// Add spec size.
+		// Add spec size and tokens.
 		if e.Spec != "" {
 			if hash, ok := pathToHash[e.Spec]; ok {
-				specSize := readObjectSize(hash)
-				topicStats.SizeBytes += specSize
+				m := readObject(hash)
+				topicStats.SizeBytes += m.size
+				topicStats.EstimatedTokens += m.tokens
 				pkg := provenance["topics:"+e.ID]
-				pkgBytes[pkg] += specSize
+				pkgBytes[pkg] += m.size
+				pkgTokens[pkg] += m.tokens
 			}
 		}
-		// Add extra files size.
+		// Add extra files size and tokens.
 		for _, f := range e.Files {
 			if hash, ok := pathToHash[f]; ok {
-				fileSize := readObjectSize(hash)
-				topicStats.SizeBytes += fileSize
+				m := readObject(hash)
+				topicStats.SizeBytes += m.size
+				topicStats.EstimatedTokens += m.tokens
 				pkg := provenance["topics:"+e.ID]
-				pkgBytes[pkg] += fileSize
+				pkgBytes[pkg] += m.size
+				pkgTokens[pkg] += m.tokens
 			}
 		}
 	}
@@ -199,12 +214,8 @@ func generateHeuristics(
 		addEntry("plans", e.ID, e.Path, &planStats, false)
 	}
 
-	// Compute token estimates for sections.
-	foundationStats.EstimatedTokens = estimateTokens(foundationStats.SizeBytes)
-	applicationStats.EstimatedTokens = estimateTokens(applicationStats.SizeBytes)
-	topicStats.EstimatedTokens = estimateTokens(topicStats.SizeBytes)
-	promptStats.EstimatedTokens = estimateTokens(promptStats.SizeBytes)
-	planStats.EstimatedTokens = estimateTokens(planStats.SizeBytes)
+	// Token counts are now accumulated inline via addEntry and the
+	// spec/files loops — no separate estimation pass needed.
 
 	// Populate sections (only non-empty).
 	if foundationStats.Entries > 0 {
@@ -226,11 +237,13 @@ func generateHeuristics(
 	// Compute totals.
 	totalBytes := foundationStats.SizeBytes + applicationStats.SizeBytes +
 		topicStats.SizeBytes + promptStats.SizeBytes + planStats.SizeBytes
+	totalTokens := foundationStats.EstimatedTokens + applicationStats.EstimatedTokens +
+		topicStats.EstimatedTokens + promptStats.EstimatedTokens + planStats.EstimatedTokens
 	h.Totals = HeuristicsTotals{
 		Entries:         totalEntries,
-		Objects:         len(objectSizes),
+		Objects:         len(objectCache),
 		SizeBytes:       totalBytes,
-		EstimatedTokens: estimateTokens(totalBytes),
+		EstimatedTokens: totalTokens,
 		AlwaysLoad:      totalAlwaysLoad,
 	}
 
@@ -251,7 +264,7 @@ func generateHeuristics(
 			Name:            "local",
 			Entries:         pkgEntries["local"],
 			SizeBytes:       pkgBytes["local"],
-			EstimatedTokens: estimateTokens(pkgBytes["local"]),
+			EstimatedTokens: pkgTokens["local"],
 		})
 	}
 	for _, name := range pkgNames {
@@ -259,7 +272,7 @@ func generateHeuristics(
 			Name:            name,
 			Entries:         pkgEntries[name],
 			SizeBytes:       pkgBytes[name],
-			EstimatedTokens: estimateTokens(pkgBytes[name]),
+			EstimatedTokens: pkgTokens[name],
 		})
 	}
 

@@ -1,5 +1,7 @@
 package cmdx
 
+import "github.com/securacore/codectx/core/tokenizer"
+
 // Analyze computes compression statistics for a Markdown document.
 // It encodes the input and measures the difference in size.
 func Analyze(markdown []byte) (*Stats, error) {
@@ -44,9 +46,9 @@ func Analyze(markdown []byte) (*Stats, error) {
 		domainSavings = len(noDomainEncoded) - compressedBytes
 	}
 
-	// Rough token estimation: ~4 bytes per token.
-	estTokensBefore := originalBytes / 4
-	estTokensAfter := compressedBytes / 4
+	// Real token counting via o200k_base (GPT-4o class).
+	estTokensBefore := tokenizer.CountTokensBytes(markdown)
+	estTokensAfter := tokenizer.CountTokensBytes(encoded)
 	var tokenSavings float64
 	if estTokensBefore > 0 {
 		tokenSavings = float64(estTokensBefore-estTokensAfter) / float64(estTokensBefore) * 100

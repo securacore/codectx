@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/securacore/codectx/core/cmdx"
 	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/lock"
 	"github.com/securacore/codectx/core/manifest"
@@ -170,7 +171,7 @@ func Compile(cfg *config.Config, onProgress ...func(ProgressEvent)) (*Result, er
 	progress(ProgressEvent{Stage: "store", Message: "Storing objects"})
 
 	// Store all winning entry files as content-addressed objects.
-	pathToHash, objectsStored, err := storeObjects(store, unified, srcDirs, provenance)
+	pathToHash, sources, objectsStored, err := storeObjects(store, unified, srcDirs, provenance)
 	if err != nil {
 		return nil, fmt.Errorf("store objects: %w", err)
 	}
@@ -187,6 +188,15 @@ func Compile(cfg *config.Config, onProgress ...func(ProgressEvent)) (*Result, er
 
 	// Generate heuristics sidecar (needed for decomposition thresholds and README).
 	h := generateHeuristics(unified, pathToHash, provenance, objectsDir, store.ext())
+
+	// Analyze global dictionary opportunity when compression is active.
+	if compressed && len(sources) >= 2 {
+		fileContents := make(map[string][]byte, len(sources))
+		for _, src := range sources {
+			fileContents[src.RelPath] = src.Data
+		}
+		h.GlobalDictOpportunity = cmdx.AnalyzeGlobalDictOpportunity(fileContents, h.Totals.SizeBytes)
+	}
 
 	// Decompose if thresholds are exceeded.
 	if shouldDecompose(h) {
@@ -246,6 +256,14 @@ func Compile(cfg *config.Config, onProgress ...func(ProgressEvent)) (*Result, er
 	}, nil
 }
 
+// SourceFile holds a file's raw content and its content-addressed hash,
+// captured during object storage for downstream analysis.
+type SourceFile struct {
+	RelPath string
+	Data    []byte
+	Hash    string
+}
+
 // storeObjects iterates over the unified manifest and stores each referenced
 // file through the ObjectStore using a two-pass approach:
 //
@@ -258,21 +276,15 @@ func Compile(cfg *config.Config, onProgress ...func(ProgressEvent)) (*Result, er
 // source identity) while making links in compiled objects resolvable.
 //
 // It resolves the correct source directory for each entry using the provenance
-// map. Returns the pathToHash map and count.
+// map. Returns the pathToHash map, cached source files, and count.
 func storeObjects(
 	store *ObjectStore,
 	unified *manifest.Manifest,
 	srcDirs map[string]string,
 	provenance map[string]string,
-) (map[string]string, int, error) {
-	type cachedFile struct {
-		relPath string
-		data    []byte
-		hash    string
-	}
-
+) (map[string]string, []SourceFile, int, error) {
 	pathToHash := make(map[string]string)
-	var cached []cachedFile
+	var cached []SourceFile
 
 	// Pass 1: Read all files, compute hashes, build pathToHash.
 	collectFile := func(section, id, relPath string) error {
@@ -298,75 +310,75 @@ func storeObjects(
 
 		hash := ContentHash(data)
 		pathToHash[relPath] = hash
-		cached = append(cached, cachedFile{relPath: relPath, data: data, hash: hash})
+		cached = append(cached, SourceFile{RelPath: relPath, Data: data, Hash: hash})
 		return nil
 	}
 
 	for _, e := range unified.Foundation {
 		if err := collectFile("foundation", e.ID, e.Path); err != nil {
-			return nil, 0, err
+			return nil, nil, 0, err
 		}
 		if err := collectFile("foundation", e.ID, e.Spec); err != nil {
-			return nil, 0, err
+			return nil, nil, 0, err
 		}
 		for _, f := range e.Files {
 			if err := collectFile("foundation", e.ID, f); err != nil {
-				return nil, 0, err
+				return nil, nil, 0, err
 			}
 		}
 	}
 
 	for _, e := range unified.Application {
 		if err := collectFile("application", e.ID, e.Path); err != nil {
-			return nil, 0, err
+			return nil, nil, 0, err
 		}
 		if err := collectFile("application", e.ID, e.Spec); err != nil {
-			return nil, 0, err
+			return nil, nil, 0, err
 		}
 		for _, f := range e.Files {
 			if err := collectFile("application", e.ID, f); err != nil {
-				return nil, 0, err
+				return nil, nil, 0, err
 			}
 		}
 	}
 
 	for _, e := range unified.Topics {
 		if err := collectFile("topics", e.ID, e.Path); err != nil {
-			return nil, 0, err
+			return nil, nil, 0, err
 		}
 		if err := collectFile("topics", e.ID, e.Spec); err != nil {
-			return nil, 0, err
+			return nil, nil, 0, err
 		}
 		for _, f := range e.Files {
 			if err := collectFile("topics", e.ID, f); err != nil {
-				return nil, 0, err
+				return nil, nil, 0, err
 			}
 		}
 	}
 
 	for _, e := range unified.Prompts {
 		if err := collectFile("prompts", e.ID, e.Path); err != nil {
-			return nil, 0, err
+			return nil, nil, 0, err
 		}
 	}
 
 	for _, e := range unified.Plans {
 		if err := collectFile("plans", e.ID, e.Path); err != nil {
-			return nil, 0, err
+			return nil, nil, 0, err
 		}
 	}
 
 	// Pass 2: Rewrite links and store objects.
 	stored := 0
 	for _, cf := range cached {
-		rewritten := rewriteLinks(cf.data, cf.relPath, pathToHash, store.ext())
-		if err := store.StoreAs(cf.hash, rewritten); err != nil {
-			return nil, stored, err
+		rewritten := rewriteLinks(cf.Data, cf.RelPath, pathToHash, store.ext())
+		if err := store.StoreAs(cf.Hash, rewritten); err != nil {
+			return nil, nil, stored, err
 		}
 		stored++
 	}
 
-	return pathToHash, stored, nil
+	return pathToHash, cached, stored, nil
 }
 
 // copyStateFiles copies plan state files to outputDir/state/{id}.yml.

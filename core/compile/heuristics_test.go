@@ -132,11 +132,17 @@ func TestGenerateHeuristics_emptySections(t *testing.T) {
 	assert.Empty(t, h.Packages)
 }
 
-func TestGenerateHeuristics_tokenEstimation(t *testing.T) {
-	// 400 bytes at 0.25 tokens/byte = 100 tokens.
-	assert.Equal(t, 100, estimateTokens(400))
-	assert.Equal(t, 0, estimateTokens(0))
-	assert.Equal(t, 250, estimateTokens(1000))
+func TestCountTokens_realTokenizer(t *testing.T) {
+	// Real o200k_base tokenization; exact counts depend on the BPE
+	// vocabulary but must be non-zero for non-empty content and zero
+	// for empty content.
+	assert.Equal(t, 0, countTokens(nil))
+	assert.Equal(t, 0, countTokens([]byte("")))
+
+	tokens := countTokens([]byte("# Heading\n\nSome markdown content.\n"))
+	assert.Greater(t, tokens, 0, "non-empty content should produce tokens")
+	// Real tokenization yields fewer tokens than bytes for English text.
+	assert.Less(t, tokens, 34, "tokens should be less than byte count for short English")
 }
 
 func TestWriteAndLoadHeuristics(t *testing.T) {
@@ -354,6 +360,113 @@ func TestGenerateHeuristics_applicationWithFiles(t *testing.T) {
 	require.Len(t, h.Packages, 1)
 	assert.Equal(t, "local", h.Packages[0].Name)
 	assert.Equal(t, h.Sections.Application.SizeBytes, h.Packages[0].SizeBytes)
+}
+
+func TestGenerateHeuristics_tokensSumToTotal(t *testing.T) {
+	dir, _, pathToHash := setupHeuristicsTest(t)
+	objectsDir := filepath.Join(dir, "objects")
+
+	m := &manifest.Manifest{
+		Name: "token-sum-test",
+		Foundation: []manifest.FoundationEntry{
+			{ID: "philosophy", Path: "foundation/a.md", Load: "always"},
+			{ID: "conventions", Path: "foundation/b.md"},
+		},
+		Application: []manifest.ApplicationEntry{
+			{ID: "arch", Path: "application/arch/README.md"},
+		},
+		Topics: []manifest.TopicEntry{
+			{ID: "go", Path: "topics/go/README.md", Spec: "topics/go/spec.md"},
+		},
+		Prompts: []manifest.PromptEntry{
+			{ID: "lint", Path: "prompts/lint/README.md"},
+		},
+		Plans: []manifest.PlanEntry{
+			{ID: "migrate", Path: "plans/migrate/README.md"},
+		},
+	}
+
+	provenance := map[string]string{
+		"foundation:philosophy":  "local",
+		"foundation:conventions": "local",
+		"application:arch":       "local",
+		"topics:go":              "go@org",
+		"prompts:lint":           "local",
+		"plans:migrate":          "local",
+	}
+
+	h := generateHeuristics(m, pathToHash, provenance, objectsDir)
+
+	// Section token counts should sum to the total.
+	sectionTokenSum := 0
+	if h.Sections.Foundation != nil {
+		sectionTokenSum += h.Sections.Foundation.EstimatedTokens
+	}
+	if h.Sections.Application != nil {
+		sectionTokenSum += h.Sections.Application.EstimatedTokens
+	}
+	if h.Sections.Topics != nil {
+		sectionTokenSum += h.Sections.Topics.EstimatedTokens
+	}
+	if h.Sections.Prompts != nil {
+		sectionTokenSum += h.Sections.Prompts.EstimatedTokens
+	}
+	if h.Sections.Plans != nil {
+		sectionTokenSum += h.Sections.Plans.EstimatedTokens
+	}
+	assert.Equal(t, h.Totals.EstimatedTokens, sectionTokenSum,
+		"section tokens should sum to total tokens")
+	assert.Greater(t, sectionTokenSum, 0, "total tokens should be positive")
+}
+
+func TestGenerateHeuristics_topicFilesIncludeTokens(t *testing.T) {
+	dir, store, _ := setupHeuristicsTest(t)
+	objectsDir := filepath.Join(dir, "objects")
+
+	pathToHash := make(map[string]string)
+	files := map[string]string{
+		"topics/react/README.md": "# React\n\nReact conventions.\n",
+		"topics/react/hooks.md":  "# Hooks\n\nHook patterns and usage.\n",
+	}
+	for path, content := range files {
+		hash, err := store.Store([]byte(content))
+		require.NoError(t, err)
+		pathToHash[path] = hash
+	}
+
+	// Without extra files.
+	mNoFiles := &manifest.Manifest{
+		Name: "no-files",
+		Topics: []manifest.TopicEntry{
+			{ID: "react", Path: "topics/react/README.md"},
+		},
+	}
+	provenance := map[string]string{"topics:react": "local"}
+	hNoFiles := generateHeuristics(mNoFiles, pathToHash, provenance, objectsDir)
+
+	// With extra files.
+	mWithFiles := &manifest.Manifest{
+		Name: "with-files",
+		Topics: []manifest.TopicEntry{
+			{ID: "react", Path: "topics/react/README.md",
+				Files: []string{"topics/react/hooks.md"}},
+		},
+	}
+	hWithFiles := generateHeuristics(mWithFiles, pathToHash, provenance, objectsDir)
+
+	require.NotNil(t, hNoFiles.Sections.Topics)
+	require.NotNil(t, hWithFiles.Sections.Topics)
+
+	// Token count should be higher when extra files are included.
+	assert.Greater(t, hWithFiles.Sections.Topics.EstimatedTokens,
+		hNoFiles.Sections.Topics.EstimatedTokens,
+		"tokens should increase when extra files are included")
+
+	// Package token stats should match section stats.
+	require.Len(t, hWithFiles.Packages, 1)
+	assert.Equal(t, hWithFiles.Sections.Topics.EstimatedTokens,
+		hWithFiles.Packages[0].EstimatedTokens,
+		"package tokens should match section tokens")
 }
 
 func TestGenerateHeuristics_applicationAlwaysLoad(t *testing.T) {
