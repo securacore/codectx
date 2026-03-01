@@ -110,7 +110,7 @@ func RunCore(name string, autoCompile *bool, isPackage bool) (*CoreResult, error
 	}
 
 	// Initialize git if no .git directory exists.
-	if err := EnsureGit(); err != nil {
+	if err := ensureGit(); err != nil {
 		return nil, err
 	}
 
@@ -277,11 +277,11 @@ func RunPostInit(cfg *config.Config) {
 		return
 	}
 
-	if err := AutoCompile(cfg); err != nil {
+	if err := autoCompile(cfg); err != nil {
 		ui.Warn(fmt.Sprintf("compile: %s", err))
 	}
 
-	if err := PromptLink(cfg.OutputDir()); err != nil {
+	if err := promptLink(cfg.OutputDir()); err != nil {
 		ui.Warn(fmt.Sprintf("link: %s", err))
 	}
 }
@@ -309,9 +309,9 @@ func formatBool(b *bool) string {
 	return "false"
 }
 
-// EnsureGit initializes a git repository and writes a .gitignore
+// ensureGit initializes a git repository and writes a .gitignore
 // if no .git directory exists in the current directory.
-func EnsureGit() error {
+func ensureGit() error {
 	if _, err := os.Stat(".git"); err == nil {
 		// Git already initialized; ensure .gitignore has .codectx/ entry.
 		return ensureGitignore()
@@ -361,8 +361,8 @@ func ensureGitignore() error {
 	return os.WriteFile(path, []byte(gitignoreContent), 0o644)
 }
 
-// AutoCompile compiles the documentation using the inline spinner pattern.
-func AutoCompile(cfg *config.Config) error {
+// autoCompile compiles the documentation using the inline spinner pattern.
+func autoCompile(cfg *config.Config) error {
 	ui.Blank()
 	var result *compile.Result
 	err := ui.SpinErr("Compiling...", func() error {
@@ -384,9 +384,9 @@ func AutoCompile(cfg *config.Config) error {
 	return nil
 }
 
-// PromptLink offers to set up AI tool integration by creating entry point files.
+// promptLink offers to set up AI tool integration by creating entry point files.
 // If the user declines, a hint is printed.
-func PromptLink(outputDir string) error {
+func promptLink(outputDir string) error {
 	ui.Blank()
 	var confirm bool
 	form := huh.NewForm(

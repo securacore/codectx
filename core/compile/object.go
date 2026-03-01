@@ -7,16 +7,16 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/securacore/codectx/core/cmdx"
+	"github.com/securacore/codectx/core/md"
 )
 
 // ObjectStore manages the content-addressed object store.
 // Files are stored as {16-char SHA256 prefix}.{ext} in a flat directory,
-// where ext is ".md" (plain markdown) or ".cmdx" (compressed).
+// where ext is ".md" (plain markdown) or ".ctx.md" (compact markdown).
 // Identical content produces the same hash, giving natural deduplication.
 type ObjectStore struct {
 	dir         string // absolute path to the objects/ directory
-	compression bool   // when true, encode content via CMDX before storing
+	compression bool   // when true, encode content via compact markdown before storing
 }
 
 // NewObjectStore creates an ObjectStore rooted at the given directory.
@@ -24,12 +24,12 @@ func NewObjectStore(dir string) *ObjectStore {
 	return &ObjectStore{dir: dir}
 }
 
-// NewCompressedObjectStore creates an ObjectStore with CMDX compression enabled.
+// NewCompressedObjectStore creates an ObjectStore with compact markdown compression enabled.
 func NewCompressedObjectStore(dir string) *ObjectStore {
 	return &ObjectStore{dir: dir, compression: true}
 }
 
-// Compressed reports whether this store uses CMDX compression.
+// Compressed reports whether this store uses compact markdown compression.
 func (s *ObjectStore) Compressed() bool {
 	return s.compression
 }
@@ -37,7 +37,7 @@ func (s *ObjectStore) Compressed() bool {
 // ext returns the file extension used by this store.
 func (s *ObjectStore) ext() string {
 	if s.compression {
-		return ".cmdx"
+		return ".ctx.md"
 	}
 	return ".md"
 }
@@ -45,7 +45,7 @@ func (s *ObjectStore) ext() string {
 // Store writes content to the object store and returns its hash.
 // If an object with the same hash already exists, it is not overwritten
 // (content-addressed writes are idempotent). When compression is enabled,
-// content is encoded to CMDX format before writing.
+// content is encoded to compact markdown before writing.
 func (s *ObjectStore) Store(content []byte) (string, error) {
 	hash := ContentHash(content)
 	stored, err := s.encode(content)
@@ -76,7 +76,7 @@ func (s *ObjectStore) Store(content []byte) (string, error) {
 // This supports the two-pass compilation model where the hash is based on raw
 // source content but the stored content has rewritten links.
 // If an object with the same hash already exists, it is not overwritten.
-// When compression is enabled, content is encoded to CMDX format before writing.
+// When compression is enabled, content is encoded to compact markdown before writing.
 func (s *ObjectStore) StoreAs(hash string, content []byte) error {
 	stored, err := s.encode(content)
 	if err != nil {
@@ -115,15 +115,15 @@ func objectPath(hash string) string {
 	return fmt.Sprintf("objects/%s.md", hash)
 }
 
-// objectPathCompressed returns the relative path for a hash using .cmdx extension
-// (e.g., "objects/a1b2c3d4e5f67890.cmdx").
+// objectPathCompressed returns the relative path for a hash using .ctx.md extension
+// (e.g., "objects/a1b2c3d4e5f67890.ctx.md").
 // This is the value stored in compiled manifest entries when compression is on.
 func objectPathCompressed(hash string) string {
-	return fmt.Sprintf("objects/%s.cmdx", hash)
+	return fmt.Sprintf("objects/%s.ctx.md", hash)
 }
 
 // ObjectPathExt returns the relative path for a hash using the given extension
-// (including the dot, e.g., ".md" or ".cmdx").
+// (including the dot, e.g., ".md" or ".ctx.md").
 func ObjectPathExt(hash, ext string) string {
 	return fmt.Sprintf("objects/%s%s", hash, ext)
 }
@@ -189,19 +189,20 @@ func (s *ObjectStore) Read(hash string) ([]byte, error) {
 	return data, nil
 }
 
-// encode optionally compresses content via CMDX.
+// encode optionally compresses content via compact markdown encoding.
 // When compression is disabled, the content is returned as-is.
 func (s *ObjectStore) encode(content []byte) ([]byte, error) {
 	if !s.compression {
 		return content, nil
 	}
-	return cmdx.Encode(content)
+	return md.Encode(content)
 }
 
-// stripObjectExt removes known object extensions (.md or .cmdx) from a filename.
+// stripObjectExt removes known object extensions (.md or .ctx.md) from a filename.
+// Note: .ctx.md must be checked before .md since .md is a suffix of .ctx.md.
 func stripObjectExt(name string) string {
-	if strings.HasSuffix(name, ".cmdx") {
-		return strings.TrimSuffix(name, ".cmdx")
+	if strings.HasSuffix(name, ".ctx.md") {
+		return strings.TrimSuffix(name, ".ctx.md")
 	}
 	return strings.TrimSuffix(name, ".md")
 }

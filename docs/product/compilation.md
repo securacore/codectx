@@ -1,6 +1,6 @@
 # Compilation
 
-Running `codectx compile` builds a compiled documentation set from everything you've activated. The compiled output lives in `.codectx/` and is optimized for AI consumption: flat file layout, content-addressed filenames, rewritten cross-references, optional CMDX compression, and a single data map that indexes everything.
+Running `codectx compile` builds a compiled documentation set from everything you've activated. The compiled output lives in `.codectx/` and is optimized for AI consumption: flat file layout, content-addressed filenames, rewritten cross-references, optional Markdown compression, and a single data map that indexes everything.
 
 The compiled format is validated by `compiled.schema.json` (not yet created).
 
@@ -19,9 +19,9 @@ Only entries you've activated in `codectx.yml` are included. If two packages pro
 
 ### 2. Content-Addressed Storage
 
-Each documentation file is stored in a flat `objects/` directory. The filename is a 16-character SHA256 prefix of the stored content (e.g., `objects/a1b2c3d4e5f67890.md` or `objects/a1b2c3d4e5f67890.cmdx`).
+Each documentation file is stored in a flat `objects/` directory. The filename is a 16-character SHA256 prefix of the stored content (e.g., `objects/a1b2c3d4e5f67890.md` or `objects/a1b2c3d4e5f67890.ctx.md`).
 
-When compression is disabled, the hash is computed from the original source content, and files use the `.md` extension. When compression is enabled, the hash is computed from the CMDX-encoded content, and files use the `.cmdx` extension. Either way, identical stored content produces the same filename and is naturally deduplicated.
+When compression is disabled, the hash is computed from the original source content, and files use the `.md` extension. When compression is enabled, the hash is computed from the original source content, and files use the `.ctx.md` extension. Either way, identical source content produces the same filename and is naturally deduplicated.
 
 Plan state files are stored separately in `state/` because they're mutable and change between compiles.
 
@@ -31,13 +31,13 @@ Source documentation files contain relative markdown links that reference their 
 
 During this stage, the compiler rewrites every markdown link target in each compiled object:
 
-- **Resolvable links** are rewritten to the target's content-addressed filename. For example, `[hooks](hooks.md)` becomes `[hooks](bbbb444455556666.md)` (or `.cmdx` when compressed).
+- **Resolvable links** are rewritten to the target's content-addressed filename. For example, `[hooks](hooks.md)` becomes `[hooks](bbbb444455556666.md)` (or `.ctx.md` when compressed).
 - **Unresolvable links** (targets not in the compiled set, such as references to topics you haven't activated) use the `unresolved:` URI scheme. For example, `[TypeScript](../typescript/README.md)` becomes `[TypeScript](unresolved:../typescript/README.md)`. This tells AI the reference exists but the target isn't available in this compilation.
 - **HTTP/HTTPS links** are left untouched.
 - **Fragment suffixes** (e.g., `#section`) are preserved on rewritten links.
 - **Non-markdown links** (JSON, YAML, etc.) are left untouched.
 
-Link rewriting happens before compression. The compiler rewrites links in the Markdown source, then encodes the rewritten content to CMDX (if compression is enabled). This means CMDX-encoded files contain links to content-addressed objects, not to original source paths.
+Link rewriting happens before compression. The compiler rewrites links in the Markdown source, then encodes the rewritten content through the compression pipeline (if compression is enabled). Compressed files contain links to content-addressed objects, not to original source paths.
 
 Source files in `docs/` are never modified. Link rewriting only affects the compiled objects in `.codectx/objects/`.
 
@@ -67,7 +67,7 @@ If the documentation set exceeds decomposition thresholds, the manifest is split
 
 ### 7. README and Lock
 
-A `README.md` is generated from the unified manifest and heuristics (includes token estimates, section summaries, and the loading protocol). When compression is enabled, the README includes a note explaining the `.cmdx` format to AI consumers. A `codectx.lock` file is generated with resolved versions, checksums, and full activation state.
+A `README.md` is generated from the unified manifest and heuristics (includes token estimates, section summaries, and the loading protocol). A `codectx.lock` file is generated with resolved versions, checksums, and full activation state.
 
 ## Compiled Output Format
 
@@ -81,7 +81,7 @@ After compilation, your `.codectx/` directory looks like this:
   preferences.yml                 # User preferences (preserved across compiles)
   objects/                        # Content-addressed file store
     {16-char-sha256}.md           # Uncompressed objects (when compression disabled)
-    {16-char-sha256}.cmdx         # Compressed objects (when compression enabled)
+    {16-char-sha256}.ctx.md       # Compressed objects (when compression enabled)
   state/                          # Mutable plan state files
     {plan-id}.yml
   manifests/                      # Sub-manifests (only present when decomposed)
@@ -94,7 +94,7 @@ After compilation, your `.codectx/` directory looks like this:
 Key properties:
 
 - **`manifest.yml`** is the compiled data map. Each entry has an `object` field (content-addressed path), a `source` field (provenance), and standard `depends_on`/`required_by` edges.
-- **`objects/`** is a flat directory of content-addressed files. Filenames are 16-character SHA256 prefixes with `.md` or `.cmdx` extension, providing 64 bits of collision resistance. Links inside these files are rewritten to reference other objects by hash.
+- **`objects/`** is a flat directory of content-addressed files. Filenames are 16-character SHA256 prefixes with `.md` or `.ctx.md` extension, providing 64 bits of collision resistance. Links inside these files are rewritten to reference other objects by hash.
 - **`state/`** contains mutable plan state files. These are not content-addressed because they change between compiles.
 - **`preferences.yml`** stores user-specific settings (e.g., compression, AI model class). It is preserved across recompiles.
 
@@ -133,7 +133,7 @@ Sub-manifests use the same schema, enabling recursive decomposition at deeper le
 ## Related
 
 - [Package Format](packages.md) -- source package structure and the two kinds of manifest
-- [Compression](compression.md) -- CMDX codec details and performance characteristics
+- [Compression](compression.md) -- Markdown compression pipeline and performance characteristics
 - [Configuration](configuration.md) -- activation settings that control what gets compiled
 - [Preference Management](set-command.md) -- compression and auto_compile preferences
 - [Design Decisions](spec/README.md) -- reasoning behind compilation choices

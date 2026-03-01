@@ -197,7 +197,7 @@ func TestEnsureGit_initializesRepo(t *testing.T) {
 	defer func() { _ = os.Chdir(origDir) }()
 	require.NoError(t, os.Chdir(dir))
 
-	err = EnsureGit()
+	err = ensureGit()
 	require.NoError(t, err)
 
 	// Verify .git directory was created.
@@ -220,7 +220,7 @@ func TestEnsureGit_skipsIfGitExists(t *testing.T) {
 	// Pre-create .git directory.
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".git"), 0o755))
 
-	err = EnsureGit()
+	err = ensureGit()
 	require.NoError(t, err)
 
 	// Should still create .gitignore.
@@ -739,7 +739,7 @@ func TestFormatBool(t *testing.T) {
 	assert.Equal(t, "(unset)", formatBool(nil))
 }
 
-// --- AutoCompile ---
+// --- autoCompile ---
 
 func TestAutoCompile_success(t *testing.T) {
 	dir := t.TempDir()
@@ -774,8 +774,8 @@ func TestAutoCompile_success(t *testing.T) {
 	}
 	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
 
-	// AutoCompile should succeed.
-	err = AutoCompile(cfg)
+	// autoCompile should succeed.
+	err = autoCompile(cfg)
 	require.NoError(t, err)
 
 	// Verify compiled output was produced.
@@ -813,7 +813,7 @@ func TestAutoCompile_emptyProject(t *testing.T) {
 	require.NoError(t, manifest.Write(filepath.Join(docsDir, "manifest.yml"), m))
 
 	// Should succeed even with no entries.
-	err = AutoCompile(cfg)
+	err = autoCompile(cfg)
 	require.NoError(t, err)
 }
 
@@ -831,6 +831,6 @@ func TestAutoCompile_missingManifest(t *testing.T) {
 	require.NoError(t, config.Write(filepath.Join(dir, shared.ConfigFile), cfg))
 
 	// No docs/ dir or manifest — compile should fail.
-	err = AutoCompile(cfg)
+	err = autoCompile(cfg)
 	require.Error(t, err)
 }

@@ -15,7 +15,7 @@ Displays every known preference key with its current value and description:
 ```
 Preferences:
 
-  compression      true       Encode compiled objects to CMDX format
+  compression      true       Compress compiled objects for token efficiency
   auto_compile     true       Recompile automatically after changes
   ai.provider      claude     AI provider (claude, opencode, ollama)
   ai.model         (unset)    AI model name (ollama only)
@@ -38,7 +38,7 @@ codectx set ai.provider=claude
 
 **Type:** bool | **Default (new projects):** `true`
 
-When enabled, compiled objects are encoded to CMDX format during compilation, reducing token usage by ~25% on structured content. When disabled, compiled objects are stored as plain Markdown.
+When enabled, compiled objects are encoded through the Markdown compression pipeline during compilation, reducing token usage on structured content. When disabled, compiled objects are stored as uncompressed Markdown.
 
 Existing projects (created before compression was added) have this unset, which is treated as `false` for backward compatibility.
 

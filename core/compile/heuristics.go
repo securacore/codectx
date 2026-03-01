@@ -8,7 +8,6 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/securacore/codectx/core/cmdx"
 	"github.com/securacore/codectx/core/manifest"
 	"github.com/securacore/codectx/core/tokenizer"
 )
@@ -20,11 +19,10 @@ const heuristicsFile = "heuristics.yml"
 // Not part of the AI loading protocol; used by tooling and the generated
 // README for richer context.
 type Heuristics struct {
-	CompiledAt            string                   `yaml:"compiled_at"`
-	Totals                HeuristicsTotals         `yaml:"totals"`
-	Sections              HeuristicsSections       `yaml:"sections"`
-	Packages              []PackageStats           `yaml:"packages"`
-	GlobalDictOpportunity *cmdx.GlobalDictAnalysis `yaml:"global_dict_opportunity,omitempty"`
+	CompiledAt string             `yaml:"compiled_at"`
+	Totals     HeuristicsTotals   `yaml:"totals"`
+	Sections   HeuristicsSections `yaml:"sections"`
+	Packages   []PackageStats     `yaml:"packages"`
 }
 
 // HeuristicsTotals holds aggregate stats for the entire documentation set.
@@ -70,7 +68,7 @@ func countTokens(content []byte) int {
 // generateHeuristics builds heuristics metadata from the unified manifest
 // and stored objects. It reads object sizes from the object store to
 // compute byte counts and token estimates. The ext parameter is the file
-// extension used by the object store (e.g., ".md" or ".cmdx").
+// extension used by the object store (e.g., ".md" or ".ctx.md").
 func generateHeuristics(
 	unified *manifest.Manifest,
 	pathToHash map[string]string,

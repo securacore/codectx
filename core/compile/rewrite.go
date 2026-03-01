@@ -11,7 +11,7 @@ import (
 // object filenames. sourceRelPath is the docs-relative path of the source file
 // (e.g., "topics/react/README.md"). pathToHash maps docs-relative file paths to
 // their 16-char content hashes. The optional ext parameter specifies the object
-// file extension (defaults to ".md"; pass ".cmdx" for compressed output).
+// file extension (defaults to ".md"; pass ".ctx.md" for compressed output).
 //
 // For each markdown link [text](target.md):
 //   - HTTP/HTTPS links are left untouched.

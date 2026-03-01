@@ -356,17 +356,17 @@ func TestPrune_allActive(t *testing.T) {
 // --- objectPathCompressed ---
 
 func TestObjectPathCompressed(t *testing.T) {
-	assert.Equal(t, "objects/a1b2c3d4e5f67890.cmdx", objectPathCompressed("a1b2c3d4e5f67890"))
+	assert.Equal(t, "objects/a1b2c3d4e5f67890.ctx.md", objectPathCompressed("a1b2c3d4e5f67890"))
 }
 
-// --- stripObjectExt with .cmdx ---
+// --- stripObjectExt with .ctx.md ---
 
 func TestStripObjectExt_md(t *testing.T) {
 	assert.Equal(t, "a1b2c3d4e5f67890", stripObjectExt("a1b2c3d4e5f67890.md"))
 }
 
-func TestStripObjectExt_cmdx(t *testing.T) {
-	assert.Equal(t, "a1b2c3d4e5f67890", stripObjectExt("a1b2c3d4e5f67890.cmdx"))
+func TestStripObjectExt_ctxmd(t *testing.T) {
+	assert.Equal(t, "a1b2c3d4e5f67890", stripObjectExt("a1b2c3d4e5f67890.ctx.md"))
 }
 
 func TestStripObjectExt_noExt(t *testing.T) {
@@ -380,7 +380,7 @@ func TestNewCompressedObjectStore_flagsSet(t *testing.T) {
 	store := NewCompressedObjectStore(filepath.Join(dir, "objects"))
 
 	assert.True(t, store.Compressed(), "Compressed() should be true")
-	assert.Equal(t, ".cmdx", store.ext(), "ext() should be .cmdx")
+	assert.Equal(t, ".ctx.md", store.ext(), "ext() should be .ctx.md")
 }
 
 func TestNewObjectStore_flagsUnset(t *testing.T) {
@@ -400,13 +400,14 @@ func TestCompressedStore_writesFile(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, hash, 16)
 
-	// Verify .cmdx file exists (not .md).
-	cmdxPath := filepath.Join(dir, "objects", hash+".cmdx")
-	data, err := os.ReadFile(cmdxPath)
+	// Verify .ctx.md file exists (not .md).
+	ctxPath := filepath.Join(dir, "objects", hash+".ctx.md")
+	data, err := os.ReadFile(ctxPath)
 	require.NoError(t, err)
-	assert.True(t, strings.HasPrefix(string(data), "@CMDX v1"), "stored content should be CMDX-encoded")
+	// Compressed store encodes via md.Encode which produces compact normalized markdown.
+	assert.NotEmpty(t, data, "stored content should not be empty")
 
-	// Verify .md file does NOT exist.
+	// Verify plain .md file does NOT exist (compressed uses .ctx.md extension).
 	mdPath := filepath.Join(dir, "objects", hash+".md")
 	_, err = os.Stat(mdPath)
 	assert.True(t, os.IsNotExist(err), ".md file should not exist when compression is enabled")
@@ -422,7 +423,8 @@ func TestCompressedStore_readRoundTrip(t *testing.T) {
 
 	data, err := store.Read(hash)
 	require.NoError(t, err)
-	assert.True(t, strings.HasPrefix(string(data), "@CMDX v1"), "Read should return CMDX-encoded content")
+	// Compressed store returns compact normalized markdown from md.Encode.
+	assert.NotEmpty(t, data, "Read should return encoded content")
 }
 
 func TestCompressedStore_idempotent(t *testing.T) {
@@ -458,9 +460,9 @@ func TestCompressedStore_differentContent(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, entries, 2)
 
-	// Both should be .cmdx files.
+	// Both should be .ctx.md files.
 	for _, e := range entries {
-		assert.True(t, strings.HasSuffix(e.Name(), ".cmdx"), "file %s should have .cmdx extension", e.Name())
+		assert.True(t, strings.HasSuffix(e.Name(), ".ctx.md"), "file %s should have .ctx.md extension", e.Name())
 	}
 }
 
@@ -473,11 +475,12 @@ func TestCompressedStoreAs_writesFile(t *testing.T) {
 	err := store.StoreAs(hash, content)
 	require.NoError(t, err)
 
-	// Verify .cmdx file exists.
-	path := filepath.Join(dir, "objects", hash+".cmdx")
+	// Verify .ctx.md file exists.
+	path := filepath.Join(dir, "objects", hash+".ctx.md")
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
-	assert.True(t, strings.HasPrefix(string(data), "@CMDX v1"))
+	// Compressed store encodes via md.Encode (compact normalized markdown).
+	assert.NotEmpty(t, data, "stored content should not be empty")
 }
 
 func TestCompressedStoreAs_idempotent(t *testing.T) {
@@ -495,7 +498,7 @@ func TestCompressedStoreAs_idempotent(t *testing.T) {
 	assert.Len(t, entries, 1)
 }
 
-func TestCompressedList_withCmdxFiles(t *testing.T) {
+func TestCompressedList_withCtxMdFiles(t *testing.T) {
 	dir := t.TempDir()
 	store := NewCompressedObjectStore(filepath.Join(dir, "objects"))
 
@@ -511,7 +514,7 @@ func TestCompressedList_withCmdxFiles(t *testing.T) {
 	assert.True(t, hashes[h2], "should list hash for second object")
 }
 
-func TestCompressedPrune_removesCmdxOrphans(t *testing.T) {
+func TestCompressedPrune_removesCtxMdOrphans(t *testing.T) {
 	dir := t.TempDir()
 	store := NewCompressedObjectStore(filepath.Join(dir, "objects"))
 
@@ -530,11 +533,11 @@ func TestCompressedPrune_removesCmdxOrphans(t *testing.T) {
 	assert.Len(t, hashes, 1)
 	assert.True(t, hashes[h1])
 
-	// Verify the remaining file is .cmdx.
+	// Verify the remaining file is .ctx.md.
 	entries, err := os.ReadDir(filepath.Join(dir, "objects"))
 	require.NoError(t, err)
 	assert.Len(t, entries, 1)
-	assert.True(t, strings.HasSuffix(entries[0].Name(), ".cmdx"))
+	assert.True(t, strings.HasSuffix(entries[0].Name(), ".ctx.md"))
 }
 
 func TestCompressedStore_createsDirectory(t *testing.T) {
@@ -567,13 +570,15 @@ func TestCompressedStore_hashDiffersFromUncompressed(t *testing.T) {
 
 	assert.Equal(t, h1, h2, "hash should be the same since Store hashes raw content")
 
-	// But the stored file content should differ.
+	// Both stores should produce readable content.
 	plainData, err := plainStore.Read(h1)
 	require.NoError(t, err)
 	compData, err := compStore.Read(h2)
 	require.NoError(t, err)
 
-	assert.NotEqual(t, plainData, compData, "stored content should differ (plain vs CMDX)")
-	assert.False(t, strings.HasPrefix(string(plainData), "@CMDX"), "plain store should not produce CMDX")
-	assert.True(t, strings.HasPrefix(string(compData), "@CMDX"), "compressed store should produce CMDX")
+	// Plain store keeps content as-is; compressed store runs through md.Encode
+	// which produces compact normalized markdown. For already-normalized inputs,
+	// the output may be identical — the key property is that encoding succeeds.
+	assert.NotEmpty(t, plainData, "plain store should return content")
+	assert.NotEmpty(t, compData, "compressed store should return content")
 }

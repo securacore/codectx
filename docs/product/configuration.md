@@ -19,7 +19,7 @@ User preferences are stored in `.codectx/preferences.yml`, managed by `codectx s
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `compression` | bool | `true` (new projects) | Encode compiled objects to CMDX format |
+| `compression` | bool | `true` (new projects) | Encode compiled objects through Markdown compression pipeline |
 | `auto_compile` | bool | `true` (new projects) | Recompile automatically after changes |
 | `ai.provider` | string | unset | AI provider (`claude`, `opencode`, `ollama`) |
 | `ai.model` | string | unset | AI model name (Ollama only) |
@@ -136,7 +136,7 @@ project-root/
     README.md                       # Generated loading protocol
     heuristics.yml                  # Size and token stats
     preferences.yml                 # User preferences (personal, preserved)
-    objects/                        # Content-addressed files (.md or .cmdx)
+    objects/                        # Content-addressed files (.md or .ctx.md)
     ...
 
   CLAUDE.md                         # AI entry point (created by codectx link)
@@ -149,7 +149,7 @@ Whether you check `docs/packages/` into Git is your choice. The lock file ensure
 
 - [Package Format](packages.md) -- package structure and manifest format
 - [Compilation](compilation.md) -- how configuration drives the compile process
-- [Compression](compression.md) -- CMDX compression and the `compression` preference
+- [Compression](compression.md) -- Markdown compression pipeline and the `compression` preference
 - [Preference Management](set-command.md) -- `codectx set` and user preferences
 - [AI Integration](ai-integration.md) -- how compiled output connects to AI tools
 - [Design Decisions](spec/README.md) -- reasoning behind configuration choices

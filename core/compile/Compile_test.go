@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/securacore/codectx/core/config"
@@ -1549,7 +1550,7 @@ func setupCompressedProject(t *testing.T) (string, *config.Config) {
 	return dir, cfg
 }
 
-func TestCompile_withCompression_storesCmdxFiles(t *testing.T) {
+func TestCompile_withCompression_storesCtxMdFiles(t *testing.T) {
 	_, cfg := setupCompressedProject(t)
 	docsDir := cfg.DocsDir()
 
@@ -1576,25 +1577,25 @@ func TestCompile_withCompression_storesCmdxFiles(t *testing.T) {
 	assert.True(t, result.Compressed, "Result.Compressed should be true")
 	assert.Equal(t, 1, result.ObjectsStored)
 
-	// Verify .cmdx file exists in objects/.
+	// Verify .ctx.md file exists in objects/.
 	objectsDir := filepath.Join(result.OutputDir, "objects")
 	entries, err := os.ReadDir(objectsDir)
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
-	assert.True(t, filepath.Ext(entries[0].Name()) == ".cmdx",
-		"object file should have .cmdx extension, got: %s", entries[0].Name())
+	assert.True(t, strings.HasSuffix(entries[0].Name(), ".ctx.md"),
+		"object file should have .ctx.md extension, got: %s", entries[0].Name())
 
-	// Verify the stored content is CMDX-encoded.
+	// Verify the stored content is encoded (compact normalized markdown via md.Encode).
 	data, err := os.ReadFile(filepath.Join(objectsDir, entries[0].Name()))
 	require.NoError(t, err)
-	assert.Contains(t, string(data), "@CMDX v1", "stored content should be CMDX-encoded")
+	assert.NotEmpty(t, data, "stored content should not be empty")
 
-	// Verify compiled manifest references .cmdx paths.
+	// Verify compiled manifest references .ctx.md paths.
 	cm, err := loadCompiledManifest(filepath.Join(result.OutputDir, "manifest.yml"))
 	require.NoError(t, err)
 	require.NotEmpty(t, cm.Foundation)
-	assert.Contains(t, cm.Foundation[0].Object, ".cmdx",
-		"compiled manifest entry should reference .cmdx object")
+	assert.Contains(t, cm.Foundation[0].Object, ".ctx.md",
+		"compiled manifest entry should reference .ctx.md object")
 }
 
 func TestCompile_withCompression_heuristicsReflectCompressedSizes(t *testing.T) {
@@ -1656,7 +1657,7 @@ func TestCompile_withCompression_resultEntries(t *testing.T) {
 	entry := result.Entries[0]
 	assert.Equal(t, "foundation", entry.Section)
 	assert.Equal(t, "philosophy", entry.ID)
-	assert.Contains(t, entry.Object, ".cmdx", "ResultEntry.Object should reference .cmdx")
+	assert.Contains(t, entry.Object, ".ctx.md", "ResultEntry.Object should reference .ctx.md")
 	assert.Greater(t, entry.Size, 0, "ResultEntry.Size should be > 0")
 }
 

@@ -8,7 +8,7 @@ type Result struct {
 	Packages      int
 	Dedup         DeduplicationReport
 	UpToDate      bool // true if inputs unchanged since last compile
-	Compressed    bool // true if CMDX compression was used
+	Compressed    bool // true if compact markdown compression was used
 	Heuristics    *Heuristics
 	Entries       []ResultEntry // per-file listing for display
 }

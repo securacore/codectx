@@ -160,7 +160,7 @@ func run() error {
 	}
 	ui.KV("Packages", result.Packages, 18)
 	if result.Compressed {
-		ui.KV("Compression", "cmdx", 18)
+		ui.KV("Compression", "compact", 18)
 	}
 
 	if result.Heuristics != nil {

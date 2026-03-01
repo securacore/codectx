@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/securacore/codectx/core/cmdx"
 	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/lock"
 	"github.com/securacore/codectx/core/manifest"
@@ -76,7 +75,7 @@ func Compile(cfg *config.Config, onProgress ...func(ProgressEvent)) (*Result, er
 		return nil, fmt.Errorf("create output directory %s: %w", outputDir, err)
 	}
 
-	// Initialize object store (with optional CMDX compression).
+	// Initialize object store (with optional compact markdown compression).
 	objectsDir := filepath.Join(outputDir, "objects")
 	var store *ObjectStore
 	if compressed {
@@ -171,7 +170,7 @@ func Compile(cfg *config.Config, onProgress ...func(ProgressEvent)) (*Result, er
 	progress(ProgressEvent{Stage: "store", Message: "Storing objects"})
 
 	// Store all winning entry files as content-addressed objects.
-	pathToHash, sources, objectsStored, err := storeObjects(store, unified, srcDirs, provenance)
+	pathToHash, _, objectsStored, err := storeObjects(store, unified, srcDirs, provenance)
 	if err != nil {
 		return nil, fmt.Errorf("store objects: %w", err)
 	}
@@ -188,15 +187,6 @@ func Compile(cfg *config.Config, onProgress ...func(ProgressEvent)) (*Result, er
 
 	// Generate heuristics sidecar (needed for decomposition thresholds and README).
 	h := generateHeuristics(unified, pathToHash, provenance, objectsDir, store.ext())
-
-	// Analyze global dictionary opportunity when compression is active.
-	if compressed && len(sources) >= 2 {
-		fileContents := make(map[string][]byte, len(sources))
-		for _, src := range sources {
-			fileContents[src.RelPath] = src.Data
-		}
-		h.GlobalDictOpportunity = cmdx.AnalyzeGlobalDictOpportunity(fileContents, h.Totals.SizeBytes)
-	}
 
 	// Decompose if thresholds are exceeded.
 	if shouldDecompose(h) {
@@ -256,9 +246,9 @@ func Compile(cfg *config.Config, onProgress ...func(ProgressEvent)) (*Result, er
 	}, nil
 }
 
-// SourceFile holds a file's raw content and its content-addressed hash,
+// sourceFile holds a file's raw content and its content-addressed hash,
 // captured during object storage for downstream analysis.
-type SourceFile struct {
+type sourceFile struct {
 	RelPath string
 	Data    []byte
 	Hash    string
@@ -282,9 +272,9 @@ func storeObjects(
 	unified *manifest.Manifest,
 	srcDirs map[string]string,
 	provenance map[string]string,
-) (map[string]string, []SourceFile, int, error) {
+) (map[string]string, []sourceFile, int, error) {
 	pathToHash := make(map[string]string)
-	var cached []SourceFile
+	var cached []sourceFile
 
 	// Pass 1: Read all files, compute hashes, build pathToHash.
 	collectFile := func(section, id, relPath string) error {
@@ -310,7 +300,7 @@ func storeObjects(
 
 		hash := ContentHash(data)
 		pathToHash[relPath] = hash
-		cached = append(cached, SourceFile{RelPath: relPath, Data: data, Hash: hash})
+		cached = append(cached, sourceFile{RelPath: relPath, Data: data, Hash: hash})
 		return nil
 	}
 

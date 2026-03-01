@@ -24,7 +24,7 @@ type preferenceKey struct {
 
 // registry is the static list of all known preference keys.
 var registry = []preferenceKey{
-	{Key: "compression", Description: "Encode compiled objects to CMDX format", Type: "bool"},
+	{Key: "compression", Description: "Encode compiled objects to compact markdown", Type: "bool"},
 	{Key: "auto_compile", Description: "Recompile automatically after changes", Type: "bool"},
 	{Key: "ai.bin", Description: "AI binary (claude, opencode)", Type: "string"},
 	{Key: "ai.model", Description: "AI model name (ollama only)", Type: "string"},

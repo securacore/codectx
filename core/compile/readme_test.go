@@ -207,16 +207,16 @@ func TestGenerateReadme_requiredContext_withAlwaysLoad(t *testing.T) {
 		"foundation/markdown/spec/README.md":   "stu901vwx234",
 	}
 
-	result := generateReadme(m, nil, pathToHash, ".cmdx")
+	result := generateReadme(m, nil, pathToHash, ".ctx.md")
 
 	assert.Contains(t, result, "## Required Context")
 	assert.Contains(t, result, "Load these files now. Do not skip this step.")
 	assert.Contains(t, result, "### philosophy")
-	assert.Contains(t, result, "objects/abc123def456.cmdx")
-	assert.Contains(t, result, "objects/789ghi012jkl.cmdx")
+	assert.Contains(t, result, "objects/abc123def456.ctx.md")
+	assert.Contains(t, result, "objects/789ghi012jkl.ctx.md")
 	// documentation-load entries should not appear in required context.
 	assert.NotContains(t, result, "### markdown")
-	assert.NotContains(t, result, "objects/mno345pqr678.cmdx")
+	assert.NotContains(t, result, "objects/mno345pqr678.ctx.md")
 }
 
 func TestGenerateReadme_requiredContext_noAlwaysLoad(t *testing.T) {
@@ -285,10 +285,10 @@ func TestGenerateReadme_requiredContext_noSpec(t *testing.T) {
 		"foundation/philosophy/README.md": "abc123def456",
 	}
 
-	result := generateReadme(m, nil, pathToHash, ".cmdx")
+	result := generateReadme(m, nil, pathToHash, ".ctx.md")
 
 	assert.Contains(t, result, "### philosophy")
-	assert.Contains(t, result, "objects/abc123def456.cmdx")
+	assert.Contains(t, result, "objects/abc123def456.ctx.md")
 	assert.Contains(t, result, "(object)")
 	assert.NotContains(t, result, "(spec)")
 }
@@ -306,14 +306,14 @@ func TestGenerateReadme_requiredContext_objectHashMiss(t *testing.T) {
 		"foundation/philosophy/spec/README.md": "spechashabc123",
 	}
 
-	result := generateReadme(m, nil, pathToHash, ".cmdx")
+	result := generateReadme(m, nil, pathToHash, ".ctx.md")
 
 	// Section header and spec should appear; object line should be skipped.
 	assert.Contains(t, result, "## Required Context")
 	assert.Contains(t, result, "### philosophy")
 	assert.NotContains(t, result, "(object)")
 	assert.Contains(t, result, "(spec)")
-	assert.Contains(t, result, "objects/spechashabc123.cmdx")
+	assert.Contains(t, result, "objects/spechashabc123.ctx.md")
 }
 
 func TestGenerateReadme_requiredContext_specHashMiss(t *testing.T) {
@@ -350,7 +350,7 @@ func TestGenerateReadme_requiredContext_emptyPathToHash(t *testing.T) {
 	// Non-nil but empty map — no hashes resolve.
 	pathToHash := map[string]string{}
 
-	result := generateReadme(m, nil, pathToHash, ".cmdx")
+	result := generateReadme(m, nil, pathToHash, ".ctx.md")
 
 	// Section header appears (there IS an always-load entry), but no file lines.
 	assert.Contains(t, result, "## Required Context")
@@ -372,13 +372,13 @@ func TestGenerateReadme_requiredContext_withCompression(t *testing.T) {
 		"foundation/philosophy/spec/README.md": "789ghi012jkl",
 	}
 
-	result := generateReadme(m, nil, pathToHash, ".cmdx", true)
+	result := generateReadme(m, nil, pathToHash, ".ctx.md", true)
 
-	// Both CMDX format note and Required Context should be present.
-	assert.Contains(t, result, "CMDX compression")
+	// Both compression format note and Required Context should be present.
+	assert.Contains(t, result, "compact markdown compression")
 	assert.Contains(t, result, "## Required Context")
-	assert.Contains(t, result, "objects/abc123def456.cmdx")
-	assert.Contains(t, result, "objects/789ghi012jkl.cmdx")
+	assert.Contains(t, result, "objects/abc123def456.ctx.md")
+	assert.Contains(t, result, "objects/789ghi012jkl.ctx.md")
 }
 
 // --- pluralize ---

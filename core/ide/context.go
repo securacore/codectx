@@ -102,7 +102,7 @@ func BuildPreferencesContext(p *preferences.Preferences) string {
 
 	if p.Compression != nil {
 		if *p.Compression {
-			parts = append(parts, "- Compression is **enabled** (CMDX format). Documentation will be compressed during compilation.")
+			parts = append(parts, "- Compression is **enabled** (compact markdown). Documentation will be compressed during compilation.")
 		} else {
 			parts = append(parts, "- Compression is **disabled**. Documentation is stored as plain Markdown.")
 		}

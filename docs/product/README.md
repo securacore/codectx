@@ -51,7 +51,7 @@ One command compiles all documentation — local and installed — into a single
 codectx compile
 ```
 
-Compilation produces a `.codectx/` directory containing content-addressed objects, a compiled data map, and heuristics. When CMDX compression is enabled (the default for new projects), compiled objects are encoded into a compact text format that reduces token usage by ~25% on structured content.
+Compilation produces a `.codectx/` directory containing content-addressed objects, a compiled data map, and heuristics. When compression is enabled (the default for new projects), compiled objects are encoded into compact, BPE-optimized Markdown that reduces token usage on structured content.
 
 ### 4. Link to AI Tools
 
@@ -71,14 +71,14 @@ AI loads a lightweight data map first, then pulls in only the documentation rele
 
 **Portable packages.** Any project's documentation can be extracted and published as a package. The same format works for local docs, installed dependencies, and compiled output.
 
-**CMDX compression.** A purpose-built text codec compresses Markdown into a compact `@TAG` format with dictionary compression and domain-specific blocks. The output is still human-readable — not binary — and round-trips back to equivalent Markdown. See [Compression](compression.md).
+**Markdown compression.** A purpose-built pipeline compresses Markdown into compact, BPE-optimized Markdown with normalized formatting, compact table syntax, TOC-to-list conversion, and reference-style link deduplication. The output is valid native Markdown that AI reads directly. See [Compression](compression.md).
 
 **Reproducibility.** Lock files record exact resolved versions and checksums. `codectx add --lockfile` reproduces the exact package state on any machine.
 
 ## Features
 
 - **Content-addressed storage** — identical content across packages is deduplicated automatically
-- **CMDX compression** — purpose-built codec reduces token usage by ~25% on structured content
+- **Markdown compression** — BPE-optimized pipeline reduces token usage on structured content
 - **Link rewriting** — relative markdown links are rewritten to content-addressed references, with unresolvable references clearly marked
 - **Smart compilation** — fingerprint-based change detection skips recompilation when nothing changed
 - **Live recompilation** — `codectx watch` monitors documentation and recompiles on every change
@@ -97,7 +97,7 @@ AI loads a lightweight data map first, then pulls in only the documentation rele
 |---|---|
 | [Package Format](packages.md) | Package structure, manifest format, entry types, naming, and resolution |
 | [Compilation](compilation.md) | Compile process, content-addressed storage, compression, link rewriting, and decomposition |
-| [Compression](compression.md) | CMDX codec: algorithm, tag format, dictionary compression, and benchmarks |
+| [Compression](compression.md) | Markdown compression pipeline, normalizations, and benchmarks |
 | [Preference Management](set-command.md) | The `codectx set` command and user-local preferences |
 | [Configuration](configuration.md) | `codectx.yml` settings, activation, conflict handling, and directory layout |
 | [AI Integration](ai-integration.md) | Entry point linking, the loading protocol, model class targeting, and watch mode |
@@ -130,7 +130,7 @@ For installed packages: the package repository may or may not ship a `manifest.y
 
 **Manifest Decomposition.** Large documentation sets are automatically split into per-section sub-manifests. AI loads the root manifest (with always-load foundation entries) first, then loads sub-manifests on demand. This keeps the initial token cost low regardless of total documentation size.
 
-**CMDX Compression.** When compression is enabled, compiled objects are encoded from Markdown into a compact `@TAG` text format before storage. The content-addressed filename uses the `.cmdx` extension instead of `.md`. Compression happens transparently during compilation — source files are never modified. See [Compression](compression.md) for the full technical deep-dive.
+**Markdown Compression.** When compression is enabled, compiled objects are encoded from Markdown into compact, BPE-optimized Markdown before storage. The content-addressed filename uses the `.ctx.md` extension. Compression happens transparently during compilation; source files are never modified. See [Compression](compression.md) for the full technical details.
 
 ## Validation Schemas
 

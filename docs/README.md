@@ -26,7 +26,7 @@ At the start of every session, load [metadata.yml](metadata.yml) and all foundat
 | [Architecture](product/README.md)                   | System architecture overview and core concepts       |
 | [Package Format](product/packages.md)               | Package structure, manifest, naming, and resolution  |
 | [Compilation](product/compilation.md)               | Compile process, content addressing, decomposition   |
-| [Compression](product/compression.md)               | CMDX codec, algorithm, tag format, and benchmarks    |
+| [Compression](product/compression.md)               | Markdown compression pipeline and benchmarks         |
 | [Configuration](product/configuration.md)           | Settings, activation, conflicts, and directory layout|
 | [Preference Management](product/set-command.md)     | The `codectx set` command and user-local preferences |
 | [AI Integration](product/ai-integration.md)         | Entry point linking, loading protocol, watch mode    |

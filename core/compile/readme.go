@@ -11,9 +11,9 @@ import (
 // from the unified manifest and heuristics data. Only sections with
 // entries are included. When heuristics are available, token estimates
 // and size information are included. The compressed flag adds a format
-// note about CMDX encoding.
+// note about compact markdown encoding.
 func generateReadme(m *manifest.Manifest, h *Heuristics, pathToHash map[string]string, ext string, compressed ...bool) string {
-	isCmdx := len(compressed) > 0 && compressed[0]
+	isCompressed := len(compressed) > 0 && compressed[0]
 
 	var b strings.Builder
 
@@ -21,8 +21,8 @@ func generateReadme(m *manifest.Manifest, h *Heuristics, pathToHash map[string]s
 	b.WriteString("> Documentation managed by codectx.\n\n")
 	b.WriteString("Load [manifest.yml](manifest.yml) and all foundation documents marked `load: always` at the start of every session.\n\n")
 
-	if isCmdx {
-		b.WriteString("> **Format**: Objects use CMDX compression (`.cmdx`). CMDX is a compact binary encoding of markdown optimized for AI context loading. Decode with `codectx cmdx decode` or load directly — content is semantically equivalent to the source markdown.\n\n")
+	if isCompressed {
+		b.WriteString("> **Format**: Objects use compact markdown compression (`.ctx.md`). Content is BPE-optimized markdown that is semantically equivalent to the source — load directly as standard markdown.\n\n")
 	}
 
 	b.WriteString("## Loading Protocol\n\n")

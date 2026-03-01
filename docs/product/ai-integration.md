@@ -32,7 +32,7 @@ When an AI tool starts a session, it follows this sequence:
 
 This protocol ensures AI never loads documentation blindly. The data map acts as a table of contents, and AI selectively loads only what the current task requires. Links within compiled documents reference other objects by their content-addressed filenames, so AI can navigate between related documents directly.
 
-When CMDX compression is enabled, the compiled README includes a note explaining the `.cmdx` format to AI consumers. AI models process the `@TAG` syntax natively without requiring a decoding step.
+When compression is enabled, compiled objects contain compact, BPE-optimized Markdown that AI models read directly. The output is valid native Markdown; no decoding step is required.
 
 ## AI Provider Configuration
 
@@ -77,6 +77,6 @@ Watch mode is useful during documentation authoring: save a file, and the compil
 
 - [Package Format](packages.md) -- how documentation is structured for AI consumption
 - [Compilation](compilation.md) -- how documentation is compiled into the output format
-- [Compression](compression.md) -- CMDX format that AI reads when compression is enabled
+- [Compression](compression.md) -- Markdown compression pipeline for token-efficient AI output
 - [Preference Management](set-command.md) -- managing AI provider and model class preferences
 - [Configuration](configuration.md) -- how to configure output directory and entry points

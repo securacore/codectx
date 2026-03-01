@@ -24,7 +24,7 @@ func TestIntegration_Claude_directiveWorks(t *testing.T) {
 		t.Skip("claude binary not found on PATH")
 	}
 
-	directive := coreide.AssemblePrompt("", "")
+	directive := coreide.AssemblePrompt("", "", "")
 
 	cmd := exec.Command(path,
 		"-p", "In one sentence, what is your role and purpose?",

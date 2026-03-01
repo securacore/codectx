@@ -101,7 +101,7 @@ type CompiledPlanEntry struct {
 // toCompiledManifest converts a unified source manifest into a compiled manifest.
 // pathToHash maps source file paths to their 16-char content hashes.
 // provenance maps "section:id" keys to source labels ("local" or "name@author").
-// ext is the object file extension (e.g., ".md" or ".cmdx").
+// ext is the object file extension (e.g., ".md" or ".ctx.md").
 func toCompiledManifest(
 	unified *manifest.Manifest,
 	pathToHash map[string]string,
