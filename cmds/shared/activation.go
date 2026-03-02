@@ -8,6 +8,7 @@ import (
 	"github.com/securacore/codectx/core/compile"
 	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/manifest"
+	"github.com/securacore/codectx/internal/util"
 )
 
 // ParseActivateFlag parses the --activate flag value into an Activation.
@@ -102,7 +103,7 @@ func DetectCollisions(cfg *config.Config, skipIdx int, pkgManifest *manifest.Man
 	var collisions []Collision
 	for key := range newIDs {
 		if pkg, exists := activeIDs[key]; exists {
-			section, id := SplitKey(key)
+			section, id := util.SplitKey(key)
 			collisions = append(collisions, Collision{Section: section, ID: id, Pkg: pkg})
 		}
 	}
@@ -126,7 +127,7 @@ func FilterManifestForIDs(m *manifest.Manifest, activation config.Activation) *m
 	filtered := &manifest.Manifest{}
 
 	if am.Foundation != nil {
-		ids := ToSet(am.Foundation)
+		ids := util.ToSet(am.Foundation)
 		for _, e := range m.Foundation {
 			if ids[e.ID] {
 				filtered.Foundation = append(filtered.Foundation, e)
@@ -134,7 +135,7 @@ func FilterManifestForIDs(m *manifest.Manifest, activation config.Activation) *m
 		}
 	}
 	if am.Application != nil {
-		ids := ToSet(am.Application)
+		ids := util.ToSet(am.Application)
 		for _, e := range m.Application {
 			if ids[e.ID] {
 				filtered.Application = append(filtered.Application, e)
@@ -142,7 +143,7 @@ func FilterManifestForIDs(m *manifest.Manifest, activation config.Activation) *m
 		}
 	}
 	if am.Topics != nil {
-		ids := ToSet(am.Topics)
+		ids := util.ToSet(am.Topics)
 		for _, e := range m.Topics {
 			if ids[e.ID] {
 				filtered.Topics = append(filtered.Topics, e)
@@ -150,7 +151,7 @@ func FilterManifestForIDs(m *manifest.Manifest, activation config.Activation) *m
 		}
 	}
 	if am.Prompts != nil {
-		ids := ToSet(am.Prompts)
+		ids := util.ToSet(am.Prompts)
 		for _, e := range m.Prompts {
 			if ids[e.ID] {
 				filtered.Prompts = append(filtered.Prompts, e)
@@ -158,7 +159,7 @@ func FilterManifestForIDs(m *manifest.Manifest, activation config.Activation) *m
 		}
 	}
 	if am.Plans != nil {
-		ids := ToSet(am.Plans)
+		ids := util.ToSet(am.Plans)
 		for _, e := range m.Plans {
 			if ids[e.ID] {
 				filtered.Plans = append(filtered.Plans, e)
@@ -171,19 +172,10 @@ func FilterManifestForIDs(m *manifest.Manifest, activation config.Activation) *m
 
 // ToSet converts a string slice to a set for O(1) lookups.
 func ToSet(items []string) map[string]bool {
-	s := make(map[string]bool, len(items))
-	for _, item := range items {
-		s[item] = true
-	}
-	return s
+	return util.ToSet(items)
 }
 
 // SplitKey splits "section:id" into its parts.
 func SplitKey(key string) (string, string) {
-	for i := 0; i < len(key); i++ {
-		if key[i] == ':' {
-			return key[:i], key[i+1:]
-		}
-	}
-	return key, ""
+	return util.SplitKey(key)
 }

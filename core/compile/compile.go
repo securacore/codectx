@@ -104,7 +104,64 @@ func Compile(cfg *config.Config, onProgress ...func(ProgressEvent)) (*Result, er
 	// Merge local package entries.
 	mergeManifestDedup(unified, localManifest, docsDir, docsDir, "local", seen)
 
-	// Merge installed packages.
+	// Merge installed packages and build lock + provenance.
+	lck, packagesProcessed, provenance, err := mergePackages(
+		cfg, docsDir, outputDir, unified, seen, &report, srcDirs,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	progress(ProgressEvent{Stage: "store", Message: "Storing objects"})
+
+	// Store all winning entry files as content-addressed objects.
+	pathToHash, _, objectsStored, err := storeObjects(store, unified, srcDirs, provenance)
+	if err != nil {
+		return nil, fmt.Errorf("store objects: %w", err)
+	}
+
+	// Copy plan state files (mutable, not content-addressed).
+	if err := copyStateFiles(unified, srcDirs, provenance, outputDir); err != nil {
+		return nil, fmt.Errorf("copy state files: %w", err)
+	}
+
+	progress(ProgressEvent{Stage: "finalize", Message: "Building compiled manifest"})
+
+	// Write all output artifacts and build the result.
+	h, objectsPruned, err := writeOutputs(
+		unified, pathToHash, provenance, store, outputDir, objectsDir, compressed, lck,
+		fingerprint, fpErr,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	entries := buildResultEntries(unified, pathToHash, objectsDir, store.ext())
+
+	return &Result{
+		OutputDir:     outputDir,
+		ObjectsStored: objectsStored,
+		ObjectsPruned: objectsPruned,
+		Packages:      packagesProcessed,
+		Dedup:         report,
+		Compressed:    compressed,
+		Heuristics:    h,
+		Entries:       entries,
+	}, nil
+}
+
+// mergePackages loads, discovers, filters, and merges each installed package
+// into the unified manifest. It returns the lock file, package count, and
+// provenance map. The seen and report accumulators are updated in place;
+// srcDirs is extended with package source directories.
+func mergePackages(
+	cfg *config.Config,
+	docsDir, outputDir string,
+	unified *manifest.Manifest,
+	seen map[string]seenEntry,
+	report *DeduplicationReport,
+	srcDirs map[string]string,
+) (*lock.Lock, int, map[string]string, error) {
 	lck := &lock.Lock{
 		CompiledAt: time.Now().Format("2006-01-02"),
 	}
@@ -128,7 +185,7 @@ func Compile(cfg *config.Config, onProgress ...func(ProgressEvent)) (*Result, er
 
 		pkgManifest, err := manifest.Load(pkgManifestPath)
 		if err != nil {
-			return nil, fmt.Errorf("load package %s@%s manifest: %w", pkg.Name, pkg.Author, err)
+			return nil, 0, nil, fmt.Errorf("load package %s@%s manifest: %w", pkg.Name, pkg.Author, err)
 		}
 
 		// Discover entries from disk that aren't declared in the manifest.
@@ -167,21 +224,23 @@ func Compile(cfg *config.Config, onProgress ...func(ProgressEvent)) (*Result, er
 		provenance[key] = s.pkg
 	}
 
-	progress(ProgressEvent{Stage: "store", Message: "Storing objects"})
+	return lck, packagesProcessed, provenance, nil
+}
 
-	// Store all winning entry files as content-addressed objects.
-	pathToHash, _, objectsStored, err := storeObjects(store, unified, srcDirs, provenance)
-	if err != nil {
-		return nil, fmt.Errorf("store objects: %w", err)
-	}
-
-	// Copy plan state files (mutable, not content-addressed).
-	if err := copyStateFiles(unified, srcDirs, provenance, outputDir); err != nil {
-		return nil, fmt.Errorf("copy state files: %w", err)
-	}
-
-	progress(ProgressEvent{Stage: "finalize", Message: "Building compiled manifest"})
-
+// writeOutputs builds the compiled manifest, heuristics, README, prunes
+// orphaned objects, writes the lock file, and saves the fingerprint.
+// Returns the heuristics and pruned object count.
+func writeOutputs(
+	unified *manifest.Manifest,
+	pathToHash map[string]string,
+	provenance map[string]string,
+	store *ObjectStore,
+	outputDir, objectsDir string,
+	compressed bool,
+	lck *lock.Lock,
+	fingerprint string,
+	fpErr error,
+) (*Heuristics, int, error) {
 	// Convert to compiled manifest with object references.
 	cm := toCompiledManifest(unified, pathToHash, provenance, store.ext())
 
@@ -191,39 +250,39 @@ func Compile(cfg *config.Config, onProgress ...func(ProgressEvent)) (*Result, er
 	// Decompose if thresholds are exceeded.
 	if shouldDecompose(h) {
 		if err := decompose(cm, h, outputDir); err != nil {
-			return nil, fmt.Errorf("decompose manifest: %w", err)
+			return nil, 0, fmt.Errorf("decompose manifest: %w", err)
 		}
 	}
 
 	// Write compiled manifest.
 	manifestPath := filepath.Join(outputDir, "manifest.yml")
 	if err := WriteCompiledManifest(manifestPath, cm); err != nil {
-		return nil, fmt.Errorf("write compiled manifest: %w", err)
+		return nil, 0, fmt.Errorf("write compiled manifest: %w", err)
 	}
 
 	// Write heuristics sidecar.
 	heuristicsPath := filepath.Join(outputDir, heuristicsFile)
 	if err := WriteHeuristics(heuristicsPath, h); err != nil {
-		return nil, fmt.Errorf("write heuristics: %w", err)
+		return nil, 0, fmt.Errorf("write heuristics: %w", err)
 	}
 
 	// Generate and write compiled README.md.
 	readmeContent := generateReadme(unified, h, pathToHash, store.ext(), compressed)
 	readmePath := filepath.Join(outputDir, "README.md")
 	if err := os.WriteFile(readmePath, []byte(readmeContent), 0o644); err != nil {
-		return nil, fmt.Errorf("write compiled README.md: %w", err)
+		return nil, 0, fmt.Errorf("write compiled README.md: %w", err)
 	}
 
 	// Prune orphaned objects no longer referenced by any entry.
 	activeHashes := collectActiveHashes(pathToHash)
 	objectsPruned, err := store.Prune(activeHashes)
 	if err != nil {
-		return nil, fmt.Errorf("prune orphaned objects: %w", err)
+		return nil, 0, fmt.Errorf("prune orphaned objects: %w", err)
 	}
 
 	// Write lock file.
 	if err := lock.Write(lockFile, lck); err != nil {
-		return nil, fmt.Errorf("write lock file: %w", err)
+		return nil, 0, fmt.Errorf("write lock file: %w", err)
 	}
 
 	// Save fingerprint for incremental compilation.
@@ -231,19 +290,7 @@ func Compile(cfg *config.Config, onProgress ...func(ProgressEvent)) (*Result, er
 		_ = saveFingerprint(outputDir, fingerprint)
 	}
 
-	// Build per-file entry listing for display.
-	entries := buildResultEntries(unified, pathToHash, objectsDir, store.ext())
-
-	return &Result{
-		OutputDir:     outputDir,
-		ObjectsStored: objectsStored,
-		ObjectsPruned: objectsPruned,
-		Packages:      packagesProcessed,
-		Dedup:         report,
-		Compressed:    compressed,
-		Heuristics:    h,
-		Entries:       entries,
-	}, nil
+	return h, objectsPruned, nil
 }
 
 // sourceFile holds a file's raw content and its content-addressed hash,

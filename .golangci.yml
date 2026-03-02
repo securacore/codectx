@@ -7,10 +7,16 @@ linters:
   default: standard
   enable:
     - misspell
+    - errorlint
+    - nilerr
+    - gocritic
+    - exhaustive
 
   settings:
     misspell:
       locale: US
+    exhaustive:
+      default-signifies-exhaustive: true
 
 formatters:
   enable:

@@ -119,6 +119,10 @@ func (m searchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		switch m.state {
+		case stateSearching:
+			// Key events during search are ignored.
+			return m, nil
+
 		case stateInput:
 			if msg.Type == tea.KeyEnter {
 				query := strings.TrimSpace(m.input.Value())
@@ -190,11 +194,12 @@ func (m searchModel) View() string {
 	// Content area.
 	switch m.state {
 	case stateInput:
-		if m.err != nil {
+		switch {
+		case m.err != nil:
 			lines = append(lines, "  "+errorStyle.Render(ui.SymbolFail+" "+m.err.Error()))
-		} else if m.searched {
+		case m.searched:
 			lines = append(lines, "  "+hintStyle.Render("No packages found. Try a different query."))
-		} else {
+		default:
 			lines = append(lines, "  "+hintStyle.Render("Type a package name to search GitHub."))
 		}
 	case stateSearching:

@@ -35,6 +35,52 @@ func shouldDecompose(h *Heuristics) bool {
 		h.Totals.EstimatedTokens > ThresholdTokens
 }
 
+// writeSubManifest writes a sub-manifest to disk and returns the ManifestRef.
+func writeSubManifest(manifestsDir, section string, sub *CompiledManifest, entryCount, tokens int) (ManifestRef, error) {
+	subPath := filepath.Join(manifestsDir, section+".yml")
+	if err := WriteCompiledManifest(subPath, sub); err != nil {
+		return ManifestRef{}, fmt.Errorf("write %s sub-manifest: %w", section, err)
+	}
+	return ManifestRef{
+		Section:         section,
+		Path:            "manifests/" + section + ".yml",
+		Entries:         entryCount,
+		EstimatedTokens: tokens,
+		Description:     sectionDescriptions[section],
+	}, nil
+}
+
+// sectionTokens returns the estimated token count for a section from heuristics.
+func sectionTokens(h *Heuristics, section string) int {
+	if h == nil {
+		return 0
+	}
+	switch section {
+	case "foundation":
+		if h.Sections.Foundation != nil {
+			return h.Sections.Foundation.EstimatedTokens
+		}
+	case "application":
+		if h.Sections.Application != nil {
+			return h.Sections.Application.EstimatedTokens
+		}
+	case "topics":
+		if h.Sections.Topics != nil {
+			return h.Sections.Topics.EstimatedTokens
+		}
+	case "prompts":
+		if h.Sections.Prompts != nil {
+			return h.Sections.Prompts.EstimatedTokens
+		}
+	case "plans":
+		if h.Sections.Plans != nil {
+			return h.Sections.Plans.EstimatedTokens
+		}
+	default:
+	}
+	return 0
+}
+
 // decompose splits a compiled manifest into a root manifest (with
 // always-load entries and ManifestRef pointers) and per-section
 // sub-manifests. Sub-manifest files are written to outputDir/manifests/.
@@ -45,9 +91,8 @@ func decompose(cm *CompiledManifest, h *Heuristics, outputDir string) error {
 		return fmt.Errorf("create manifests directory: %w", err)
 	}
 
-	// Extract always-load foundation entries for inlining in root.
-	var alwaysLoad []CompiledFoundationEntry
-	var nonAlwaysLoad []CompiledFoundationEntry
+	// Separate always-load foundation entries for inlining in root.
+	var alwaysLoad, nonAlwaysLoad []CompiledFoundationEntry
 	for _, e := range cm.Foundation {
 		if e.Load == "always" {
 			alwaysLoad = append(alwaysLoad, e)
@@ -61,34 +106,19 @@ func decompose(cm *CompiledManifest, h *Heuristics, outputDir string) error {
 	// Foundation sub-manifest (non-always-load entries only).
 	if len(nonAlwaysLoad) > 0 {
 		sub := &CompiledManifest{
-			Name:        cm.Name + " - Foundation",
-			Description: sectionDescriptions["foundation"],
-			Foundation:  nonAlwaysLoad,
+			Name: cm.Name + " - Foundation", Description: sectionDescriptions["foundation"],
+			Foundation: nonAlwaysLoad,
 		}
-		subPath := filepath.Join(manifestsDir, "foundation.yml")
-		if err := WriteCompiledManifest(subPath, sub); err != nil {
-			return fmt.Errorf("write foundation sub-manifest: %w", err)
+		ref, err := writeSubManifest(manifestsDir, "foundation", sub, len(nonAlwaysLoad), sectionTokens(h, "foundation"))
+		if err != nil {
+			return err
 		}
-
-		tokens := 0
-		if h != nil && h.Sections.Foundation != nil {
-			tokens = h.Sections.Foundation.EstimatedTokens
-		}
-
-		refs = append(refs, ManifestRef{
-			Section:         "foundation",
-			Path:            "manifests/foundation.yml",
-			Entries:         len(nonAlwaysLoad),
-			EstimatedTokens: tokens,
-			Description:     sectionDescriptions["foundation"],
-		})
+		refs = append(refs, ref)
 	}
 
-	// Application sub-manifest.
+	// Application sub-manifest (split always-load like foundation).
 	if len(cm.Application) > 0 {
-		// Extract always-load application entries for inlining in root.
-		var alwaysLoadApp []CompiledApplicationEntry
-		var nonAlwaysLoadApp []CompiledApplicationEntry
+		var alwaysLoadApp, nonAlwaysLoadApp []CompiledApplicationEntry
 		for _, e := range cm.Application {
 			if e.Load == "always" {
 				alwaysLoadApp = append(alwaysLoadApp, e)
@@ -96,117 +126,61 @@ func decompose(cm *CompiledManifest, h *Heuristics, outputDir string) error {
 				nonAlwaysLoadApp = append(nonAlwaysLoadApp, e)
 			}
 		}
-
 		if len(nonAlwaysLoadApp) > 0 {
 			sub := &CompiledManifest{
-				Name:        cm.Name + " - Application",
-				Description: sectionDescriptions["application"],
+				Name: cm.Name + " - Application", Description: sectionDescriptions["application"],
 				Application: nonAlwaysLoadApp,
 			}
-			subPath := filepath.Join(manifestsDir, "application.yml")
-			if err := WriteCompiledManifest(subPath, sub); err != nil {
-				return fmt.Errorf("write application sub-manifest: %w", err)
+			ref, err := writeSubManifest(manifestsDir, "application", sub, len(nonAlwaysLoadApp), sectionTokens(h, "application"))
+			if err != nil {
+				return err
 			}
-
-			tokens := 0
-			if h != nil && h.Sections.Application != nil {
-				tokens = h.Sections.Application.EstimatedTokens
-			}
-
-			refs = append(refs, ManifestRef{
-				Section:         "application",
-				Path:            "manifests/application.yml",
-				Entries:         len(nonAlwaysLoadApp),
-				EstimatedTokens: tokens,
-				Description:     sectionDescriptions["application"],
-			})
+			refs = append(refs, ref)
 		}
-
-		// Keep only always-load application entries in root.
 		cm.Application = alwaysLoadApp
 	}
 
 	// Topics sub-manifest.
 	if len(cm.Topics) > 0 {
 		sub := &CompiledManifest{
-			Name:        cm.Name + " - Topics",
-			Description: sectionDescriptions["topics"],
-			Topics:      cm.Topics,
+			Name: cm.Name + " - Topics", Description: sectionDescriptions["topics"],
+			Topics: cm.Topics,
 		}
-		subPath := filepath.Join(manifestsDir, "topics.yml")
-		if err := WriteCompiledManifest(subPath, sub); err != nil {
-			return fmt.Errorf("write topics sub-manifest: %w", err)
+		ref, err := writeSubManifest(manifestsDir, "topics", sub, len(cm.Topics), sectionTokens(h, "topics"))
+		if err != nil {
+			return err
 		}
-
-		tokens := 0
-		if h != nil && h.Sections.Topics != nil {
-			tokens = h.Sections.Topics.EstimatedTokens
-		}
-
-		refs = append(refs, ManifestRef{
-			Section:         "topics",
-			Path:            "manifests/topics.yml",
-			Entries:         len(cm.Topics),
-			EstimatedTokens: tokens,
-			Description:     sectionDescriptions["topics"],
-		})
+		refs = append(refs, ref)
 	}
 
 	// Prompts sub-manifest.
 	if len(cm.Prompts) > 0 {
 		sub := &CompiledManifest{
-			Name:        cm.Name + " - Prompts",
-			Description: sectionDescriptions["prompts"],
-			Prompts:     cm.Prompts,
+			Name: cm.Name + " - Prompts", Description: sectionDescriptions["prompts"],
+			Prompts: cm.Prompts,
 		}
-		subPath := filepath.Join(manifestsDir, "prompts.yml")
-		if err := WriteCompiledManifest(subPath, sub); err != nil {
-			return fmt.Errorf("write prompts sub-manifest: %w", err)
+		ref, err := writeSubManifest(manifestsDir, "prompts", sub, len(cm.Prompts), sectionTokens(h, "prompts"))
+		if err != nil {
+			return err
 		}
-
-		tokens := 0
-		if h != nil && h.Sections.Prompts != nil {
-			tokens = h.Sections.Prompts.EstimatedTokens
-		}
-
-		refs = append(refs, ManifestRef{
-			Section:         "prompts",
-			Path:            "manifests/prompts.yml",
-			Entries:         len(cm.Prompts),
-			EstimatedTokens: tokens,
-			Description:     sectionDescriptions["prompts"],
-		})
+		refs = append(refs, ref)
 	}
 
 	// Plans sub-manifest.
 	if len(cm.Plans) > 0 {
 		sub := &CompiledManifest{
-			Name:        cm.Name + " - Plans",
-			Description: sectionDescriptions["plans"],
-			Plans:       cm.Plans,
+			Name: cm.Name + " - Plans", Description: sectionDescriptions["plans"],
+			Plans: cm.Plans,
 		}
-		subPath := filepath.Join(manifestsDir, "plans.yml")
-		if err := WriteCompiledManifest(subPath, sub); err != nil {
-			return fmt.Errorf("write plans sub-manifest: %w", err)
+		ref, err := writeSubManifest(manifestsDir, "plans", sub, len(cm.Plans), sectionTokens(h, "plans"))
+		if err != nil {
+			return err
 		}
-
-		tokens := 0
-		if h != nil && h.Sections.Plans != nil {
-			tokens = h.Sections.Plans.EstimatedTokens
-		}
-
-		refs = append(refs, ManifestRef{
-			Section:         "plans",
-			Path:            "manifests/plans.yml",
-			Entries:         len(cm.Plans),
-			EstimatedTokens: tokens,
-			Description:     sectionDescriptions["plans"],
-		})
+		refs = append(refs, ref)
 	}
 
 	// Rewrite root manifest: keep only always-load entries + refs.
 	cm.Foundation = alwaysLoad
-	// cm.Application is already set to alwaysLoadApp above (or left as-is if empty).
 	cm.Topics = nil
 	cm.Prompts = nil
 	cm.Plans = nil

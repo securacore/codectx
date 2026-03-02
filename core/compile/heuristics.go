@@ -141,6 +141,30 @@ func generateHeuristics(
 		pkgTokens[pkg] += m.tokens
 	}
 
+	// addSpecAndFiles accumulates byte/token stats for an entry's spec and
+	// extra files into the section and package accumulators.
+	addSpecAndFiles := func(section, id, spec string, files []string, stats *SectionStats) {
+		pkg := provenance[section+":"+id]
+		if spec != "" {
+			if hash, ok := pathToHash[spec]; ok {
+				m := readObject(hash)
+				stats.SizeBytes += m.size
+				stats.EstimatedTokens += m.tokens
+				pkgBytes[pkg] += m.size
+				pkgTokens[pkg] += m.tokens
+			}
+		}
+		for _, f := range files {
+			if hash, ok := pathToHash[f]; ok {
+				m := readObject(hash)
+				stats.SizeBytes += m.size
+				stats.EstimatedTokens += m.tokens
+				pkgBytes[pkg] += m.size
+				pkgTokens[pkg] += m.tokens
+			}
+		}
+	}
+
 	// Foundation entries.
 	for _, e := range unified.Foundation {
 		addEntry("foundation", e.ID, e.Path, &foundationStats, e.Load == "always")
@@ -149,57 +173,13 @@ func generateHeuristics(
 	// Application entries (include spec and files in size).
 	for _, e := range unified.Application {
 		addEntry("application", e.ID, e.Path, &applicationStats, e.Load == "always")
-
-		// Add spec size and tokens.
-		if e.Spec != "" {
-			if hash, ok := pathToHash[e.Spec]; ok {
-				m := readObject(hash)
-				applicationStats.SizeBytes += m.size
-				applicationStats.EstimatedTokens += m.tokens
-				pkg := provenance["application:"+e.ID]
-				pkgBytes[pkg] += m.size
-				pkgTokens[pkg] += m.tokens
-			}
-		}
-		// Add extra files size and tokens.
-		for _, f := range e.Files {
-			if hash, ok := pathToHash[f]; ok {
-				m := readObject(hash)
-				applicationStats.SizeBytes += m.size
-				applicationStats.EstimatedTokens += m.tokens
-				pkg := provenance["application:"+e.ID]
-				pkgBytes[pkg] += m.size
-				pkgTokens[pkg] += m.tokens
-			}
-		}
+		addSpecAndFiles("application", e.ID, e.Spec, e.Files, &applicationStats)
 	}
 
 	// Topic entries (include spec and files in size).
 	for _, e := range unified.Topics {
 		addEntry("topics", e.ID, e.Path, &topicStats, false)
-
-		// Add spec size and tokens.
-		if e.Spec != "" {
-			if hash, ok := pathToHash[e.Spec]; ok {
-				m := readObject(hash)
-				topicStats.SizeBytes += m.size
-				topicStats.EstimatedTokens += m.tokens
-				pkg := provenance["topics:"+e.ID]
-				pkgBytes[pkg] += m.size
-				pkgTokens[pkg] += m.tokens
-			}
-		}
-		// Add extra files size and tokens.
-		for _, f := range e.Files {
-			if hash, ok := pathToHash[f]; ok {
-				m := readObject(hash)
-				topicStats.SizeBytes += m.size
-				topicStats.EstimatedTokens += m.tokens
-				pkg := provenance["topics:"+e.ID]
-				pkgBytes[pkg] += m.size
-				pkgTokens[pkg] += m.tokens
-			}
-		}
+		addSpecAndFiles("topics", e.ID, e.Spec, e.Files, &topicStats)
 	}
 
 	// Prompt entries.
@@ -212,31 +192,26 @@ func generateHeuristics(
 		addEntry("plans", e.ID, e.Path, &planStats, false)
 	}
 
-	// Token counts are now accumulated inline via addEntry and the
-	// spec/files loops — no separate estimation pass needed.
+	// Populate sections and compute totals.
+	allStats := []struct {
+		stats *SectionStats
+		dest  **SectionStats
+	}{
+		{&foundationStats, &h.Sections.Foundation},
+		{&applicationStats, &h.Sections.Application},
+		{&topicStats, &h.Sections.Topics},
+		{&promptStats, &h.Sections.Prompts},
+		{&planStats, &h.Sections.Plans},
+	}
+	var totalBytes, totalTokens int
+	for _, s := range allStats {
+		if s.stats.Entries > 0 {
+			*s.dest = s.stats
+		}
+		totalBytes += s.stats.SizeBytes
+		totalTokens += s.stats.EstimatedTokens
+	}
 
-	// Populate sections (only non-empty).
-	if foundationStats.Entries > 0 {
-		h.Sections.Foundation = &foundationStats
-	}
-	if applicationStats.Entries > 0 {
-		h.Sections.Application = &applicationStats
-	}
-	if topicStats.Entries > 0 {
-		h.Sections.Topics = &topicStats
-	}
-	if promptStats.Entries > 0 {
-		h.Sections.Prompts = &promptStats
-	}
-	if planStats.Entries > 0 {
-		h.Sections.Plans = &planStats
-	}
-
-	// Compute totals.
-	totalBytes := foundationStats.SizeBytes + applicationStats.SizeBytes +
-		topicStats.SizeBytes + promptStats.SizeBytes + planStats.SizeBytes
-	totalTokens := foundationStats.EstimatedTokens + applicationStats.EstimatedTokens +
-		topicStats.EstimatedTokens + promptStats.EstimatedTokens + planStats.EstimatedTokens
 	h.Totals = HeuristicsTotals{
 		Entries:         totalEntries,
 		Objects:         len(objectCache),
@@ -245,7 +220,19 @@ func generateHeuristics(
 		AlwaysLoad:      totalAlwaysLoad,
 	}
 
-	// Build per-package stats (sorted: local first, then alphabetical).
+	// Build per-package stats.
+	h.Packages = buildPackageStats(pkgEntries, pkgBytes, pkgTokens)
+
+	return h
+}
+
+// buildPackageStats assembles sorted per-package stats from the accumulators.
+// "local" is placed first, followed by remaining packages in alphabetical order.
+func buildPackageStats(
+	pkgEntries map[string]int,
+	pkgBytes map[string]int,
+	pkgTokens map[string]int,
+) []PackageStats {
 	pkgNames := make([]string, 0, len(pkgEntries))
 	for name := range pkgEntries {
 		if name == "local" {
@@ -253,12 +240,11 @@ func generateHeuristics(
 		}
 		pkgNames = append(pkgNames, name)
 	}
-	// Sort package names.
 	sortStrings(pkgNames)
 
-	// Local first.
+	var stats []PackageStats
 	if pkgEntries["local"] > 0 {
-		h.Packages = append(h.Packages, PackageStats{
+		stats = append(stats, PackageStats{
 			Name:            "local",
 			Entries:         pkgEntries["local"],
 			SizeBytes:       pkgBytes["local"],
@@ -266,15 +252,14 @@ func generateHeuristics(
 		})
 	}
 	for _, name := range pkgNames {
-		h.Packages = append(h.Packages, PackageStats{
+		stats = append(stats, PackageStats{
 			Name:            name,
 			Entries:         pkgEntries[name],
 			SizeBytes:       pkgBytes[name],
 			EstimatedTokens: pkgTokens[name],
 		})
 	}
-
-	return h
+	return stats
 }
 
 // sortStrings sorts a slice of strings in place (simple insertion sort;

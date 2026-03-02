@@ -3,6 +3,7 @@ package compile
 import (
 	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/manifest"
+	"github.com/securacore/codectx/internal/util"
 )
 
 // filterManifest returns a new manifest containing only the entries
@@ -31,7 +32,7 @@ func filterManifest(m *manifest.Manifest, activation config.Activation) *manifes
 	}
 
 	if am.Foundation != nil {
-		ids := toSet(am.Foundation)
+		ids := util.ToSet(am.Foundation)
 		for _, e := range m.Foundation {
 			if ids[e.ID] {
 				filtered.Foundation = append(filtered.Foundation, e)
@@ -40,7 +41,7 @@ func filterManifest(m *manifest.Manifest, activation config.Activation) *manifes
 	}
 
 	if am.Application != nil {
-		ids := toSet(am.Application)
+		ids := util.ToSet(am.Application)
 		for _, e := range m.Application {
 			if ids[e.ID] {
 				filtered.Application = append(filtered.Application, e)
@@ -49,7 +50,7 @@ func filterManifest(m *manifest.Manifest, activation config.Activation) *manifes
 	}
 
 	if am.Topics != nil {
-		ids := toSet(am.Topics)
+		ids := util.ToSet(am.Topics)
 		for _, e := range m.Topics {
 			if ids[e.ID] {
 				filtered.Topics = append(filtered.Topics, e)
@@ -58,7 +59,7 @@ func filterManifest(m *manifest.Manifest, activation config.Activation) *manifes
 	}
 
 	if am.Prompts != nil {
-		ids := toSet(am.Prompts)
+		ids := util.ToSet(am.Prompts)
 		for _, e := range m.Prompts {
 			if ids[e.ID] {
 				filtered.Prompts = append(filtered.Prompts, e)
@@ -67,7 +68,7 @@ func filterManifest(m *manifest.Manifest, activation config.Activation) *manifes
 	}
 
 	if am.Plans != nil {
-		ids := toSet(am.Plans)
+		ids := util.ToSet(am.Plans)
 		for _, e := range m.Plans {
 			if ids[e.ID] {
 				filtered.Plans = append(filtered.Plans, e)
@@ -76,13 +77,4 @@ func filterManifest(m *manifest.Manifest, activation config.Activation) *manifes
 	}
 
 	return filtered
-}
-
-// toSet converts a string slice to a set for O(1) lookups.
-func toSet(items []string) map[string]bool {
-	s := make(map[string]bool, len(items))
-	for _, item := range items {
-		s[item] = true
-	}
-	return s
 }

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/securacore/codectx/core/manifest"
+	"github.com/securacore/codectx/internal/util"
 )
 
 // ConflictEntry records a single deduplication or conflict event.
@@ -127,7 +128,7 @@ func checkDedup(
 		// Same content: silent dedup.
 		return ConflictEntry{
 			Section:    section,
-			ID:         keyID(key),
+			ID:         util.KeyID(key),
 			WinnerPkg:  existing.pkg,
 			SkippedPkg: srcPkg,
 			Reason:     "duplicate",
@@ -137,7 +138,7 @@ func checkDedup(
 	// Different content: precedence wins.
 	return ConflictEntry{
 		Section:    section,
-		ID:         keyID(key),
+		ID:         util.KeyID(key),
 		WinnerPkg:  existing.pkg,
 		SkippedPkg: srcPkg,
 		Reason:     "conflict",
@@ -153,16 +154,6 @@ func fileHash(path string) string {
 	}
 	h := sha256.Sum256(data)
 	return fmt.Sprintf("%x", h)
-}
-
-// keyID extracts the ID portion from a "section:id" key.
-func keyID(key string) string {
-	for i := 0; i < len(key); i++ {
-		if key[i] == ':' {
-			return key[i+1:]
-		}
-	}
-	return key
 }
 
 // collectActiveIDs returns a map of "section:id" for all entries in a manifest.

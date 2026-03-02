@@ -8,11 +8,6 @@ import (
 //go:embed content/directive.md
 var directive string
 
-// Directive returns the raw embedded documentation authoring directive.
-func Directive() string {
-	return directive
-}
-
 // AssemblePrompt builds the full system prompt by combining the embedded
 // directive with dynamic context (package mode, manifest summary, and preferences).
 func AssemblePrompt(manifestSummary, prefsContext, packageContext string) string {

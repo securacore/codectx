@@ -5,6 +5,7 @@ import (
 
 	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/manifest"
+	"github.com/securacore/codectx/internal/util"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -183,7 +184,7 @@ func TestMergeManifest_emptySource(t *testing.T) {
 // --- toSet ---
 
 func TestToSet(t *testing.T) {
-	s := toSet([]string{"a", "b", "c"})
+	s := util.ToSet([]string{"a", "b", "c"})
 	assert.True(t, s["a"])
 	assert.True(t, s["b"])
 	assert.True(t, s["c"])
@@ -191,7 +192,7 @@ func TestToSet(t *testing.T) {
 }
 
 func TestToSet_empty(t *testing.T) {
-	s := toSet([]string{})
+	s := util.ToSet([]string{})
 	assert.Len(t, s, 0)
 }
 

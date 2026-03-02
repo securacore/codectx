@@ -241,7 +241,9 @@ func (w *Watcher) syncLocal(cfg *config.Config) *SyncResult {
 	rels := countRelationships(synced)
 
 	// Write back (conditional — skips if content unchanged).
-	_ = manifest.Write(manifestPath, synced)
+	if writeErr := manifest.Write(manifestPath, synced); writeErr != nil {
+		return nil // Manifest write failure is non-fatal in watch mode.
+	}
 
 	sr := &SyncResult{
 		Entries:       afterTotal,
@@ -289,7 +291,7 @@ func countRelationships(m *manifest.Manifest) int {
 func addDirRecursive(fsw *fsnotify.Watcher, root, excludeDir string) error {
 	return filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
-			return nil // skip inaccessible directories
+			return nil //nolint:nilerr // Skip inaccessible directories.
 		}
 		if !d.IsDir() {
 			return nil

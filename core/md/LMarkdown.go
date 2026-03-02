@@ -166,6 +166,9 @@ func serializeNodeMDWithRefs(buf *strings.Builder, node Node, indent int, refs m
 			buf.WriteString(node.Content)
 			buf.WriteByte('\n')
 		}
+
+	default:
+		// Inline tags (Bold, Italic, etc.) are handled by serializeInlineMDFull.
 	}
 }
 
@@ -276,6 +279,9 @@ func serializeInlineMDFull(nodes []Node, parentEmphChar byte, refs map[string]st
 					nodes[i+1].Content = "\\" + c
 				}
 			}
+
+		default:
+			// Block-level tags (H1-H6, HR, P, etc.) are handled by serializeNodeMDWithRefs.
 		}
 	}
 	return buf.String()

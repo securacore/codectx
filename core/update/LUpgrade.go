@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -25,9 +26,7 @@ const (
 
 // upgradeDownloadBase returns the base URL for downloading release assets.
 // Tests override this to point at an httptest server.
-var upgradeDownloadBase = func(tag string) string {
-	return releaseDownloadURL(tag)
-}
+var upgradeDownloadBase = releaseDownloadURL
 
 // resolveExecutable locates the running binary for replacement.
 // Tests override this to avoid replacing the test runner.
@@ -200,7 +199,7 @@ func extractBinary(archivePath, dir string) (string, error) {
 	tr := tar.NewReader(gz)
 	for {
 		hdr, err := tr.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

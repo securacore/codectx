@@ -159,7 +159,9 @@ func Run(inputs []string, sourceFlag, activateFlag string) error {
 	manifestPath := filepath.Join(docsDir, "manifest.yml")
 	if localManifest, loadErr := manifest.Load(manifestPath); loadErr == nil {
 		synced := manifest.Sync(docsDir, localManifest)
-		_ = manifest.Write(manifestPath, synced)
+		if writeErr := manifest.Write(manifestPath, synced); writeErr != nil {
+			ui.Warn(fmt.Sprintf("Failed to sync manifest: %s", writeErr))
+		}
 	}
 
 	// Print results.

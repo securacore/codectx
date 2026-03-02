@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 
 	"github.com/securacore/codectx/cmds/shared"
-	"github.com/securacore/codectx/core/compile"
 	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/defaults"
 	"github.com/securacore/codectx/core/gitkeep"
@@ -22,8 +21,8 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-const manifestFile = "manifest.yml"
-const gitignoreContent = ".codectx/\n"
+// manifestFile is a local alias for shared.ManifestFile.
+const manifestFile = shared.ManifestFile
 
 var Command = &cli.Command{
 	Name:      "init",
@@ -114,51 +113,11 @@ func RunCore(name string, autoCompile *bool, isPackage bool) (*CoreResult, error
 		return nil, err
 	}
 
-	// Create docs directory structure.
+	// Scaffold docs directory structure.
 	docsDir := "docs"
-	dirs := []string{
-		docsDir,
-		filepath.Join(docsDir, "foundation"),
-		filepath.Join(docsDir, "topics"),
-		filepath.Join(docsDir, "prompts"),
-		filepath.Join(docsDir, "plans"),
-		filepath.Join(docsDir, "schemas"),
-		filepath.Join(docsDir, "packages"),
-	}
-
-	for _, dir := range dirs {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return nil, fmt.Errorf("create directory %s: %w", dir, err)
-		}
-	}
-
-	// Place .gitkeep files in documentation directories that start empty.
-	gitkeepDirs := []string{
-		filepath.Join(docsDir, "topics"),
-		filepath.Join(docsDir, "prompts"),
-		filepath.Join(docsDir, "plans"),
-		filepath.Join(docsDir, "packages"),
-	}
-	for _, dir := range gitkeepDirs {
-		if err := gitkeep.Write(dir); err != nil {
-			return nil, fmt.Errorf("write .gitkeep in %s: %w", dir, err)
-		}
-	}
-
-	// Write embedded schemas to docs/schemas/.
-	schemasDir := filepath.Join(docsDir, "schemas")
-	if err := schema.WriteAll(schemasDir); err != nil {
-		return nil, fmt.Errorf("write schemas: %w", err)
-	}
-
-	// Write embedded default foundation documents to docs/foundation/.
-	// Packages skip this step — foundation documents are project-level
-	// conventions and should not be duplicated into every published package.
-	if !isPackage {
-		foundationDir := filepath.Join(docsDir, "foundation")
-		if err := defaults.WriteAll(foundationDir); err != nil {
-			return nil, fmt.Errorf("write defaults: %w", err)
-		}
+	dirs, err := scaffoldDocs(docsDir, isPackage)
+	if err != nil {
+		return nil, err
 	}
 
 	// Create codectx.yml.
@@ -230,37 +189,7 @@ func RunCore(name string, autoCompile *bool, isPackage bool) (*CoreResult, error
 		return nil, fmt.Errorf("write preferences: %w", err)
 	}
 
-	kind := "project"
-	if isPackage {
-		kind = "package"
-	}
-	ui.Done(fmt.Sprintf("Initialized codectx %s: %s", kind, name))
-	ui.Blank()
-	ui.Header("Created:")
-	ui.Item(shared.ConfigFile)
-	ui.Item(packagePath)
-	ui.Item(".gitignore")
-	ui.Item(outputDir + "/preferences.yml")
-	for _, dir := range dirs {
-		ui.Item(dir + "/")
-	}
-	ui.Blank()
-	ui.Header("Preferences:")
-	ui.KV("compression", formatBool(prefs.Compression), 16)
-	ui.KV("auto_compile", formatBool(prefs.AutoCompile), 16)
-	if prefs.AI != nil {
-		if prefs.AI.Bin != "" {
-			ui.KV("ai.bin", prefs.AI.Bin, 16)
-			if prefs.AI.Model != "" {
-				ui.KV("ai.model", prefs.AI.Model, 16)
-			}
-		}
-		if prefs.AI.Class != "" {
-			ui.KV("ai.class", prefs.AI.Class, 16)
-		}
-	}
-	ui.Blank()
-	ui.Item("Adjust preferences: codectx set")
+	printInitSummary(name, isPackage, packagePath, outputDir, dirs, prefs)
 
 	return &CoreResult{
 		Config:      cfg,
@@ -329,59 +258,13 @@ func ensureGit() error {
 
 // ensureGitignore creates or appends to .gitignore to include .codectx/.
 func ensureGitignore() error {
-	const entry = ".codectx/"
-	path := ".gitignore"
-
-	// Check if .gitignore already exists and contains the entry.
-	if data, err := os.ReadFile(path); err == nil {
-		content := string(data)
-		for _, line := range splitLines(content) {
-			if line == entry {
-				return nil // already present
-			}
-		}
-		// Append the entry.
-		f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
-		if err != nil {
-			return fmt.Errorf("open .gitignore: %w", err)
-		}
-		defer func() { _ = f.Close() }()
-		if len(data) > 0 && data[len(data)-1] != '\n' {
-			if _, err := f.WriteString("\n"); err != nil {
-				return fmt.Errorf("write newline to .gitignore: %w", err)
-			}
-		}
-		if _, err := f.WriteString(entry + "\n"); err != nil {
-			return fmt.Errorf("append to .gitignore: %w", err)
-		}
-		return nil
-	}
-
-	// Create new .gitignore.
-	return os.WriteFile(path, []byte(gitignoreContent), 0o644)
+	return shared.EnsureGitignoreEntry(".gitignore", ".codectx/")
 }
 
-// autoCompile compiles the documentation using the inline spinner pattern.
+// autoCompile compiles the documentation using the shared compile-and-print pattern.
 func autoCompile(cfg *config.Config) error {
 	ui.Blank()
-	var result *compile.Result
-	err := ui.SpinErr("Compiling...", func() error {
-		var compileErr error
-		result, compileErr = compile.Compile(cfg)
-		return compileErr
-	})
-	if err != nil {
-		return err
-	}
-
-	ui.Done(fmt.Sprintf("Compiled to %s", result.OutputDir))
-	ui.KV("Objects stored", result.ObjectsStored, 16)
-	if result.ObjectsPruned > 0 {
-		ui.KV("Objects pruned", result.ObjectsPruned, 16)
-	}
-	ui.KV("Packages", result.Packages, 16)
-
-	return nil
+	return shared.RunCompileAndPrint(cfg)
 }
 
 // promptLink offers to set up AI tool integration by creating entry point files.
@@ -401,7 +284,7 @@ func promptLink(outputDir string) error {
 	).WithTheme(ui.Theme())
 
 	if err := form.Run(); err != nil {
-		return nil // User canceled, not an error.
+		return nil //nolint:nilerr // User canceled the prompt.
 	}
 
 	if !confirm {
@@ -425,6 +308,90 @@ func promptLink(outputDir string) error {
 	}
 
 	return nil
+}
+
+// scaffoldDocs creates the docs directory structure, writes .gitkeep files,
+// embedded schemas, and (for non-package projects) default foundation docs.
+// Returns the list of created directories.
+func scaffoldDocs(docsDir string, isPackage bool) ([]string, error) {
+	dirs := []string{
+		docsDir,
+		filepath.Join(docsDir, "foundation"),
+		filepath.Join(docsDir, "topics"),
+		filepath.Join(docsDir, "prompts"),
+		filepath.Join(docsDir, "plans"),
+		filepath.Join(docsDir, "schemas"),
+		filepath.Join(docsDir, "packages"),
+	}
+	for _, dir := range dirs {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, fmt.Errorf("create directory %s: %w", dir, err)
+		}
+	}
+
+	// Place .gitkeep files in documentation directories that start empty.
+	gitkeepDirs := []string{
+		filepath.Join(docsDir, "topics"),
+		filepath.Join(docsDir, "prompts"),
+		filepath.Join(docsDir, "plans"),
+		filepath.Join(docsDir, "packages"),
+	}
+	for _, dir := range gitkeepDirs {
+		if err := gitkeep.Write(dir); err != nil {
+			return nil, fmt.Errorf("write .gitkeep in %s: %w", dir, err)
+		}
+	}
+
+	// Write embedded schemas.
+	schemasDir := filepath.Join(docsDir, "schemas")
+	if err := schema.WriteAll(schemasDir); err != nil {
+		return nil, fmt.Errorf("write schemas: %w", err)
+	}
+
+	// Write default foundation documents (project-only, not packages).
+	if !isPackage {
+		foundationDir := filepath.Join(docsDir, "foundation")
+		if err := defaults.WriteAll(foundationDir); err != nil {
+			return nil, fmt.Errorf("write defaults: %w", err)
+		}
+	}
+
+	return dirs, nil
+}
+
+// printInitSummary displays the initialization results to the user.
+func printInitSummary(name string, isPackage bool, packagePath, outputDir string, dirs []string, prefs *preferences.Preferences) {
+	kind := "project"
+	if isPackage {
+		kind = "package"
+	}
+	ui.Done(fmt.Sprintf("Initialized codectx %s: %s", kind, name))
+	ui.Blank()
+	ui.Header("Created:")
+	ui.Item(shared.ConfigFile)
+	ui.Item(packagePath)
+	ui.Item(".gitignore")
+	ui.Item(outputDir + "/preferences.yml")
+	for _, dir := range dirs {
+		ui.Item(dir + "/")
+	}
+	ui.Blank()
+	ui.Header("Preferences:")
+	ui.KV("compression", formatBool(prefs.Compression), 16)
+	ui.KV("auto_compile", formatBool(prefs.AutoCompile), 16)
+	if prefs.AI != nil {
+		if prefs.AI.Bin != "" {
+			ui.KV("ai.bin", prefs.AI.Bin, 16)
+			if prefs.AI.Model != "" {
+				ui.KV("ai.model", prefs.AI.Model, 16)
+			}
+		}
+		if prefs.AI.Class != "" {
+			ui.KV("ai.class", prefs.AI.Class, 16)
+		}
+	}
+	ui.Blank()
+	ui.Item("Adjust preferences: codectx set")
 }
 
 // splitLines splits a string into lines, handling both \n and \r\n.

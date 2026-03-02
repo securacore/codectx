@@ -37,8 +37,8 @@ func (p Phase) String() string {
 	}
 }
 
-// ParsePhase converts a string to a Phase.
-func ParsePhase(s string) (Phase, error) {
+// parsePhase converts a string to a Phase.
+func parsePhase(s string) (Phase, error) {
 	switch s {
 	case "discover":
 		return PhaseDiscover, nil
@@ -70,33 +70,10 @@ func (p *Phase) UnmarshalYAML(unmarshal func(any) error) error {
 	if err := unmarshal(&s); err != nil {
 		return err
 	}
-	parsed, err := ParsePhase(s)
+	parsed, err := parsePhase(s)
 	if err != nil {
 		return err
 	}
 	*p = parsed
 	return nil
-}
-
-// CanTransition checks whether transitioning from the current phase to
-// the target phase is valid. Forward transitions are always allowed.
-// The only backward transitions permitted are Review->Draft (revisions)
-// and Finalize->Draft (preview rejection).
-func (p Phase) CanTransition(target Phase) bool {
-	// Forward is always valid.
-	if target > p {
-		return true
-	}
-	// Same phase is valid (no-op).
-	if target == p {
-		return true
-	}
-	// Allowed backward transitions.
-	if p == PhaseReview && target == PhaseDraft {
-		return true
-	}
-	if p == PhaseFinalize && target == PhaseDraft {
-		return true
-	}
-	return false
 }

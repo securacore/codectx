@@ -32,12 +32,12 @@ func TestParsePhase(t *testing.T) {
 		"discover", "classify", "scope", "draft",
 		"review", "finalize", "complete",
 	} {
-		p, err := ParsePhase(name)
+		p, err := parsePhase(name)
 		require.NoError(t, err)
 		assert.Equal(t, name, p.String())
 	}
 
-	_, err := ParsePhase("invalid")
+	_, err := parsePhase("invalid")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown phase")
 }
@@ -69,37 +69,4 @@ func TestPhase_UnmarshalYAML_invalid(t *testing.T) {
 	var w wrapper
 	err := yaml.Unmarshal([]byte("phase: bogus"), &w)
 	assert.Error(t, err)
-}
-
-func TestPhase_CanTransition_forward(t *testing.T) {
-	// All forward transitions are valid.
-	assert.True(t, PhaseDiscover.CanTransition(PhaseClassify))
-	assert.True(t, PhaseClassify.CanTransition(PhaseScope))
-	assert.True(t, PhaseScope.CanTransition(PhaseDraft))
-	assert.True(t, PhaseDraft.CanTransition(PhaseReview))
-	assert.True(t, PhaseReview.CanTransition(PhaseFinalize))
-	assert.True(t, PhaseFinalize.CanTransition(PhaseComplete))
-
-	// Skipping phases is also valid.
-	assert.True(t, PhaseDiscover.CanTransition(PhaseDraft))
-	assert.True(t, PhaseDiscover.CanTransition(PhaseComplete))
-}
-
-func TestPhase_CanTransition_samePhase(t *testing.T) {
-	assert.True(t, PhaseDraft.CanTransition(PhaseDraft))
-	assert.True(t, PhaseReview.CanTransition(PhaseReview))
-}
-
-func TestPhase_CanTransition_allowedBackward(t *testing.T) {
-	// Review -> Draft (revisions)
-	assert.True(t, PhaseReview.CanTransition(PhaseDraft))
-	// Finalize -> Draft (preview rejection)
-	assert.True(t, PhaseFinalize.CanTransition(PhaseDraft))
-}
-
-func TestPhase_CanTransition_disallowedBackward(t *testing.T) {
-	assert.False(t, PhaseDraft.CanTransition(PhaseDiscover))
-	assert.False(t, PhaseScope.CanTransition(PhaseClassify))
-	assert.False(t, PhaseComplete.CanTransition(PhaseDraft))
-	assert.False(t, PhaseReview.CanTransition(PhaseScope))
 }

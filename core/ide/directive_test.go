@@ -6,27 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestDirective_notEmpty(t *testing.T) {
-	d := Directive()
-	assert.NotEmpty(t, d)
-	assert.Contains(t, d, "documentation authoring assistant")
-}
-
-func TestDirective_unrestrictedToolAccess(t *testing.T) {
-	d := Directive()
-	// Must grant full tool access — no restrictions on what the AI can do.
-	assert.Contains(t, d, "Use any and all tools available to you")
-	assert.Contains(t, d, "You are not limited to documentation tasks alone")
-}
-
-func TestDirective_packagePathReferences(t *testing.T) {
-	d := Directive()
-	// Classify phase should mention package/ as an alternative path.
-	assert.Contains(t, d, "package/")
-	// Output format should mention package/ for package projects.
-	assert.Contains(t, d, "package projects")
-}
-
 func TestAssemblePrompt_includesDirective(t *testing.T) {
 	prompt := AssemblePrompt("", "", "")
 	assert.Contains(t, prompt, "documentation authoring assistant")

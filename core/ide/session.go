@@ -39,14 +39,14 @@ func NewSession(bin string) *Session {
 	}
 }
 
-// SessionDir returns the sessions directory path inside the output directory.
-func SessionDir(outputDir string) string {
+// sessionDir returns the sessions directory path inside the output directory.
+func sessionDir(outputDir string) string {
 	return filepath.Join(outputDir, "sessions")
 }
 
 // Save writes the session to a YAML file in the sessions directory.
 func Save(outputDir string, s *Session) error {
-	dir := SessionDir(outputDir)
+	dir := sessionDir(outputDir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create sessions dir: %w", err)
 	}
@@ -64,7 +64,7 @@ func Save(outputDir string, s *Session) error {
 
 // Load reads a session from the sessions directory by ID.
 func Load(outputDir, id string) (*Session, error) {
-	path := filepath.Join(SessionDir(outputDir), id+".yml")
+	path := filepath.Join(sessionDir(outputDir), id+".yml")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read session %q: %w", id, err)
@@ -79,7 +79,7 @@ func Load(outputDir, id string) (*Session, error) {
 
 // List returns all sessions sorted by updated time (newest first).
 func List(outputDir string) ([]*Session, error) {
-	dir := SessionDir(outputDir)
+	dir := sessionDir(outputDir)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -125,31 +125,6 @@ func Active(outputDir string) ([]*Session, error) {
 	return active, nil
 }
 
-// Rename changes a session's ID and renames the file on disk.
-// If the target ID already exists, a numeric suffix is appended (-2, -3, etc.).
-func Rename(outputDir string, s *Session, newID string) error {
-	dir := SessionDir(outputDir)
-	oldPath := filepath.Join(dir, s.ID+".yml")
-
-	// Resolve collisions.
-	finalID := newID
-	for i := 2; ; i++ {
-		candidate := filepath.Join(dir, finalID+".yml")
-		if _, err := os.Stat(candidate); os.IsNotExist(err) {
-			break
-		}
-		finalID = fmt.Sprintf("%s-%d", newID, i)
-	}
-
-	newPath := filepath.Join(dir, finalID+".yml")
-	if err := os.Rename(oldPath, newPath); err != nil {
-		return fmt.Errorf("rename session: %w", err)
-	}
-
-	s.ID = finalID
-	return Save(outputDir, s)
-}
-
 // Cleanup removes completed sessions older than maxAge.
 func Cleanup(outputDir string, maxAge time.Duration) (int, error) {
 	all, err := List(outputDir)
@@ -159,7 +134,7 @@ func Cleanup(outputDir string, maxAge time.Duration) (int, error) {
 
 	cutoff := time.Now().UTC().Add(-maxAge)
 	removed := 0
-	dir := SessionDir(outputDir)
+	dir := sessionDir(outputDir)
 
 	for _, s := range all {
 		if s.Phase == PhaseComplete && s.Updated.Before(cutoff) {

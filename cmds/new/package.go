@@ -65,8 +65,10 @@ func runPackage(name string) error {
 	}
 
 	// Append package-specific entries to .gitignore (devbox, opencode).
-	if err := appendGitignoreEntries(".gitignore", ".devbox/", "tui.json"); err != nil {
-		return fmt.Errorf("update .gitignore: %w", err)
+	for _, entry := range []string{".devbox/", "tui.json"} {
+		if err := shared.EnsureGitignoreEntry(".gitignore", entry); err != nil {
+			return fmt.Errorf("update .gitignore: %w", err)
+		}
 	}
 
 	// Prompt for author (org/username) and description (interactive only).
@@ -287,55 +289,6 @@ func detectGitHubUser() string {
 		return ""
 	}
 	return strings.TrimSpace(string(out))
-}
-
-// appendGitignoreEntries appends entries to a .gitignore file if they are not
-// already present. This is used to add package-specific ignores (e.g., .devbox/,
-// tui.json) after RunCore creates the initial .gitignore with .codectx/.
-func appendGitignoreEntries(path string, entries ...string) error {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		// No .gitignore to append to; write a new one.
-		content := strings.Join(entries, "\n") + "\n"
-		return os.WriteFile(path, []byte(content), 0o644)
-	}
-
-	existing := make(map[string]bool)
-	for _, line := range strings.Split(string(data), "\n") {
-		existing[strings.TrimSpace(line)] = true
-	}
-
-	var toAdd []string
-	for _, entry := range entries {
-		if !existing[entry] {
-			toAdd = append(toAdd, entry)
-		}
-	}
-
-	if len(toAdd) == 0 {
-		return nil
-	}
-
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
-	if err != nil {
-		return fmt.Errorf("open %s: %w", path, err)
-	}
-	defer func() { _ = f.Close() }()
-
-	// Ensure a trailing newline before appending.
-	if len(data) > 0 && data[len(data)-1] != '\n' {
-		if _, err := f.WriteString("\n"); err != nil {
-			return err
-		}
-	}
-
-	for _, entry := range toAdd {
-		if _, err := f.WriteString(entry + "\n"); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 // scaffoldPackageDir creates the package/ directory structure. This is the

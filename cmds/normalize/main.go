@@ -4,11 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
-	"os/signal"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/config"
@@ -71,12 +68,13 @@ func run(_ context.Context, c *cli.Command) error {
 	// Resolve AI binary launcher.
 	l, err := launcher.Resolve(prefs)
 	if err != nil {
+		// Graceful degradation when AI binary is not available.
 		ui.Warn("AI binary not available.")
 		ui.Blank()
 		ui.Item(fmt.Sprintf("Configured binary %q was not found on PATH.", prefs.AI.Bin))
 		ui.Item("Run: codectx ai setup")
 		ui.Blank()
-		return nil
+		return nil //nolint:nilerr // Intentional: missing binary is not a fatal error.
 	}
 
 	// Verify docs directory exists.
@@ -109,25 +107,7 @@ func run(_ context.Context, c *cli.Command) error {
 
 	// Launch the AI binary as a child process.
 	args := l.NewSessionArgs("", prompt)
-	cmd := exec.Command(l.Binary(), args...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	// Forward signals to the child process.
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		for sig := range sigCh {
-			if cmd.Process != nil {
-				_ = cmd.Process.Signal(sig)
-			}
-		}
-	}()
-
-	err = cmd.Run()
-	signal.Stop(sigCh)
-	close(sigCh)
+	err = shared.RunAIProcess(l.Binary(), args)
 
 	ui.Blank()
 	if err != nil {
@@ -145,7 +125,7 @@ func countDocsFiles(docsDir string) int {
 	count := 0
 	_ = filepath.Walk(docsDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return nil
+			return nil //nolint:nilerr // Skip inaccessible files during count.
 		}
 		// Skip packages directory (installed packages, not owned by this project).
 		rel, _ := filepath.Rel(docsDir, path)

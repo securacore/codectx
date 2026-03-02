@@ -21,7 +21,7 @@ func tmpOutputDir(t *testing.T) string {
 // so tests can control the exact value.
 func saveRaw(t *testing.T, dir string, s *Session) {
 	t.Helper()
-	sessDir := SessionDir(dir)
+	sessDir := sessionDir(dir)
 	require.NoError(t, os.MkdirAll(sessDir, 0o755))
 	data, err := yaml.Marshal(s)
 	require.NoError(t, err)
@@ -104,43 +104,6 @@ func TestSession_active(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, active, 1)
 	assert.Equal(t, "Active", active[0].Title)
-}
-
-func TestSession_rename(t *testing.T) {
-	dir := tmpOutputDir(t)
-	s := NewSession("claude")
-	oldID := s.ID
-	require.NoError(t, Save(dir, s))
-
-	err := Rename(dir, s, "go-error-handling")
-	require.NoError(t, err)
-	assert.Equal(t, "go-error-handling", s.ID)
-
-	// Old file should not exist.
-	_, err = os.Stat(filepath.Join(SessionDir(dir), oldID+".yml"))
-	assert.True(t, os.IsNotExist(err))
-
-	// New file should exist and load correctly.
-	loaded, err := Load(dir, "go-error-handling")
-	require.NoError(t, err)
-	assert.Equal(t, "go-error-handling", loaded.ID)
-}
-
-func TestSession_renameCollision(t *testing.T) {
-	dir := tmpOutputDir(t)
-
-	// Create an existing session with the target name.
-	existing := NewSession("claude")
-	existing.ID = "go-error-handling"
-	require.NoError(t, Save(dir, existing))
-
-	// Create a new session that will be renamed.
-	s := NewSession("claude")
-	require.NoError(t, Save(dir, s))
-
-	err := Rename(dir, s, "go-error-handling")
-	require.NoError(t, err)
-	assert.Equal(t, "go-error-handling-2", s.ID)
 }
 
 func TestSession_cleanup(t *testing.T) {

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/manifest"
 	"github.com/securacore/codectx/core/preferences"
 
@@ -441,14 +442,15 @@ func TestWriteReadme_emptyDescription(t *testing.T) {
 	assert.NotContains(t, content, "\n\n\n")
 }
 
-// --- appendGitignoreEntries ---
+// --- gitignore entry appending (via shared.EnsureGitignoreEntry) ---
 
-func TestAppendGitignoreEntries_createsNew(t *testing.T) {
+func TestGitignoreEntries_createsNew(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".gitignore")
 
-	err := appendGitignoreEntries(path, ".devbox/", "tui.json")
-	require.NoError(t, err)
+	for _, entry := range []string{".devbox/", "tui.json"} {
+		require.NoError(t, shared.EnsureGitignoreEntry(path, entry))
+	}
 
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
@@ -456,13 +458,14 @@ func TestAppendGitignoreEntries_createsNew(t *testing.T) {
 	assert.Contains(t, string(data), "tui.json")
 }
 
-func TestAppendGitignoreEntries_appendsToExisting(t *testing.T) {
+func TestGitignoreEntries_appendsToExisting(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".gitignore")
 	require.NoError(t, os.WriteFile(path, []byte(".codectx/\n"), 0o644))
 
-	err := appendGitignoreEntries(path, ".devbox/", "tui.json")
-	require.NoError(t, err)
+	for _, entry := range []string{".devbox/", "tui.json"} {
+		require.NoError(t, shared.EnsureGitignoreEntry(path, entry))
+	}
 
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
@@ -472,13 +475,14 @@ func TestAppendGitignoreEntries_appendsToExisting(t *testing.T) {
 	assert.Contains(t, content, "tui.json")
 }
 
-func TestAppendGitignoreEntries_skipsExisting(t *testing.T) {
+func TestGitignoreEntries_skipsExisting(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".gitignore")
 	require.NoError(t, os.WriteFile(path, []byte(".codectx/\n.devbox/\n"), 0o644))
 
-	err := appendGitignoreEntries(path, ".devbox/", "tui.json")
-	require.NoError(t, err)
+	for _, entry := range []string{".devbox/", "tui.json"} {
+		require.NoError(t, shared.EnsureGitignoreEntry(path, entry))
+	}
 
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
@@ -488,14 +492,15 @@ func TestAppendGitignoreEntries_skipsExisting(t *testing.T) {
 	assert.Contains(t, content, "tui.json")
 }
 
-func TestAppendGitignoreEntries_allAlreadyPresent(t *testing.T) {
+func TestGitignoreEntries_allAlreadyPresent(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".gitignore")
 	original := ".codectx/\n.devbox/\ntui.json\n"
 	require.NoError(t, os.WriteFile(path, []byte(original), 0o644))
 
-	err := appendGitignoreEntries(path, ".devbox/", "tui.json")
-	require.NoError(t, err)
+	for _, entry := range []string{".devbox/", "tui.json"} {
+		require.NoError(t, shared.EnsureGitignoreEntry(path, entry))
+	}
 
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
@@ -503,13 +508,12 @@ func TestAppendGitignoreEntries_allAlreadyPresent(t *testing.T) {
 	assert.Equal(t, original, string(data))
 }
 
-func TestAppendGitignoreEntries_noTrailingNewline(t *testing.T) {
+func TestGitignoreEntries_noTrailingNewline(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".gitignore")
 	require.NoError(t, os.WriteFile(path, []byte(".codectx/"), 0o644))
 
-	err := appendGitignoreEntries(path, ".devbox/")
-	require.NoError(t, err)
+	require.NoError(t, shared.EnsureGitignoreEntry(path, ".devbox/"))
 
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)

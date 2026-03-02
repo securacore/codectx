@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 
 	"github.com/securacore/codectx/cmds/shared"
-	"github.com/securacore/codectx/core/compile"
 	"github.com/securacore/codectx/core/config"
 	"github.com/securacore/codectx/core/lock"
 	"github.com/securacore/codectx/core/manifest"
@@ -24,8 +23,10 @@ import (
 )
 
 const lockFile = "codectx.lock"
-const manifestFile = "manifest.yml"
 const defaultBackupDir = ".codectx-docs"
+
+// manifestFile is a local alias for shared.ManifestFile.
+const manifestFile = shared.ManifestFile
 
 var Command = &cli.Command{
 	Name:     "install",
@@ -84,6 +85,65 @@ func run(activateFlag string) error {
 	}
 
 	// Install each package.
+	successes, err := installPackages(cfg, docsDir, lck)
+	if err != nil {
+		return err
+	}
+
+	// Handle activation for newly installed packages.
+	if err := handleActivation(cfg, successes, activateFlag); err != nil {
+		return err
+	}
+
+	// Ask about auto-compilation preference.
+	prefs, err := preferences.Load(outputDir)
+	if err != nil {
+		return fmt.Errorf("load preferences: %w", err)
+	}
+
+	if prefs.AutoCompile == nil {
+		var confirmStr string
+		form := huh.NewForm(
+			huh.NewGroup(
+				huh.NewSelect[string]().
+					Title("Auto-compile after adding packages?").
+					Description("Automatically recompile documentation when packages are added or changed").
+					Options(
+						huh.NewOption("Yes", "yes"),
+						huh.NewOption("No", "no"),
+					).
+					Value(&confirmStr),
+			),
+		).WithTheme(ui.Theme())
+
+		if err := form.Run(); err != nil {
+			return fmt.Errorf("prompt: %w", err)
+		}
+
+		val := confirmStr == "yes"
+		prefs.AutoCompile = &val
+		if err := preferences.Write(outputDir, prefs); err != nil {
+			return fmt.Errorf("write preferences: %w", err)
+		}
+	}
+
+	// Sync local manifest: discover new entries, remove stale, infer relationships.
+	manifestPath := filepath.Join(docsDir, manifestFile)
+	if localManifest, loadErr := manifest.Load(manifestPath); loadErr == nil {
+		synced := manifest.Sync(docsDir, localManifest)
+		if writeErr := manifest.Write(manifestPath, synced); writeErr != nil {
+			ui.Warn(fmt.Sprintf("Failed to sync manifest: %s", writeErr))
+		}
+	}
+
+	// Run initial compilation.
+	ui.Blank()
+	return shared.RunCompileAndPrint(cfg)
+}
+
+// installPackages resolves, fetches, and loads each declared package.
+// Returns the list of successfully installed packages or an error if none succeed.
+func installPackages(cfg *config.Config, docsDir string, lck *lock.Lock) ([]installedPkg, error) {
 	var successes []installedPkg
 	var failures []string
 
@@ -124,7 +184,7 @@ func run(activateFlag string) error {
 		}
 
 		var resolved *resolve.ResolvedPackage
-		err = ui.SpinErr(fmt.Sprintf("Resolving %s@%s...", pkg.Name, pkg.Author), func() error {
+		err := ui.SpinErr(fmt.Sprintf("Resolving %s@%s...", pkg.Name, pkg.Author), func() error {
 			var resolveErr error
 			resolved, resolveErr = resolve.Resolve(ref, source)
 			return resolveErr
@@ -164,10 +224,16 @@ func run(activateFlag string) error {
 	}
 
 	if len(successes) == 0 {
-		return fmt.Errorf("no packages were installed successfully")
+		return nil, fmt.Errorf("no packages were installed successfully")
 	}
 
-	// Prompt for activation if any packages are inactive.
+	return successes, nil
+}
+
+// handleActivation prompts for or applies activation settings for newly
+// installed packages that have no activation set. Updates cfg in place
+// and writes the config file if changes are made.
+func handleActivation(cfg *config.Config, successes []installedPkg, activateFlag string) error {
 	hasInactive := false
 	for _, s := range successes {
 		if s.pkg.Active.IsNone() {
@@ -175,89 +241,29 @@ func run(activateFlag string) error {
 			break
 		}
 	}
+	if !hasInactive {
+		return nil
+	}
 
-	if hasInactive {
-		if activateFlag != "" {
-			activation, err := shared.ParseActivateFlag(activateFlag)
-			if err != nil {
-				return fmt.Errorf("parse --activate: %w", err)
-			}
-			for _, s := range successes {
-				if s.pkg.Active.IsNone() {
-					cfg.Packages[s.idx].Active = activation
-				}
-			}
-		} else {
-			// Build combined entry-level multi-select.
-			if err := promptCombinedActivation(cfg, successes); err != nil {
-				return fmt.Errorf("activation prompt: %w", err)
+	if activateFlag != "" {
+		activation, err := shared.ParseActivateFlag(activateFlag)
+		if err != nil {
+			return fmt.Errorf("parse --activate: %w", err)
+		}
+		for _, s := range successes {
+			if s.pkg.Active.IsNone() {
+				cfg.Packages[s.idx].Active = activation
 			}
 		}
-
-		if err := config.Write(shared.ConfigFile, cfg); err != nil {
-			return fmt.Errorf("write config: %w", err)
+	} else {
+		if err := promptCombinedActivation(cfg, successes); err != nil {
+			return fmt.Errorf("activation prompt: %w", err)
 		}
 	}
 
-	// Ask about auto-compilation preference.
-	prefs, err := preferences.Load(outputDir)
-	if err != nil {
-		return fmt.Errorf("load preferences: %w", err)
+	if err := config.Write(shared.ConfigFile, cfg); err != nil {
+		return fmt.Errorf("write config: %w", err)
 	}
-
-	if prefs.AutoCompile == nil {
-		var confirmStr string
-		form := huh.NewForm(
-			huh.NewGroup(
-				huh.NewSelect[string]().
-					Title("Auto-compile after adding packages?").
-					Description("Automatically recompile documentation when packages are added or changed").
-					Options(
-						huh.NewOption("Yes", "yes"),
-						huh.NewOption("No", "no"),
-					).
-					Value(&confirmStr),
-			),
-		).WithTheme(ui.Theme())
-
-		if err := form.Run(); err != nil {
-			return fmt.Errorf("prompt: %w", err)
-		}
-
-		val := confirmStr == "yes"
-		prefs.AutoCompile = &val
-		if err := preferences.Write(outputDir, prefs); err != nil {
-			return fmt.Errorf("write preferences: %w", err)
-		}
-	}
-
-	// Sync local manifest: discover new entries, remove stale, infer relationships.
-	manifestPath := filepath.Join(docsDir, manifestFile)
-	if localManifest, loadErr := manifest.Load(manifestPath); loadErr == nil {
-		synced := manifest.Sync(docsDir, localManifest)
-		_ = manifest.Write(manifestPath, synced)
-	}
-
-	// Run initial compilation.
-	ui.Blank()
-	var result *compile.Result
-	err = ui.SpinErr("Compiling...", func() error {
-		var compileErr error
-		result, compileErr = compile.Compile(cfg)
-		return compileErr
-	})
-	if err != nil {
-		return fmt.Errorf("compile: %w", err)
-	}
-
-	ui.Done(fmt.Sprintf("Compiled to %s", result.OutputDir))
-	ui.KV("Objects stored", result.ObjectsStored, 16)
-	if result.ObjectsPruned > 0 {
-		ui.KV("Objects pruned", result.ObjectsPruned, 16)
-	}
-	ui.KV("Packages", result.Packages, 16)
-	ui.Blank()
-
 	return nil
 }
 

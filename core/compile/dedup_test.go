@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/securacore/codectx/core/manifest"
+	"github.com/securacore/codectx/internal/util"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -398,9 +399,9 @@ func TestFileHash_emptyFile(t *testing.T) {
 // --- keyID ---
 
 func TestKeyID(t *testing.T) {
-	assert.Equal(t, "philosophy", keyID("foundation:philosophy"))
-	assert.Equal(t, "react", keyID("topics:react"))
-	assert.Equal(t, "noprefix", keyID("noprefix"))
+	assert.Equal(t, "philosophy", util.KeyID("foundation:philosophy"))
+	assert.Equal(t, "react", util.KeyID("topics:react"))
+	assert.Equal(t, "noprefix", util.KeyID("noprefix"))
 }
 
 // --- fileHash ---
@@ -452,15 +453,15 @@ func TestCheckDedup_notFound(t *testing.T) {
 
 func TestKeyID_multipleColons(t *testing.T) {
 	// Everything after the first colon should be returned.
-	assert.Equal(t, "a:b", keyID("foundation:a:b"))
+	assert.Equal(t, "a:b", util.KeyID("foundation:a:b"))
 }
 
 func TestKeyID_emptyString(t *testing.T) {
-	assert.Equal(t, "", keyID(""))
+	assert.Equal(t, "", util.KeyID(""))
 }
 
 func TestKeyID_colonAtStart(t *testing.T) {
-	assert.Equal(t, "foo", keyID(":foo"))
+	assert.Equal(t, "foo", util.KeyID(":foo"))
 }
 
 func TestMergeManifestDedup_promptConflict(t *testing.T) {

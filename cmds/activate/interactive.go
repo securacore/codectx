@@ -493,11 +493,12 @@ func (m activateModel) viewEntries() string {
 	lines = append(lines, "  "+activeTitleStyle.Render(fmt.Sprintf("%s@%s  %s", pkg.name, pkg.author, pkg.version)))
 	lines = append(lines, "")
 
-	if pkg.loadErr != nil {
+	switch {
+	case pkg.loadErr != nil:
 		lines = append(lines, "  "+ui.RedStyle.Render(ui.SymbolFail+" "+pkg.loadErr.Error()))
-	} else if len(m.entries) == 0 {
+	case len(m.entries) == 0:
 		lines = append(lines, "  "+activeHintStyle.Render("No entries in this package."))
-	} else {
+	default:
 		// Determine visible window for scrolling.
 		maxVisible := m.height - 8
 		if maxVisible < 3 {

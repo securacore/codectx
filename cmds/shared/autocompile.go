@@ -53,8 +53,14 @@ func MaybeAutoCompile(cfg *config.Config) error {
 		return nil
 	}
 
+	return RunCompileAndPrint(cfg)
+}
+
+// RunCompileAndPrint runs compilation with a spinner and prints the result summary.
+// This is the shared compile-and-display pattern used by init, install, and auto-compile.
+func RunCompileAndPrint(cfg *config.Config) error {
 	var result *compile.Result
-	err = ui.SpinErr("Compiling...", func() error {
+	err := ui.SpinErr("Compiling...", func() error {
 		var compileErr error
 		result, compileErr = compile.Compile(cfg)
 		return compileErr

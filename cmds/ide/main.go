@@ -4,10 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
-	"os/signal"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"github.com/charmbracelet/huh"
@@ -157,25 +154,7 @@ func run(_ context.Context, c *cli.Command) error {
 	ui.Blank()
 
 	// Launch the AI binary as a child process.
-	cmd := exec.Command(l.Binary(), args...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	// Forward signals to the child process.
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		for sig := range sigCh {
-			if cmd.Process != nil {
-				_ = cmd.Process.Signal(sig)
-			}
-		}
-	}()
-
-	err = cmd.Run()
-	signal.Stop(sigCh)
-	close(sigCh)
+	err = shared.RunAIProcess(l.Binary(), args)
 
 	// Cancel watch goroutine.
 	watchCancel()
@@ -189,7 +168,9 @@ func run(_ context.Context, c *cli.Command) error {
 	}
 
 	// Always save session state (updates timestamp).
-	_ = coreide.Save(outputDir, session)
+	if saveErr := coreide.Save(outputDir, session); saveErr != nil {
+		ui.Warn(fmt.Sprintf("Failed to save session: %s", saveErr))
+	}
 
 	ui.Blank()
 	if err != nil {
@@ -279,7 +260,7 @@ func pickOrCreateSession(outputDir string, l launcher.Launcher) (*coreide.Sessio
 	).WithTheme(ui.Theme())
 
 	if err := form.Run(); err != nil {
-		return nil, nil // User canceled
+		return nil, nil //nolint:nilerr // User canceled the prompt.
 	}
 
 	if selected == "__new__" {

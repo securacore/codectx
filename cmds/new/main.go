@@ -133,6 +133,9 @@ func scaffold(kind sectionKind, name string, usePackageDir bool) error {
 			return fmt.Errorf("write plan.yml: %w", err)
 		}
 		extraFiles = append(extraFiles, filepath.Join(sectionDir(kind), name, "plan.yml"))
+
+	default:
+		// Foundation and prompt sections need only the README.md created above.
 	}
 
 	// Run manifest sync.
