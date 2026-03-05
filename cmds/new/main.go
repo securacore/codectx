@@ -1,6 +1,7 @@
 package new
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,11 +19,26 @@ import (
 // starting and ending with an alphanumeric character.
 var kebabCase = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
-// Command is the parent command for scaffolding new documentation entries.
+// Command is the parent command for creating new projects and documentation entries.
 var Command = &cli.Command{
-	Name:     "new",
-	Usage:    "Scaffold a new documentation entry",
-	Category: "Content Authoring",
+	Name:      "new",
+	Usage:     "Create a new codectx project or documentation entry",
+	Category:  "Core Workflow",
+	ArgsUsage: "[name]",
+	Flags: []cli.Flag{
+		&cli.BoolFlag{
+			Name:  "minimal",
+			Usage: "Skip default foundation documents",
+		},
+	},
+	Action: func(ctx context.Context, c *cli.Command) error {
+		// Handle project initialization when no subcommand is used.
+		name := c.Args().First()
+		if name == "." {
+			name = "" // Current directory
+		}
+		return runNewProject(name, c.Bool("minimal"))
+	},
 	Commands: []*cli.Command{
 		foundationCommand,
 		topicCommand,
@@ -31,6 +47,17 @@ var Command = &cli.Command{
 		applicationCommand,
 		packageCommand,
 	},
+}
+
+// runNewProject initializes a new codectx project.
+func runNewProject(name string, minimal bool) error {
+	result, err := RunCore(name, nil, minimal)
+	if err != nil {
+		return err
+	}
+
+	RunPostInit(result.Config)
+	return nil
 }
 
 // sectionKind identifies the type of documentation section being scaffolded.
@@ -60,17 +87,10 @@ func sectionDir(kind sectionKind) string {
 	}
 }
 
-// packageFlag is the shared --package flag definition for all codectx new subcommands.
-var packageFlag = &cli.BoolFlag{
-	Name:    "package",
-	Aliases: []string{"p"},
-	Usage:   "Create in the package/ directory instead of docs/",
-}
-
 // scaffold validates the name, creates directories and template files, runs
 // manifest sync, and prints a summary. It is the shared logic for all
 // subcommands.
-func scaffold(kind sectionKind, name string, usePackageDir bool) error {
+func scaffold(kind sectionKind, name string) error {
 	if !kebabCase.MatchString(name) {
 		return fmt.Errorf("invalid name %q: must be lowercase kebab-case (e.g. my-entry)", name)
 	}
@@ -80,17 +100,7 @@ func scaffold(kind sectionKind, name string, usePackageDir bool) error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	// Resolve target directory: package/ when --package is used, docs/ otherwise.
-	var targetDir string
-	if usePackageDir {
-		if !cfg.IsPackage() {
-			return fmt.Errorf("--package requires a package project (add type: package to codectx.yml)")
-		}
-		targetDir = "package"
-	} else {
-		targetDir = cfg.DocsDir()
-	}
-
+	targetDir := cfg.DocsDir()
 	entryDir := filepath.Join(targetDir, sectionDir(kind), name)
 
 	// Check for duplicates.

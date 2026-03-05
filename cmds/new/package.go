@@ -13,7 +13,6 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/urfave/cli/v3"
 
-	initialize "github.com/securacore/codectx/cmds/init"
 	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/ai"
 	"github.com/securacore/codectx/core/config"
@@ -52,7 +51,7 @@ func runPackage(name string) error {
 	// Run core init: creates the directory, chdir into it, sets up docs
 	// structure, schemas, foundation defaults, config, manifest, and
 	// preferences.
-	result, err := initialize.RunCore(fullName, nil, false)
+	result, err := RunCore(fullName, nil, false)
 	if err != nil {
 		return err
 	}
@@ -157,7 +156,7 @@ func runPackage(name string) error {
 	ui.Blank()
 
 	// Run post-init: auto-compile and link AI tools.
-	initialize.RunPostInit(result.Config)
+	RunPostInit(result.Config)
 
 	return nil
 }
@@ -225,7 +224,7 @@ func promptPackageInfo(name string) (author, description string, err error) {
 // maybeGenerateDescription uses the configured AI tool to enhance the user's
 // description. If AI is not configured or generation fails, the original
 // description is returned unchanged.
-func maybeGenerateDescription(result *initialize.CoreResult, name, description string) string {
+func maybeGenerateDescription(result *CoreResult, name, description string) string {
 	if result.Preferences == nil || result.Preferences.AI == nil || result.Preferences.AI.Bin == "" {
 		return description
 	}

@@ -375,7 +375,7 @@ func runInteractive(author string) error {
 
 	// Check that a codectx.yml exists before attempting the add flow.
 	if _, err := os.Stat("codectx.yml"); os.IsNotExist(err) {
-		ui.Fail("No codectx.yml found. Run `codectx init` first, then add packages.")
+		ui.Fail("No codectx.yml found. Run `codectx new` first, then add packages.")
 		return nil
 	}
 

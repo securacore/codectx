@@ -8,6 +8,27 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
+// embeddedSchemaLoader loads schemas from the embedded filesystem.
+// It implements jsonschema.URLLoader to prevent the library from attempting
+// filesystem lookups when schemas are embedded in the binary.
+type embeddedSchemaLoader struct {
+	schemas map[string]any
+}
+
+func (l *embeddedSchemaLoader) Load(url string) (any, error) {
+	const prefix = "embed://"
+	if !strings.HasPrefix(url, prefix) {
+		return nil, fmt.Errorf("unsupported URL scheme: %s", url)
+	}
+
+	filename := strings.TrimPrefix(url, prefix)
+	doc, ok := l.schemas[filename]
+	if !ok {
+		return nil, fmt.Errorf("schema %s not found in embedded schemas", filename)
+	}
+	return doc, nil
+}
+
 // Validate validates a Go value against the named schema file.
 // The value should be the result of unmarshaling YAML into any.
 func Validate(schemaFile string, v any) error {
@@ -21,12 +42,27 @@ func Validate(schemaFile string, v any) error {
 		return fmt.Errorf("parse schema %s: %w", schemaFile, err)
 	}
 
+	// Create a custom loader for embedded schemas. This prevents the jsonschema
+	// library from converting relative paths to file:// URLs based on the current
+	// working directory, which would fail since schemas are embedded in the binary.
+	loader := &embeddedSchemaLoader{
+		schemas: map[string]any{
+			schemaFile: doc,
+		},
+	}
+
+	// Use embed:// URL scheme to signal this is an embedded schema.
+	// This prevents the library from attempting filesystem lookups.
+	embedURL := "embed://" + schemaFile
+
 	c := jsonschema.NewCompiler()
-	if err := c.AddResource(schemaFile, doc); err != nil {
+	c.UseLoader(loader)
+
+	if err := c.AddResource(embedURL, doc); err != nil {
 		return fmt.Errorf("add schema resource %s: %w", schemaFile, err)
 	}
 
-	sch, err := c.Compile(schemaFile)
+	sch, err := c.Compile(embedURL)
 	if err != nil {
 		return fmt.Errorf("compile schema %s: %w", schemaFile, err)
 	}

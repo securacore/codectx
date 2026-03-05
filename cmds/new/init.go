@@ -1,7 +1,6 @@
-package init
+package new
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -18,27 +17,10 @@ import (
 	"github.com/securacore/codectx/ui"
 
 	"github.com/charmbracelet/huh"
-	"github.com/urfave/cli/v3"
 )
 
 // manifestFile is a local alias for shared.ManifestFile.
 const manifestFile = shared.ManifestFile
-
-var Command = &cli.Command{
-	Name:      "init",
-	Usage:     "Initialize a new codectx project",
-	Category:  "Core Workflow",
-	ArgsUsage: "[name]",
-	Flags: []cli.Flag{
-		&cli.BoolFlag{
-			Name:  "package",
-			Usage: "Initialize as a documentation package (skip default foundation documents)",
-		},
-	},
-	Action: func(ctx context.Context, c *cli.Command) error {
-		return run(c.Args().First(), nil, c.Bool("package"))
-	},
-}
 
 // CoreResult holds the outputs of RunCore that downstream callers may need.
 type CoreResult struct {
@@ -58,7 +40,7 @@ type CoreResult struct {
 //
 // After RunCore returns, the working directory is inside the new project
 // (if a name was provided).
-func RunCore(name string, autoCompile *bool, isPackage bool) (*CoreResult, error) {
+func RunCore(name string, autoCompile *bool, minimal bool) (*CoreResult, error) {
 	// If a name is provided as argument, create the directory and work inside it.
 	if name != "" {
 		if err := os.MkdirAll(name, 0o755); err != nil {
@@ -115,7 +97,7 @@ func RunCore(name string, autoCompile *bool, isPackage bool) (*CoreResult, error
 
 	// Scaffold docs directory structure.
 	docsDir := "docs"
-	dirs, err := scaffoldDocs(docsDir, isPackage)
+	dirs, err := scaffoldDocs(docsDir, minimal)
 	if err != nil {
 		return nil, err
 	}
@@ -139,8 +121,8 @@ func RunCore(name string, autoCompile *bool, isPackage bool) (*CoreResult, error
 
 	// Pre-populate Foundation with default entries so Sync's merge-missing
 	// preserves their load values (which Discover never auto-sets).
-	// Packages skip this — they don't ship default foundation documents.
-	if !isPackage {
+	// Minimal mode skips this — projects start with no foundation documents.
+	if !minimal {
 		m.Foundation = defaults.Entries()
 	}
 
@@ -189,7 +171,7 @@ func RunCore(name string, autoCompile *bool, isPackage bool) (*CoreResult, error
 		return nil, fmt.Errorf("write preferences: %w", err)
 	}
 
-	printInitSummary(name, isPackage, packagePath, outputDir, dirs, prefs)
+	printInitSummary(name, minimal, packagePath, outputDir, dirs, prefs)
 
 	return &CoreResult{
 		Config:      cfg,
@@ -213,18 +195,6 @@ func RunPostInit(cfg *config.Config) {
 	if err := promptLink(cfg.OutputDir()); err != nil {
 		ui.Warn(fmt.Sprintf("link: %s", err))
 	}
-}
-
-// run is the private entry point for the init command. It calls RunCore
-// followed by RunPostInit.
-func run(name string, autoCompile *bool, isPackage bool) error {
-	result, err := RunCore(name, autoCompile, isPackage)
-	if err != nil {
-		return err
-	}
-
-	RunPostInit(result.Config)
-	return nil
 }
 
 // formatBool formats a *bool preference for display.
@@ -311,9 +281,9 @@ func promptLink(outputDir string) error {
 }
 
 // scaffoldDocs creates the docs directory structure, writes .gitkeep files,
-// embedded schemas, and (for non-package projects) default foundation docs.
+// embedded schemas, and (for non-minimal projects) default foundation docs.
 // Returns the list of created directories.
-func scaffoldDocs(docsDir string, isPackage bool) ([]string, error) {
+func scaffoldDocs(docsDir string, minimal bool) ([]string, error) {
 	dirs := []string{
 		docsDir,
 		filepath.Join(docsDir, "foundation"),
@@ -348,8 +318,8 @@ func scaffoldDocs(docsDir string, isPackage bool) ([]string, error) {
 		return nil, fmt.Errorf("write schemas: %w", err)
 	}
 
-	// Write default foundation documents (project-only, not packages).
-	if !isPackage {
+	// Write default foundation documents (non-minimal projects only).
+	if !minimal {
 		foundationDir := filepath.Join(docsDir, "foundation")
 		if err := defaults.WriteAll(foundationDir); err != nil {
 			return nil, fmt.Errorf("write defaults: %w", err)
@@ -360,10 +330,10 @@ func scaffoldDocs(docsDir string, isPackage bool) ([]string, error) {
 }
 
 // printInitSummary displays the initialization results to the user.
-func printInitSummary(name string, isPackage bool, packagePath, outputDir string, dirs []string, prefs *preferences.Preferences) {
+func printInitSummary(name string, minimal bool, packagePath, outputDir string, dirs []string, prefs *preferences.Preferences) {
 	kind := "project"
-	if isPackage {
-		kind = "package"
+	if minimal {
+		kind = "minimal project"
 	}
 	ui.Done(fmt.Sprintf("Initialized codectx %s: %s", kind, name))
 	ui.Blank()
@@ -392,24 +362,4 @@ func printInitSummary(name string, isPackage bool, packagePath, outputDir string
 	}
 	ui.Blank()
 	ui.Item("Adjust preferences: codectx set")
-}
-
-// splitLines splits a string into lines, handling both \n and \r\n.
-func splitLines(s string) []string {
-	var lines []string
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\n' {
-			line := s[start:i]
-			if len(line) > 0 && line[len(line)-1] == '\r' {
-				line = line[:len(line)-1]
-			}
-			lines = append(lines, line)
-			start = i + 1
-		}
-	}
-	if start < len(s) {
-		lines = append(lines, s[start:])
-	}
-	return lines
 }

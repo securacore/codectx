@@ -10,7 +10,6 @@ import (
 	"github.com/securacore/codectx/cmds/add"
 	cmdsai "github.com/securacore/codectx/cmds/ai"
 	"github.com/securacore/codectx/cmds/compile"
-	initialize "github.com/securacore/codectx/cmds/init"
 	"github.com/securacore/codectx/cmds/install"
 	"github.com/securacore/codectx/cmds/md"
 	new "github.com/securacore/codectx/cmds/new"
@@ -37,7 +36,6 @@ func main() {
 			cmdsai.Command,
 			md.Command,
 			compile.Command,
-			initialize.Command,
 			install.Command,
 			new.Command,
 			normalize.Command,

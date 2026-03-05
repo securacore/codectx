@@ -137,7 +137,7 @@ Boolean preferences use pointer semantics internally (`*bool`). This distinguish
 - **`false`** — Explicitly disabled
 - **`nil` (unset)** — Never configured; the command interprets this based on context (e.g., compression `nil` is treated as `false` for backward compatibility with existing projects)
 
-New projects created with `codectx init` set both booleans to `true` explicitly.
+New projects created with `codectx new` set both booleans to `true` explicitly.
 
 ## Related
 

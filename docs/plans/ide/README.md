@@ -12,7 +12,7 @@ This is not a general-purpose AI chat tool. Every design decision serves one goa
 2. Build a session management system (`core/ide/`) that persists conversation state transparently, supports resuming, and auto-cleans completed sessions.
 3. Build an embedded documentation directive that instructs the AI to classify, scope, draft, and review documentation against codectx conventions.
 4. Build a full-screen bubbletea TUI (`cmds/ide/`) with chat viewport, streaming responses, phase tracking, document preview, and file writing with manifest sync.
-5. Enhance `codectx init` to auto-compile and offer `codectx link` after project creation.
+5. Enhance `codectx new` to auto-compile and offer `codectx link` after project creation.
 6. Ensure the AI has read-only access (`Read`, `Glob`, `Grep`) to existing documentation for context awareness and cross-reference alignment.
 
 ## Non-Goals
@@ -917,7 +917,7 @@ just build
 5. The preview overlay renders the document and allows approve/reject/request-changes.
 6. Approved documents are written to the correct directory with manifest sync.
 7. Sessions are persisted and resumable.
-8. `codectx init` compiles and offers link prompt after project creation.
+8. `codectx new` compiles and offers link prompt after project creation.
 9. All tests pass: `go test ./core/llm/ ./core/ide/ ./cmds/ide/`.
 10. Build succeeds: `just build`.
 

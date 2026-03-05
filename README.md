@@ -35,7 +35,7 @@ override the install location.
 ## Usage
 
 ```bash
-codectx init my-project    # Scaffold a new documentation package
+codectx new my-project     # Scaffold a new documentation package
 codectx add react@org      # Install a package from GitHub
 codectx compile            # Compile all packages into .codectx/
 codectx link               # Symlink compiled output to tool-specific files

@@ -12,7 +12,7 @@ import (
 
 // PromptAISetup runs AI tool detection and prompts the user to select
 // a provider. Returns nil if no tools are found or the user declines.
-// This function is shared between `codectx ai setup` and `codectx init`.
+// This function is shared between `codectx ai setup` and `codectx new`.
 func PromptAISetup() (*preferences.AIConfig, error) {
 	// Detect available providers.
 	results := ai.Detect()
