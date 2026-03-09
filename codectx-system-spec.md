@@ -85,15 +85,22 @@ A **package** is a publishable subset — just curated documentation content. Pa
 [project-root]/
   docs/                          # Default root — configurable via codectx.yaml root field
     system/
-      taxonomy-generation/
-        README.md              # Instructions the AI follows during alias generation
-        README.spec.md         # Reasoning behind the default instructions
-      bridge-summaries/
-        README.md              # Instructions for generating chunk boundary bridges
-        README.spec.md
-      context-assembly/
-        README.md              # Instructions for how foundations get assembled
-        README.spec.md
+      foundation/
+        compiler-philosophy/
+          README.md            # General principles governing compilation behavior
+          README.spec.md
+      topics/
+        taxonomy-generation/
+          README.md            # Instructions the AI follows during alias generation
+          README.spec.md       # Reasoning behind the default instructions
+        bridge-summaries/
+          README.md            # Instructions for generating chunk boundary bridges
+          README.spec.md
+        context-assembly/
+          README.md            # Instructions for how foundations get assembled
+          README.spec.md
+      plans/                   # Empty on init — available for compiler migration plans
+      prompts/                 # Default automation scripts for compiler-adjacent tasks
     foundation/
       [topic]/
         README.md              # Entry point for the topic
@@ -139,25 +146,31 @@ A **package** is a publishable subset — just curated documentation content. Pa
           [hash].[seq].md
         specs/                 # Reasoning/spec chunks (.spec.md sources)
           [hash].[seq].md
+        system/                # System/compiler documentation chunks
+          [hash].[seq].md
         bm25/
           objects/             # BM25 index over instruction chunks
           specs/               # BM25 index over reasoning chunks
+          system/              # BM25 index over system/compiler chunks
 ```
 
 ### Directory Semantics
 
-**system/**: Instructions that govern how the compiler's AI behaves during compilation passes. These are documentation files in the same format as everything else — README.md as entry point, .spec.md for reasoning. They ship as sensible defaults on `codectx init` and belong to the user from that moment on. Modifying these files changes the compiler's AI behavior on the next compilation.
+**system/**: Documentation about the compiler itself, using the same subdirectory layout as the standard package structure (foundation/, topics/, plans/, prompts/). Files are documentation in the same format as everything else — README.md as entry point, .spec.md for reasoning. They ship as sensible defaults on `codectx init` and belong to the user from that moment on. Modifying these files changes the compiler's AI behavior on the next compilation.
+
+The system/ directory mirrors the standard layout:
+- `system/foundation/`: General compiler philosophy and principles. The AI reads these before running any specific compilation pass, the same way project foundations frame everything in topics.
+- `system/topics/`: Specific compiler operations — taxonomy generation, bridge summaries, context assembly. These contain the instructions the compiler's LLM passes follow.
+- `system/plans/`: Empty on init. Available for compiler migration plans (e.g., "migrate taxonomy strategy from v1 to v2").
+- `system/prompts/`: Default automation scripts for compiler-adjacent tasks — "audit taxonomy quality," "identify documentation gaps from heuristics.yaml," "refactor oversized chunks."
 
 The system/ directory is never included in published packages. The consumer's compiler uses their own system/ instructions to process all content uniformly — both local docs and installed packages. There is one set of compilation rules per project, not per package.
 
-System topics include:
-- `taxonomy-generation/`: How the AI generates aliases for extracted terms. Controls the alias quality and domain-specificity of the taxonomy.
-- `bridge-summaries/`: How the AI generates one-line semantic bridges at chunk boundaries. Controls the quality of continuity context between chunks.
-- `context-assembly/`: How the AI assembles foundation documents into the always-loaded context.md. Controls formatting, ordering, and prose quality of the compiled context.
+**Compilation behavior**: System .md files (excluding .spec.md) are compiled into `compiled/system/` with the `sys:` prefix and indexed in their own BM25 index (`bm25/system/`). System .spec.md files are compiled into `compiled/specs/` with the `spec:` prefix alongside all other reasoning chunks. The compiler also reads raw system/topics/ markdown files as LLM instructions at compile time — the compiled system/ chunks exist for query-time searchability, while the raw files drive compile-time behavior. These are not conflicting roles; one is an input to the pipeline, the other is an output.
 
 **Default system/ content scaffolded by `codectx init`:**
 
-`system/taxonomy-generation/README.md`:
+`system/topics/taxonomy-generation/README.md`:
 ```markdown
 # Taxonomy Alias Generation Instructions
 
@@ -188,7 +201,7 @@ term's specificity level. A top-level term like "Authentication" should have
 broader aliases than a leaf term like "JWT Refresh Token."
 ```
 
-`system/taxonomy-generation/README.spec.md`:
+`system/topics/taxonomy-generation/README.spec.md`:
 ```markdown
 # Taxonomy Generation Reasoning
 
@@ -205,7 +218,7 @@ from creating misleading connections. "Error handling" should not alias to
 searching for error handling does not want success response documentation.
 ```
 
-`system/bridge-summaries/README.md`:
+`system/topics/bridge-summaries/README.md`:
 ```markdown
 # Bridge Summary Generation Instructions
 
@@ -230,7 +243,7 @@ Bad: "The previous section was about JWT tokens." (too vague)
 Bad: "JWT Token Structure: this section covered the structure." (repeats heading)
 ```
 
-`system/context-assembly/README.md`:
+`system/topics/context-assembly/README.md`:
 ```markdown
 # Context Assembly Instructions
 
@@ -299,7 +312,15 @@ Every documentation file can have a corresponding `.spec.md` file that captures 
 
 **For AI-authored documentation**: The .spec.md files are particularly valuable when AI generates or maintains documentation. They record the reasoning that produced each decision, creating an audit trail that both humans and AI can reference during maintenance and updates.
 
-**Compilation behavior**: The compiler processes .spec.md files through the same pipeline as regular .md files (parsing, stripping, chunking, indexing) but routes them to separate output directories and indexes. Instruction chunks go to `compiled/objects/` with the `obj:` prefix. Reasoning chunks go to `compiled/specs/` with the `spec:` prefix. Each type gets its own BM25 index so they can be searched and scored independently. The manifest cross-references spec chunks to their parent instruction chunks via heading path alignment, so `codectx query` can surface relevant reasoning alongside instruction results without the two types diluting each other's relevance scores.
+**Compilation behavior**: The compiler routes content to three separate output directories and BM25 indexes based on source type:
+
+| Source | Compiled to | Prefix | BM25 Index |
+|--------|-------------|--------|------------|
+| `.md` files (non-system) | `compiled/objects/` | `obj:` | `bm25/objects/` |
+| `.spec.md` files (all sources) | `compiled/specs/` | `spec:` | `bm25/specs/` |
+| `system/**/*.md` files (non-spec) | `compiled/system/` | `sys:` | `bm25/system/` |
+
+Each type gets its own BM25 index so they can be searched and scored independently. The manifest cross-references spec chunks to their parent instruction chunks via heading path alignment, so `codectx query` can surface relevant reasoning alongside instruction results without the types diluting each other's relevance scores. System chunks are searchable separately so project queries don't get polluted with compiler meta-documentation.
 
 ### codectx.yaml
 
@@ -434,7 +455,7 @@ consumption:
 output_format: "markdown"  # markdown | xml_tags | plain
 ```
 
-**Note**: ai.yaml does not contain query translation overrides or alias mappings. All term aliasing is handled through the taxonomy, which is governed by the instructions in `docs/system/taxonomy-generation/`. If the taxonomy isn't producing the right aliases, the fix is to improve those instructions and recompile — not to maintain override maps in config files. One mechanism, one place, one pattern.
+**Note**: ai.yaml does not contain query translation overrides or alias mappings. All term aliasing is handled through the taxonomy, which is governed by the instructions in `docs/system/topics/taxonomy-generation/`. If the taxonomy isn't producing the right aliases, the fix is to improve those instructions and recompile — not to maintain override maps in config files. One mechanism, one place, one pattern.
 
 ### ai.local.yaml (always gitignored)
 
@@ -505,11 +526,12 @@ The compilation pipeline transforms raw markdown files into the set of artifacts
 
 ### Input Sources
 
-The compiler processes markdown from two locations:
+The compiler processes markdown from three locations:
 1. `docs/` — local project documentation (foundation, topics, plans, prompts)
-2. `.codectx/packages/` — installed dependency packages (active ones only per codectx.yaml)
+2. `docs/system/` — compiler documentation (foundation, topics, plans, prompts for the tooling itself)
+3. `.codectx/packages/` — installed dependency packages (active ones only per codectx.yaml)
 
-Both sources are processed through the identical pipeline. The `docs/system/` directory is NOT processed as documentation content — its files are read as instructions that govern how the compiler's AI passes behave.
+All three sources are processed through the same pipeline but routed to different output directories. Non-system .md files go to `compiled/objects/`, system .md files go to `compiled/system/`, and all .spec.md files go to `compiled/specs/`. Additionally, the compiler reads raw system/topics/ markdown files as LLM instructions during compile-time passes — compilation and indexing are not conflicting roles.
 
 ### Pipeline Stages
 
@@ -530,14 +552,14 @@ Stage 5: Extract Taxonomy
   Structural terms + POS extraction → candidate terms → deduplicated taxonomy tree
 
 Stage 6: LLM Augmentation
-  Taxonomy tree → LLM alias generation (using docs/system/taxonomy-generation/ instructions)
-  Chunk boundaries → LLM bridge summaries (using docs/system/bridge-summaries/ instructions)
+  Taxonomy tree → LLM alias generation (using docs/system/topics/taxonomy-generation/ instructions)
+  Chunk boundaries → LLM bridge summaries (using docs/system/topics/bridge-summaries/ instructions)
 
 Stage 7: Generate Manifests
   Chunks + taxonomy + relationships → manifest.yaml + metadata.yaml + hashes.yaml
 
 Stage 8: Assemble Context
-  Always-loaded foundations → context.md (using docs/system/context-assembly/ instructions)
+  Always-loaded foundations → context.md (using docs/system/topics/context-assembly/ instructions)
 
 Stage 9: Sync Entry Points
   context.md → CLAUDE.md / AGENTS.md / .cursorrules
@@ -548,7 +570,7 @@ Stage 10: Generate Heuristics
 
 ### Stage 1: Parse & Validate
 
-**Input**: All `.md` files under `docs/foundation/`, `docs/topics/`, `docs/plans/`, `docs/prompts/`, and active packages in `.codectx/packages/`.
+**Input**: All `.md` files under `docs/foundation/`, `docs/topics/`, `docs/plans/`, `docs/prompts/`, `docs/system/`, and active packages in `.codectx/packages/`.
 
 **Process**:
 - Parse each markdown file into an AST (abstract syntax tree)
@@ -640,11 +662,15 @@ Algorithm: Semantic Block Accumulation
    - Hash the chunk CONTENT (without context header)
    - ID format: [content-hash].[sequence-index]
    - Content-only hashing means header format changes don't invalidate cache
-   - Prefix with type: obj:[hash].[seq] for instruction chunks, spec:[hash].[seq] for reasoning chunks
+   - Prefix with type:
+     - obj:[hash].[seq] for instruction chunks
+     - spec:[hash].[seq] for reasoning chunks
+     - sys:[hash].[seq] for system/compiler documentation chunks
 
 6. Route chunk to the appropriate output directory:
-   - Chunks from .md files → .codectx/compiled/objects/[hash].[seq].md
-   - Chunks from .spec.md files → .codectx/compiled/specs/[hash].[seq].md
+   - Chunks from .md files (non-system) → .codectx/compiled/objects/[hash].[seq].md
+   - Chunks from .spec.md files (all sources) → .codectx/compiled/specs/[hash].[seq].md
+   - Chunks from system/**/*.md (non-spec) → .codectx/compiled/system/[hash].[seq].md
 ```
 
 **Chunk file format**:
@@ -680,25 +706,43 @@ The refresh token lifecycle was designed around the constraint that...
 
 The `parent_object` field in spec chunks links reasoning to its corresponding instruction chunk based on heading path alignment. This cross-reference is how `codectx query` surfaces relevant reasoning alongside instruction results.
 
+**System chunk file format**:
+```markdown
+<!-- codectx:meta
+id: sys:m3n4o5.01
+type: system
+source: system/topics/taxonomy-generation/README.md
+heading: Taxonomy Alias Generation Instructions > Rules
+chunk: 1 of 2
+tokens: 340
+-->
+
+Generate common abbreviations (e.g., "authentication" → "auth")...
+[system instruction content continues]
+```
+
+System chunks are searchable at query time so the AI or developer can ask "how does the compiler generate aliases" and get results. They are also read as raw instructions by the compiler during LLM passes — these two roles don't conflict.
+
 **Handling oversized atomic blocks**: A code block that's 2,000 tokens can't be split. It becomes a single oversized chunk, flagged in the manifest so the AI knows it exists and can budget accordingly. These are exceptions, not the norm — the overall scoring consistency is preserved.
 
 **Why this approach over heading-based chunking**: Someone can write a 5,000-word section under a single H2. Heading-based chunking produces one massive chunk that BM25 penalizes through length normalization even when it's highly relevant. Token-based accumulation with semantic block boundaries produces consistent chunk sizes across the entire corpus. When all chunks are approximately the same size, BM25's length normalization parameter `b` becomes nearly irrelevant — scoring becomes purely about term frequency and inverse document frequency. Every chunk competes on equal footing.
 
-**Output**: Instruction chunks in `.codectx/compiled/objects/` and reasoning chunks in `.codectx/compiled/specs/`, each with context headers, type markers, and token counts.
+**Output**: Instruction chunks in `.codectx/compiled/objects/`, reasoning chunks in `.codectx/compiled/specs/`, and system chunks in `.codectx/compiled/system/`, each with context headers, type markers, and token counts.
 
 ### Stage 4: Index (BM25)
 
-**Input**: All chunk files from Stage 3 (both objects/ and specs/).
+**Input**: All chunk files from Stage 3 (objects/, specs/, and system/).
 
 **Process**:
-- Build two separate BM25 indexes:
+- Build three separate BM25 indexes:
   - **Objects index**: Tokenize and index all instruction chunks from objects/
   - **Specs index**: Tokenize and index all reasoning chunks from specs/
+  - **System index**: Tokenize and index all system/compiler chunks from system/
 - Each index has its own IDF calculations scoped to its corpus, so term rarity is meaningful within each type
-- Apply BM25 scoring parameters from `preferences.yaml` (k1, b) to both indexes
-- Serialize to `.codectx/compiled/bm25/objects/` and `.codectx/compiled/bm25/specs/`
+- Apply BM25 scoring parameters from `preferences.yaml` (k1, b) to all indexes
+- Serialize to `.codectx/compiled/bm25/objects/`, `.codectx/compiled/bm25/specs/`, and `.codectx/compiled/bm25/system/`
 
-**Why separate indexes**: Instructions and reasoning use different language patterns. Reasoning docs use more explanatory terms ("because," "the goal is," "we chose") while instructions use directive terms ("use," "implement," "always"). Separate indexes mean each type scores within its own corpus. A reasoning chunk about JWT competes against other reasoning chunks, not against terse instruction chunks that would have very different term frequency distributions.
+**Why separate indexes**: Each content type uses different language patterns. Instructions use directive terms ("use," "implement," "always"). Reasoning uses explanatory terms ("because," "the goal is," "we chose"). System docs use meta/tooling terms ("compiler," "generate," "alias," "chunk"). Separate indexes mean each type scores within its own corpus — a system chunk about "how to generate authentication aliases" doesn't compete with an instruction chunk about "how to implement authentication."
 
 **Go packages for BM25** (evaluated during design):
 
@@ -764,7 +808,7 @@ func tokenize(text string) []string {
 
 **What gets indexed**: The chunk content text, minus the context header metadata. The context header is for AI navigation, not for search scoring. Both instruction and reasoning content feed into the shared taxonomy (Stage 5) since canonical vocabulary is shared across both types.
 
-**Output**: Two serialized BM25 indexes in `.codectx/compiled/bm25/objects/` and `.codectx/compiled/bm25/specs/`.
+**Output**: Three serialized BM25 indexes in `.codectx/compiled/bm25/objects/`, `.codectx/compiled/bm25/specs/`, and `.codectx/compiled/bm25/system/`.
 
 ### Stage 5: Extract Taxonomy
 
@@ -831,7 +875,7 @@ for _, ent := range doc.Entities() {
 **Process**: Two LLM tasks run during compilation. Both use the instructions in `docs/system/` to control the AI's behavior. This means the user can read, understand, and modify how these passes work by editing documentation files — the compiler's AI behavior is transparent and documentation-driven.
 
 **Task 1 — Alias generation**:
-- Read instructions from `docs/system/taxonomy-generation/README.md`
+- Read instructions from `docs/system/topics/taxonomy-generation/README.md`
 - For each canonical term in the taxonomy, generate likely aliases and variations
 - The LLM receives the term, its context (parent/child terms, example sentences), and the taxonomy-generation instructions
 - Batch efficiently: send 50-100 terms per API call, grouped by taxonomy branch
@@ -844,7 +888,7 @@ for _, ent := range doc.Entities() {
 - This is cheap, fast, and completely feasible
 
 **Task 2 — Boundary bridge summaries**:
-- Read instructions from `docs/system/bridge-summaries/README.md`
+- Read instructions from `docs/system/topics/bridge-summaries/README.md`
 - For each pair of adjacent chunks from the same source file, generate a one-line semantic bridge
 - The bridge summarizes what the previous chunk established that the next chunk assumes
 - Example: "Previous chunk defined the JWT refresh token lifecycle and validation rules"
@@ -864,7 +908,7 @@ for _, ent := range doc.Entities() {
 encoding: "cl100k_base"
 compiled_with: "claude-sonnet-4-20250514"
 compiled_at: "2025-03-09T12:00:00Z"
-instructions_hash: "abc123..."  # Hash of system/taxonomy-generation/ for cache invalidation
+instructions_hash: "abc123..."  # Hash of system/topics/taxonomy-generation/ for cache invalidation
 term_count: 12847
 
 terms:
@@ -917,9 +961,9 @@ terms:
 
 | Artifact | Instructions source | Hash field |
 |----------|-------------------|------------|
-| taxonomy.yaml | `system/taxonomy-generation/` | `instructions_hash` |
-| manifest.yaml | `system/bridge-summaries/` | `bridge_instructions_hash` |
-| context.md | `system/context-assembly/` | In metadata header |
+| taxonomy.yaml | `system/topics/taxonomy-generation/` | `instructions_hash` |
+| manifest.yaml | `system/topics/bridge-summaries/` | `bridge_instructions_hash` |
+| context.md | `system/topics/context-assembly/` | In metadata header |
 
 During incremental compilation, the compiler compares each artifact's stored instruction hash against the current hash of the corresponding system/ directory. If different, that artifact is fully regenerated regardless of whether source content changed. This ensures that editing system instructions always takes effect on the next compile — without it, the compiler would see unchanged source terms/chunks and skip the LLM pass, leaving stale output.
 
@@ -932,12 +976,13 @@ During incremental compilation, the compiler compares each artifact's stored ins
 **manifest.yaml** — Chunk navigation map:
 ```yaml
 # .codectx/compiled/manifest.yaml
-total_chunks: 4721
+total_chunks: 4850
 total_object_chunks: 3842
 total_spec_chunks: 879
+total_system_chunks: 129
 total_tokens: 2134500
 encoding: "cl100k_base"
-bridge_instructions_hash: "sha256:q7r8s9..."  # Hash of system/bridge-summaries/ — change triggers full bridge regeneration
+bridge_instructions_hash: "sha256:q7r8s9..."  # Hash of system/topics/bridge-summaries/ — change triggers full bridge regeneration
 
 objects:
   obj:a1b2c3.01:
@@ -978,6 +1023,20 @@ specs:
     tokens: 380
     terms: ["authentication", "jwt", "design-decision"]
     parent_object: "obj:a1b2c3.01"
+
+system:
+  sys:m3n4o5.01:
+    type: "system"
+    source: "system/topics/taxonomy-generation/README.md"
+    heading: "Taxonomy Alias Generation Instructions > Rules"
+    sequence: 1
+    total_in_file: 2
+    tokens: 340
+    terms: ["taxonomy", "alias", "generation", "keyword-extraction"]
+    adjacent:
+      previous: null
+      next: "sys:m3n4o5.02"
+    bridge_to_next: "Defined alias generation rules including abbreviations, shorthand, and formal alternatives"
 ```
 
 **metadata.yaml** — Document relationship graph:
@@ -1025,7 +1084,7 @@ system:
 
 ### Stage 8: Assemble Context
 
-**Input**: Always-loaded entries declared in `codectx.yaml` under `session.always_loaded`. These may be local foundation paths, specific topics from packages, or entire packages. Assembly instructions from `docs/system/context-assembly/`.
+**Input**: Always-loaded entries declared in `codectx.yaml` under `session.always_loaded`. These may be local foundation paths, specific topics from packages, or entire packages. Assembly instructions from `docs/system/topics/context-assembly/`.
 
 **Process**:
 - Resolve each always-loaded reference to its source markdown files:
@@ -1034,7 +1093,7 @@ system:
   - Bare package references (e.g., `company-standards@acme`) → resolve all docs from that package
 - Process through Stages 2-3 (strip and normalize) but do NOT chunk — keep as flowing prose
 - Assemble into a single coherent document in the order declared in `codectx.yaml`
-- The assembly may use the LLM pass (governed by `docs/system/context-assembly/` instructions) to smooth transitions between sections
+- The assembly may use the LLM pass (governed by `docs/system/topics/context-assembly/` instructions) to smooth transitions between sections
 - Tokenize the assembled output and compare against the declared budget
 - If over budget: emit warning identifying which entries are the largest consumers
 - Write to `.codectx/compiled/context.md`
@@ -1046,7 +1105,7 @@ system:
 
 > This document is automatically compiled from session context entries.
 > Source: docs/codectx.yaml session.always_loaded
-> Assembly instructions: docs/system/context-assembly/ (sha256:u1v2w3...)
+> Assembly instructions: docs/system/topics/context-assembly/ (sha256:u1v2w3...)
 > Token count: 28,450 / 30,000 budget
 > Compiled: 2025-03-09T12:00:00Z
 
@@ -1091,9 +1150,9 @@ They override any assumptions from your training data for this project.
 
 For any development task, search documentation before writing code:
 - Query: `codectx query "your search terms"`
-- Generate: `codectx generate "obj:chunk-id,obj:chunk-id,spec:chunk-id"`
+- Generate: `codectx generate "obj:chunk-id,obj:chunk-id,spec:chunk-id,sys:chunk-id"`
 
-Query returns ranked instruction and reasoning results.
+Query returns ranked instruction, reasoning, and system results.
 Generate assembles selected chunks into a single readable document.
 Read the returned files for task-specific guidance.
 
@@ -1126,11 +1185,12 @@ sources:
 
 # Chunk output summary
 chunks:
-  total: 4721
+  total: 4850
   objects: 3842
   specs: 879
+  system: 129
   total_tokens: 2134500
-  average_tokens: 452
+  average_tokens: 440
   min_tokens: 203
   max_tokens: 1847
   oversized: 4  # Chunks exceeding max_tokens due to indivisible blocks
@@ -1172,6 +1232,10 @@ bm25:
     indexed_terms: 12847
     indexed_chunks: 879
     average_chunk_length: 433
+  system:
+    indexed_terms: 3210
+    indexed_chunks: 129
+    average_chunk_length: 428
 
 # Incremental compilation details
 incremental:
@@ -1197,7 +1261,7 @@ timing:
   sync_entry_points: 1.4
 ```
 
-**Purpose**: Gives both humans and AI a complete picture of the compiled state. The AI can read heuristics.yaml to orient itself — "this project has 4,721 chunks across 342 files with 12,847 taxonomy terms, session context is at 95% of budget" — before it begins querying. The timing breakdown helps identify pipeline bottlenecks. The incremental details show what was skipped and why. The session summary surfaces budget pressure before it becomes a problem.
+**Purpose**: Gives both humans and AI a complete picture of the compiled state. The AI can read heuristics.yaml to orient itself — "this project has 4,850 chunks across 342 files with 12,847 taxonomy terms, session context is at 95% of budget" — before it begins querying. The timing breakdown helps identify pipeline bottlenecks. The incremental details show what was skipped and why. The session summary surfaces budget pressure before it becomes a problem.
 
 ---
 
@@ -1255,19 +1319,21 @@ When all chunks are approximately the same length, `|document| / avgdl` approach
    Original: "login failures"
    Expanded: "authentication login sign-in auth error-handling failures errors"
 
-4. Run expanded query against BOTH BM25 indexes
+4. Run expanded query against ALL THREE BM25 indexes
    - Objects index → ranked instruction chunk IDs with scores
    - Specs index → ranked reasoning chunk IDs with scores
+   - System index → ranked system/compiler chunk IDs with scores
    - Each index returns up to results_count results (default 10, configurable in ai.yaml)
    - Override per-call with: codectx query --top 20 "login failures"
 
 5. Return grouped results to the AI with manifest metadata
    - Instructions section: ranked object chunks with scores, sources, token counts
    - Reasoning section: ranked spec chunks with scores, sources, token counts
+   - System section: ranked system chunks with scores, sources, token counts
    - Related section: adjacent chunks not scored but potentially useful
 
 6. AI selects which chunks to request via codectx generate
-   - Can mix obj: and spec: chunks in a single generate call
+   - Can mix obj:, spec:, and sys: chunks in a single generate call
    - Makes token-budget-aware decisions using reported token counts
 ```
 
@@ -1291,7 +1357,7 @@ The taxonomy follows a SKOS-inspired data model (W3C Simple Knowledge Organizati
 
 ### Transparent AI Instructions
 
-The LLM alias generation pass is governed by `docs/system/taxonomy-generation/README.md`. This file ships as a sensible default on `codectx init` and is fully editable by the user.
+The LLM alias generation pass is governed by `docs/system/topics/taxonomy-generation/README.md`. This file ships as a sensible default on `codectx init` and is fully editable by the user.
 
 If the taxonomy isn't producing the right aliases, the fix is to improve these instructions and recompile. There are no override maps, no secondary alias configurations, no hidden alias sources. One mechanism, one place, one pattern.
 
@@ -1307,7 +1373,7 @@ Covered in detail in Phase 3, Stages 5 and 6. Summary:
 4. **Deduplication**: merge, score by frequency, filter by threshold
 5. **LLM alias generation**: batched by taxonomy branch, governed by system/ instructions
 
-The taxonomy is built from both instruction (.md) and reasoning (.spec.md) content. Reasoning docs often use the same canonical terms in explanatory context, which can improve alias generation — the LLM sees terms used in both instructional and explanatory sentences, producing broader alias coverage.
+The taxonomy is built from all three content types — instruction (.md), reasoning (.spec.md), and system (system/**/*.md). Reasoning docs often use the same canonical terms in explanatory context, and system docs use terms in meta/tooling context. This breadth improves alias generation — the LLM sees terms used in instructional, explanatory, and tooling sentences, producing broader alias coverage.
 
 ---
 
@@ -1324,7 +1390,7 @@ Initialize a new documentation package in the current directory. Defaults to `do
 Run the full compilation pipeline. Supports `--incremental` flag (default: true) to only reprocess changed files. Generates `.codectx/compiled/heuristics.yaml` with full diagnostic report. Prints a summary to stdout:
 
 ```
-Compiled: 342 files → 4,721 chunks (2,134,500 tokens)
+Compiled: 342 files → 4,850 chunks (2,134,500 tokens)
 Taxonomy: 12,847 terms, 48,203 aliases
 Session: 28,450 / 30,000 tokens (94.8%)
 Changes: 3 new, 7 modified, 332 unchanged
@@ -1335,11 +1401,11 @@ Time: 47.3s (22.1s LLM augmentation)
 Regenerate CLAUDE.md / AGENTS.md / .cursorrules from the current compiled state. Run automatically at the end of `codectx compile`, or standalone after changing `ai.yaml`.
 
 **`codectx query "<search terms>"`**
-Search the compiled documentation. Searches both the objects and specs BM25 indexes and returns results grouped by type. Supports `--top N` flag to override the default `results_count` from ai.yaml.
+Search the compiled documentation. Searches all three BM25 indexes (objects, specs, system) and returns results grouped by type. Supports `--top N` flag to override the default `results_count` from ai.yaml.
 
 Internally:
 1. Loads taxonomy and translates query terms
-2. Runs expanded query against both BM25 indexes (objects and specs)
+2. Runs expanded query against all three BM25 indexes (objects, specs, system)
 3. Returns ranked results grouped by type with manifest metadata
 
 Output format (returned to the AI):
@@ -1364,18 +1430,22 @@ Reasoning:
 2. [score: 4.21] spec:j1k2l3.01 — Token Validation Strategy
    Source: docs/foundation/error-handling/README.spec.md (chunk 1/2, 290 tokens)
 
+System:
+1. [score: 3.12] sys:m3n4o5.01 — Taxonomy Alias Generation Instructions > Rules
+   Source: system/topics/taxonomy-generation/README.md (chunk 1/2, 340 tokens)
+
 Related chunks (adjacent to top instruction results, not scored):
   obj:a1b2c3.02 — Authentication > JWT Tokens > Token Structure
   obj:a1b2c3.05 — Authentication > JWT Tokens > Error Handling
 ```
 
 **`codectx generate "<chunk-id>,<chunk-id>,<chunk-id>"`**
-Assemble specific chunks into a single coherent reading document. Accepts both `obj:` and `spec:` prefixed chunk IDs in a single call, assembling a unified document with clear type demarcation.
+Assemble specific chunks into a single coherent reading document. Accepts `obj:`, `spec:`, and `sys:` prefixed chunk IDs in a single call, assembling a unified document with clear type demarcation.
 
 Internally:
-1. Load requested chunks (from objects/ or specs/ based on prefix)
+1. Load requested chunks (from objects/, specs/, or system/ based on prefix)
 2. Sort into natural sequence order (even if requested out of order)
-3. Group by type: instruction content first, reasoning content after
+3. Group by type: instruction content first, system content second, reasoning content last
 4. Restore heading hierarchy for document coherence
 5. Insert bridge summaries at boundaries where chunks from the same file are non-adjacent
 6. Format according to `output_format` in `ai.yaml`
@@ -1489,7 +1559,7 @@ Recommendation: Re-run stored queries to refresh context with updated documentat
 
 ### Generated File Format
 
-When `codectx generate` assembles chunks, the output is a coherent reading document with instruction and reasoning content clearly separated:
+When `codectx generate` assembles chunks, the output is a coherent reading document with content grouped by type: Instructions first, then System (if any `sys:` chunks requested), then Reasoning. Each section is clearly demarcated so the AI understands what is actionable, what is tooling context, and what is explanatory reasoning:
 
 ```markdown
 <!-- codectx:generated
@@ -1782,7 +1852,7 @@ The `source` field distinguishes direct dependencies from transitive ones so the
 
 The compiler itself is the quality contract. A package that compiles cleanly with comprehensive taxonomy coverage, well-structured chunks, and complete manifests is a good package. A package with sparse taxonomy, oversized chunks, and validation warnings is visible as lower quality through compilation reports. The ecosystem self-corrects as publishers learn what produces good compiled output.
 
-No enforcement of cross-package terminology consistency is needed. Each package's content feeds into the single project-level taxonomy. The consumer's `system/taxonomy-generation/` instructions govern how aliases are generated for all content uniformly.
+No enforcement of cross-package terminology consistency is needed. Each package's content feeds into the single project-level taxonomy. The consumer's `system/topics/taxonomy-generation/` instructions govern how aliases are generated for all content uniformly.
 
 ---
 
@@ -1846,7 +1916,8 @@ No enforcement of cross-package terminology consistency is needed. Each package'
 | Build cache | No separate cache/ directory | Dedicated cache/ directory | Compiled artifacts serve as their own cache. taxonomy.yaml persists aliases, manifest.yaml persists bridges, hashes.yaml tracks file changes. No intermediate artifacts needed. |
 | Package contents | Pure content only (foundation, topics, plans, prompts) | Include system/ instructions and compiler config | One set of compilation rules per project. Consumer's compiler processes all content uniformly. Package authoring stays simple. |
 | Query results count | Configurable results_count in ai.yaml with --top CLI override | Vague "conservative"/"aggressive" retrieval_strategy | Concrete, configurable, overridable per-call. The AI or developer controls exactly how many results they get. Default 10. |
-| Chunk type separation | Separate objects/ and specs/ directories with independent BM25 indexes | Mixed chunks in single directory and index | Instructions and reasoning use different language patterns with different term frequency distributions. Separate indexes keep scoring clean within each type. Enables independent reasoning-only searches. |
+| Chunk type separation | Three separate directories (objects/, specs/, system/) with independent BM25 indexes | Mixed chunks in single directory and index | Instructions, reasoning, and system docs use different language patterns with different term frequency distributions. Three indexes keep scoring clean within each type. Enables independent searches per type. |
+| System documentation compilation | system/ uses standard subdirectory layout (foundation/, topics/, plans/, prompts/) and compiles into its own chunks and BM25 index | system/ only read as raw instructions, not indexed | Makes compiler documentation searchable through the same mechanism as everything else. The compiler can read raw files as instructions at compile time AND the compiled chunks are searchable at query time — no conflict. |
 | Spec chunk surfacing | Shown as separate "Reasoning" section in query results | Pre-linked to parent instruction chunks only | Independent BM25 search over specs enables reasoning-focused queries like "why do we use repository pattern" that wouldn't match instruction content. |
 | Config file naming | `codectx.yaml` and `codectx.lock` | `package.yaml` and `package.lock` | Tool-named files are self-identifying in directory listings and PR diffs. Avoids collision with other tools that claim the `package.*` namespace. Follows convention of docker-compose.yaml, tsconfig.json, Cargo.toml. |
 | Dependency lock file | `codectx.lock` checked into version control | No lock file, or lock file gitignored | Deterministic reproducibility. Two developers running `codectx install` on the same codectx.yaml get identical package versions. Same pattern as package-lock.json, Cargo.lock, Gemfile.lock. |
