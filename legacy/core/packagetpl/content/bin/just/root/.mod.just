@@ -1,7 +1,0 @@
-import "../settings.just"
-import "add.just"
-import "done.just"
-import "install.just"
-import "release.just"
-import "save.just"
-import "search.just"
