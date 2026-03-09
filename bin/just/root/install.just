@@ -1,6 +1,7 @@
 # Install system packages.
-[group('root')]
+[group("root")]
 install:
+  #!/usr/bin/env bash
   echo "Installing, please wait..."
   devbox install
   lefthook install

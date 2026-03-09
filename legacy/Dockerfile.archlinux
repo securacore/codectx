@@ -1,0 +1,31 @@
+FROM archlinux/archlinux:latest
+
+RUN echo 'DisableSandbox' >> /etc/pacman.conf
+
+RUN \
+  pacman -Syu --noconfirm && \
+  pacman -S --noconfirm \
+  git \
+  go \
+  base-devel
+
+RUN \
+  useradd -m -G wheel -s /bin/bash user && \
+  echo "user ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+RUN \
+  mkdir -p \
+  /home/user/project \
+  /home/user/go \
+  /home/user/.cache/go-build && \
+  chown -R user:user /home/user
+
+USER user
+WORKDIR /home/user
+
+ENV HOME=/home/user
+ENV USER=user
+ENV GOPATH=/home/user/go
+ENV PATH="/home/user/go/bin:${PATH}"
+
+CMD [ "/bin/bash" ]

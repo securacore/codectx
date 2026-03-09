@@ -17,7 +17,7 @@ builds:
 
 archives:
   - formats: [tar.gz]
-    name_template: "codectx_{{.Version}}_{{.Os}}_{{.Arch}}"
+    name_template: "codectx.{{.Version}}.{{.Os}}.{{.Arch}}"
 
 checksum:
   name_template: "checksums.txt"
@@ -30,4 +30,3 @@ changelog:
       - "^docs:"
       - "^test:"
       - "^chore:"
-

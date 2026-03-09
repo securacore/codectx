@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Release script for codectx.
+# Creates a semver git tag and pushes it to trigger the release pipeline.
+#
+# Usage:
+#   bin/release          # bump patch (v0.1.0 -> v0.1.1)
+#   bin/release patch    # bump patch (v0.1.0 -> v0.1.1)
+#   bin/release minor    # bump minor (v0.1.0 -> v0.2.0)
+#   bin/release major    # bump major (v0.1.0 -> v1.0.0)
+
+BUMP="${1:-patch}"
+
+# Validate bump type.
+case "$BUMP" in
+  patch|minor|major) ;;
+  *)
+    echo "error: invalid bump type '$BUMP' (must be patch, minor, or major)" >&2
+    exit 1
+    ;;
+esac
+
+# Require clean working tree.
+if [ -n "$(git status --porcelain)" ]; then
+  echo "error: working tree is dirty — commit or stash changes first" >&2
+  exit 1
+fi
+
+# Require main branch.
+BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+if [ "$BRANCH" != "main" ]; then
+  echo "error: releases must be created from the main branch (currently on '$BRANCH')" >&2
+  exit 1
+fi
+
+# Ensure local main is up to date with remote.
+git fetch origin main --quiet
+LOCAL="$(git rev-parse HEAD)"
+REMOTE="$(git rev-parse origin/main)"
+if [ "$LOCAL" != "$REMOTE" ]; then
+  echo "error: local main is not up to date with origin/main" >&2
+  echo "  local:  $LOCAL" >&2
+  echo "  remote: $REMOTE" >&2
+  echo "  run: git pull origin main" >&2
+  exit 1
+fi
+
+# Get latest tag or default to v0.0.0.
+LATEST="$(git tag --sort=-v:refname --list 'v*' | head -n 1)"
+if [ -z "$LATEST" ]; then
+  LATEST="v0.0.0"
+fi
+
+# Parse version components.
+VERSION="${LATEST#v}"
+IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+
+# Bump.
+case "$BUMP" in
+  patch)
+    PATCH=$((PATCH + 1))
+    ;;
+  minor)
+    MINOR=$((MINOR + 1))
+    PATCH=0
+    ;;
+  major)
+    MAJOR=$((MAJOR + 1))
+    MINOR=0
+    PATCH=0
+    ;;
+esac
+
+NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+
+# Check tag doesn't already exist.
+if git rev-parse "$NEW_VERSION" >/dev/null 2>&1; then
+  echo "error: tag $NEW_VERSION already exists" >&2
+  exit 1
+fi
+
+# Confirm with user.
+echo "Release: $LATEST -> $NEW_VERSION ($BUMP)"
+echo ""
+printf "Push tag %s to origin? [y/N] " "$NEW_VERSION"
+read -r CONFIRM
+case "$CONFIRM" in
+  y|Y|yes|YES) ;;
+  *)
+    echo "Aborted."
+    exit 0
+    ;;
+esac
+
+# Update version in package manifest.
+sed -i '' "s/^version: .*/version: ${MAJOR}.${MINOR}.${PATCH}/" docs/manifest.yml
+git add docs/manifest.yml
+git commit -m "release: ${NEW_VERSION}"
+git push origin main
+
+# Create annotated tag and push.
+git tag -a "$NEW_VERSION" -m "$NEW_VERSION"
+git push origin "$NEW_VERSION"
+
+echo ""
+echo "Tag $NEW_VERSION pushed. Release pipeline will run at:"
+echo "  https://github.com/securacore/codectx/actions"

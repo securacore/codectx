@@ -8,4 +8,4 @@ set shell := ["devbox", "run", "-q", "--"]
 # "claude" or "opencode". Changing this changes
 # which bin is used to perform actions under the
 # bin/just/ai/ module.
-ai_bin := "opencode"
+codectx_ai_bin := env("CODECTX_AI_BIN", "opencode")

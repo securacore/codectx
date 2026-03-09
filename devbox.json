@@ -1,10 +1,12 @@
 {
   "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.16.0/.schema/devbox.schema.json",
   "packages": [
+    "jq@latest",
     "go@latest",
-    "docker@latest",
-    "golangci-lint@latest",
-    "lefthook@latest"
+    "lefthook@latest",
+    "fzf@latest",
+    "lua@latest",
+    "luarocks@latest"
   ],
   "shell": {
     "init_hook": ["echo 'Welcome to devbox!' > /dev/null"],

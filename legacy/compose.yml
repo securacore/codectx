@@ -1,0 +1,20 @@
+services:
+  archlinux:
+    image: codectx
+    build:
+      dockerfile: Dockerfile.archlinux
+    user: user
+    working_dir: /workspace
+    command: sleep infinity
+    tty: true
+    stdin_open: true
+    volumes:
+      - .:/workspace:ro
+      - ./go.mod:/workspace/go.mod:rw
+      - ./go.sum:/workspace/go.sum:rw
+      - go-cache:/home/user/go
+      - go-build-cache:/home/user/.cache/go-build
+
+volumes:
+  go-cache: {}
+  go-build-cache: {}

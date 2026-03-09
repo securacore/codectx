@@ -488,3 +488,7 @@ cargo.lock
 pubspec.lock
 mix.lock
 rebar.lock
+/luarocks
+/lua
+/lua_modules
+/.luarocks

@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Codectx Configuration",
+  "description": "Schema for codectx.yml. Validates the project-level configuration that declares documentation package dependencies, activation state, and build settings. This file is the sole source of truth for a project's documentation setup.",
+  "type": "object",
+  "required": ["name", "packages"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Project name."
+    },
+    "type": {
+      "type": "string",
+      "enum": ["project", "package"],
+      "default": "project",
+      "description": "Project type. 'package' enables package authoring mode where the package/ directory is the primary target for publishable documentation."
+    },
+    "config": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Build and directory configuration.",
+      "properties": {
+        "docs_dir": {
+          "type": "string",
+          "default": "docs",
+          "description": "Documentation source directory, relative to the repository root."
+        },
+        "output_dir": {
+          "type": "string",
+          "default": ".codectx",
+          "description": "Compiled documentation output directory, relative to the repository root."
+        }
+      }
+    },
+    "packages": {
+      "type": "array",
+      "description": "Documentation package dependencies.",
+      "items": {
+        "$ref": "#/$defs/packageDependency"
+      }
+    }
+  },
+  "$defs": {
+    "packageDependency": {
+      "type": "object",
+      "required": ["name", "author", "version"],
+      "additionalProperties": false,
+      "description": "A documentation package dependency with version constraint and activation state.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Package name."
+        },
+        "author": {
+          "type": "string",
+          "description": "Package author/creator namespace."
+        },
+        "version": {
+          "type": "string",
+          "description": "Semver version range (e.g., '^1.0.0', '~2.1.0', '1.0.0')."
+        },
+        "source": {
+          "type": "string",
+          "description": "Git repository URL. Optional. Inferred from name and author when omitted."
+        },
+        "active": {
+          "description": "Activation state. Controls which parts of the package are included in the compiled output. Defaults to 'none' when omitted.",
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": ["all", "none"],
+              "description": "'all' activates every entry in the package. 'none' installs the package but activates nothing."
+            },
+            {
+              "$ref": "#/$defs/activationMap"
+            }
+          ]
+        }
+      }
+    },
+    "activationMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Granular activation by section. Each field lists the IDs to activate from that section. Omitted sections default to no activation.",
+      "properties": {
+        "foundation": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "IDs of foundation entries to activate from this package."
+        },
+        "application": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "IDs of application entries to activate from this package."
+        },
+        "topics": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "IDs of topic entries to activate from this package."
+        },
+        "prompts": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "IDs of prompt entries to activate from this package."
+        },
+        "plans": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "IDs of plan entries to activate from this package."
+        }
+      }
+    }
+  }
+}

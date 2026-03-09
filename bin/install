@@ -75,7 +75,7 @@ main() {
   VERSION_TAG="$(resolve_version)"
   VERSION="${VERSION_TAG#v}"
 
-  ARCHIVE="codectx_${VERSION}_${OS}_${ARCH}.tar.gz"
+  ARCHIVE="codectx.${VERSION}.${OS}.${ARCH}.tar.gz"
   BASE_URL="https://github.com/${REPO}/releases/download/${VERSION_TAG}"
 
   INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"

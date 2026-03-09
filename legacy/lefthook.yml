@@ -1,0 +1,12 @@
+pre-commit:
+  parallel: true
+  commands:
+    lint:
+      run: golangci-lint run ./...
+    test:
+      run: go test ./... -count=1
+
+pre-push:
+  commands:
+    build:
+      run: go build -o /dev/null .

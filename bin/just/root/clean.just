@@ -1,10 +1,9 @@
 # Clean the repo into it's initial state.
-[group('root')]
-[arg('destroy', long='destroy', value='true')]
+[group("root")]
+[arg("destroy", long="destroy", value="true")]
 clean destroy="false":
   #!/usr/bin/env bash
   targets=(\
-    ".next" \
     ".devbox" \
     "node_modules" \
     ".DS_Store" \
@@ -27,4 +26,3 @@ clean destroy="false":
   fi
 
   echo "Done"
-

@@ -1,0 +1,231 @@
+# Documentation Metadata
+#
+# Manifest for documentation governance and portability. All paths are relative
+# to the docs/ directory. IDs are unique across all sections and form a shared
+# namespace used by depends_on and required_by.
+#
+# Symmetry rule: every entry in depends_on must have a corresponding entry in
+# required_by on the target, and vice versa. Both directions are maintained
+# explicitly for instant AI lookup without graph traversal.
+#
+# Loading: foundation entries have a "load" field that controls when they are
+# loaded into AI context. "always" means every session. "documentation" means
+# only when the task involves writing, editing, reviewing, or restructuring
+# files under docs/.
+#
+# Validated by: docs/metadata.schema.json
+# Conventions: docs/foundation/metadata.md
+
+version: "1.0"
+
+foundation:
+  - id: philosophy
+    path: foundation/philosophy/README.md
+    load: always
+    description: Guiding principles for decision-making
+    depends_on: []
+    required_by:
+      - documentation
+      - specs
+      - react
+      - nextjs
+      - typescript
+      - just
+      - tailwind
+      - elysiajs
+      - go
+      - product
+
+  - id: markdown
+    path: foundation/markdown/README.md
+    load: documentation
+    description: Markdown formatting conventions
+    depends_on: []
+    required_by:
+      - ai-authoring
+      - review-standards
+      - documentation
+
+  - id: documentation
+    path: foundation/documentation/README.md
+    load: documentation
+    description: Documentation management and strategy
+    depends_on:
+      - philosophy
+      - markdown
+    required_by:
+      - specs
+      - ai-authoring
+      - review-standards
+      - metadata
+
+  - id: specs
+    path: foundation/specs/README.md
+    spec: foundation/specs/spec/README.md
+    load: documentation
+    description: Specification template and process
+    depends_on:
+      - documentation
+      - philosophy
+    required_by:
+      - review-standards
+      - react
+      - nextjs
+      - typescript
+      - just
+      - tailwind
+      - elysiajs
+      - go
+      - product
+
+  - id: ai-authoring
+    path: foundation/ai-authoring/README.md
+    load: documentation
+    description: Cross-model AI authoring conventions
+    depends_on:
+      - markdown
+      - documentation
+    required_by:
+      - review-standards
+
+  - id: review-standards
+    path: foundation/review-standards/README.md
+    load: documentation
+    description: Post-update documentation review checklist
+    depends_on:
+      - ai-authoring
+      - markdown
+      - documentation
+      - specs
+    required_by:
+      - docs-audit
+
+  - id: metadata
+    path: foundation/metadata/README.md
+    load: documentation
+    description: Metadata manifest conventions and maintenance
+    depends_on:
+      - documentation
+    required_by: []
+
+product:
+  - id: product
+    path: product/README.md
+    load: always
+    description: Product architecture and design
+    spec: product/spec/README.md
+    depends_on:
+      - philosophy
+      - specs
+    required_by: []
+
+topics:
+  - id: react
+    path: topics/react/README.md
+    description: React component conventions and patterns
+    spec: topics/react/spec/README.md
+    depends_on:
+      - typescript
+      - philosophy
+      - specs
+    required_by:
+      - nextjs
+    files:
+      - topics/react/components.md
+      - topics/react/composable-components.md
+      - topics/react/file-organization.md
+      - topics/react/hooks.md
+      - topics/react/state.md
+      - topics/react/error-handling.md
+      - topics/react/memoization.md
+
+  - id: nextjs
+    path: topics/nextjs/README.md
+    description: Next.js App Router conventions
+    spec: topics/nextjs/spec/README.md
+    depends_on:
+      - react
+      - typescript
+      - philosophy
+      - specs
+    required_by:
+      - elysiajs
+    files:
+      - topics/nextjs/routing.md
+      - topics/nextjs/colocation.md
+      - topics/nextjs/server-client.md
+      - topics/nextjs/server-actions.md
+      - topics/nextjs/metadata.md
+      - topics/nextjs/middleware.md
+      - topics/nextjs/configuration.md
+
+  - id: typescript
+    path: topics/typescript/README.md
+    description: TypeScript conventions and standards
+    spec: topics/typescript/spec/README.md
+    depends_on:
+      - philosophy
+      - specs
+    required_by:
+      - react
+      - nextjs
+      - just
+      - elysiajs
+    files: []
+
+  - id: elysiajs
+    path: topics/elysiajs/README.md
+    description: ElysiaJS data-layer API conventions
+    spec: topics/elysiajs/spec/README.md
+    depends_on:
+      - philosophy
+      - specs
+      - typescript
+      - nextjs
+    required_by: []
+    files: []
+
+  - id: just
+    path: topics/just/README.md
+    description: Command runner conventions and structure
+    spec: topics/just/spec/README.md
+    depends_on:
+      - philosophy
+      - specs
+      - typescript
+    required_by: []
+    files: []
+
+  - id: tailwind
+    path: topics/tailwind/README.md
+    description: Tailwind CSS 4 conventions and design token system
+    spec: topics/tailwind/spec/README.md
+    depends_on:
+      - philosophy
+      - specs
+    required_by: []
+    files: []
+
+  - id: go
+    path: topics/go/README.md
+    description: Go CLI conventions and patterns
+    spec: topics/go/spec/README.md
+    depends_on:
+      - philosophy
+      - specs
+    required_by: []
+    files: []
+
+prompts:
+  - id: docs-audit
+    path: prompts/docs-audit/README.md
+    description: Audit documentation against review standards
+    depends_on:
+      - review-standards
+    required_by: []
+
+  - id: save
+    path: prompts/save/README.md
+    description: Session state persistence
+    depends_on: []
+    required_by: []
