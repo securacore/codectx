@@ -371,7 +371,9 @@ dependencies:
     active: false  # Inactive — excluded from compiled output
 
 # Package manager settings
-registry: "https://registry.codectx.dev"
+# Packages are GitHub repos using the codectx-[name] naming convention
+# e.g., react-patterns@community resolves to github.com/community/codectx-react-patterns
+registry: "github.com"
 ```
 
 **Published package codectx.yaml** — minimal identity and dependency declaration:
@@ -896,6 +898,8 @@ for _, ent := range doc.Entities() {
 - Batched similarly to alias generation
 
 **Caching**: Both outputs are stored in taxonomy.yaml (aliases) and manifest.yaml (bridges). On incremental builds, only new or changed terms/boundaries are reprocessed. The compiled artifacts serve as their own cache.
+
+**Graceful degradation**: The LLM augmentation pass is optional. If it fails (API unavailable, rate limited, misconfigured), or if `llm_alias_generation` is set to false in preferences.yaml, the compilation pipeline completes successfully. The taxonomy will contain only structurally-extracted and POS-extracted terms without LLM-generated aliases — reduced alias coverage but still functional. Bridge summaries will be empty, and the manifest's `bridge_to_next` fields will be null — the AI loses continuity hints but adjacency references still work for navigation. This ensures the compilation never fails due to an external API dependency.
 
 **Why no separate cache/ directory**: The taxonomy.yaml *is* the persisted result of alias generation. The manifest.yaml *is* the persisted result of bridge generation. If a canonical term hasn't changed (its source chunks haven't changed), the existing aliases are retained and the LLM call is skipped. No intermediate cache artifacts needed.
 
@@ -1465,7 +1469,7 @@ Related chunks not included:
 ```
 
 **`codectx install`**
-Install packages declared in `codectx.yaml`. If `codectx.lock` exists and `codectx.yaml` hasn't changed, installs from the lock file (fast, deterministic). If `codectx.yaml` changed (new dependency, version bump), re-resolves affected entries and updates the lock. Resolves transitive dependencies, downloads from registry, extracts to `.codectx/packages/`.
+Install packages declared in `codectx.yaml`. Resolves `[name]@[org]` references to `github.com/[org]/codectx-[name]`, resolves version tags, clones or fetches to `.codectx/packages/`. If `codectx.lock` exists and `codectx.yaml` hasn't changed, installs from the lock file using pinned commit SHAs (fast, deterministic). If `codectx.yaml` changed, re-resolves affected entries and updates the lock. Resolves transitive dependencies.
 
 **`codectx update`**
 Re-resolve all dependencies to their latest compatible versions, update `codectx.lock`, download any changed packages, and recompile if package content changed. This is the command for pulling in newer versions of dependencies — the user should never need flags on `install` for this.
@@ -1474,6 +1478,7 @@ Output:
 ```
 Resolving dependencies...
   react-patterns@community: 2.3.1 → 2.4.0 (updated)
+    → github.com/community/codectx-react-patterns@v2.4.0
   company-standards@acme: 2.0.0 (unchanged)
   tailwind-guide@designteam: 2.1.0 (unchanged)
   javascript-fundamentals@community: 1.3.0 (transitive, unchanged)
@@ -1487,6 +1492,31 @@ Taxonomy: 12,921 terms, 48,890 aliases
 Session: 28,450 / 30,000 tokens (94.8%)
 Time: 31.2s
 ```
+
+**`codectx search "<query>"`**
+Search for packages on GitHub using the `codectx-*` naming convention via the GitHub API.
+
+Output:
+```
+Search results for: "react patterns"
+
+1. react-patterns@community (v2.4.0) ★ 342
+   github.com/community/codectx-react-patterns
+   React component and hook patterns for AI-driven development
+
+2. react-testing@community (v1.1.0) ★ 89
+   github.com/community/codectx-react-testing
+   Testing patterns and strategies for React applications
+
+3. react-nextjs@webteam (v3.0.2) ★ 156
+   github.com/webteam/codectx-react-nextjs
+   Next.js and React integration patterns
+
+Install with: codectx install react-patterns@community:latest
+```
+
+**`codectx publish`**
+Publish the current package to GitHub. Reads codectx.yaml for name, org, and version. Validates directory structure. Tags the current commit as `v[version]` and pushes to `github.com/[org]/codectx-[name]`. The repo must already exist on GitHub — `codectx publish` handles tagging and validation, not repo creation.
 
 **`codectx session add <reference>`**
 Add a local path or package reference to the always-loaded session context. Modifies `session.always_loaded` in `codectx.yaml`. Reports the token cost of the added entry and the new total against the budget.
@@ -1769,30 +1799,47 @@ No `system/` directory. No `.codectx/` directory. No compiler configuration. No 
 
 This means package authoring has near-zero friction. Write markdown. Organize it into the standard directories. Publish. You don't need to understand the compilation pipeline, BM25, or taxonomy extraction. The quality of the compiled output depends on the structure and content of the markdown itself.
 
+### Registry: GitHub
+
+Packages are public GitHub repositories using the `codectx-[name]` naming convention. No custom registry infrastructure is needed — GitHub provides hosting, versioning (git tags), discovery (API search), and built-in quality signals (stars, issues, commit activity).
+
+**Naming convention**: A package named `react-patterns` under org `community` lives at `github.com/community/codectx-react-patterns`. The `codectx-` prefix is the namespace convention that makes packages discoverable. The dependency reference `react-patterns@community` maps to this repo automatically.
+
+**Versioning**: Git tags are versions. Tag `v2.3.1` on the repo corresponds to version `2.3.1` in codectx.yaml. The `latest` reference resolves to the most recent semver tag.
+
+**Discovery**: The GitHub search API finds all repos matching the `codectx-*` pattern. `codectx search "react patterns"` would query the API and return matching packages with their descriptions, stars, and latest versions.
+
 ### Publishing and Consuming
 
 **Publishing**:
+A package is just a GitHub repo with the `codectx-` prefix that contains the standard directory structure and a codectx.yaml. Publishing is creating or updating the repo and tagging a version.
+
 ```bash
 codectx publish
 # Reads codectx.yaml for name, org, version
 # Validates directory structure
-# Publishes source markdown + codectx.yaml to registry
-# Consumers compile locally with their own settings
+# Tags the current commit as v[version]
+# Pushes to github.com/[org]/codectx-[name]
+# Consumers install by referencing [name]@[org]
 ```
 
 **Consuming**:
 ```yaml
 # In codectx.yaml
+# react-patterns@community → github.com/community/codectx-react-patterns
 dependencies:
   react-patterns@community:latest:
+    active: true
+  company-standards@acme:2.0.0:
     active: true
 ```
 
 ```bash
 codectx install
-# Resolves dependencies from registry
-# Downloads source markdown to .codectx/packages/
-# Generates or updates codectx.lock with resolved versions
+# Resolves [name]@[org] to github.com/[org]/codectx-[name]
+# Resolves version tags (latest → highest semver tag)
+# Clones/fetches to .codectx/packages/
+# Generates or updates codectx.lock with resolved versions and commit SHAs
 # Next codectx compile processes them alongside local docs
 ```
 
@@ -1823,26 +1870,26 @@ resolved_at: "2025-03-09T12:00:00Z"
 packages:
   react-patterns@community:
     resolved_version: "2.3.1"
-    integrity: "sha256:a1b2c3d4e5f6..."
-    registry: "https://registry.codectx.dev"
+    repo: "github.com/community/codectx-react-patterns"
+    commit: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"  # Git tag v2.3.1
     source: "direct"  # Declared in project codectx.yaml
 
   company-standards@acme:
     resolved_version: "2.0.0"
-    integrity: "sha256:g7h8i9j0k1l2..."
-    registry: "https://registry.codectx.dev"
+    repo: "github.com/acme/codectx-company-standards"
+    commit: "d4e5f6g7h8i9d4e5f6g7h8i9d4e5f6g7h8i9d4e5"
     source: "direct"
 
   javascript-fundamentals@community:
     resolved_version: "1.3.0"
-    integrity: "sha256:m3n4o5p6q7r8..."
-    registry: "https://registry.codectx.dev"
+    repo: "github.com/community/codectx-javascript-fundamentals"
+    commit: "g7h8i9j0k1l2g7h8i9j0k1l2g7h8i9j0k1l2g7h8"
     source: "transitive"  # Not directly declared — pulled in by a dependency
     required_by:
       - "react-patterns@community:2.3.1"
 ```
 
-The `source` field distinguishes direct dependencies from transitive ones so the developer can see why a package was installed. The `required_by` field traces the dependency chain. The `integrity` hash verifies package contents weren't tampered with or corrupted.
+The `source` field distinguishes direct dependencies from transitive ones so the developer can see why a package was installed. The `required_by` field traces the dependency chain. The git `commit` SHA pins the exact content — no separate integrity hash is needed since git already provides content-addressed storage.
 
 **Install and update behavior**:
 - `codectx install` — if `codectx.lock` exists and `codectx.yaml` hasn't changed, install from lock (fast, deterministic). If `codectx.yaml` changed, re-resolve affected entries and update lock.
@@ -1886,7 +1933,7 @@ No enforcement of cross-package terminology consistency is needed. Each package'
 
 13. **Plan state tracking**: Implement plan.yaml schema, plan status command, and plan resume command with dependency hash checking and chunk replay.
 
-14. **Package manager**: Implement install, publish, dependency resolution, active/inactive toggling.
+14. **Package manager**: Implement install, update, publish, search (via GitHub API), dependency resolution, active/inactive toggling. Packages are GitHub repos with `codectx-[name]` convention, versions are git tags, lock file pins commit SHAs.
 
 ### Key Go Packages Summary
 
@@ -1918,6 +1965,7 @@ No enforcement of cross-package terminology consistency is needed. Each package'
 | Query results count | Configurable results_count in ai.yaml with --top CLI override | Vague "conservative"/"aggressive" retrieval_strategy | Concrete, configurable, overridable per-call. The AI or developer controls exactly how many results they get. Default 10. |
 | Chunk type separation | Three separate directories (objects/, specs/, system/) with independent BM25 indexes | Mixed chunks in single directory and index | Instructions, reasoning, and system docs use different language patterns with different term frequency distributions. Three indexes keep scoring clean within each type. Enables independent searches per type. |
 | System documentation compilation | system/ uses standard subdirectory layout (foundation/, topics/, plans/, prompts/) and compiles into its own chunks and BM25 index | system/ only read as raw instructions, not indexed | Makes compiler documentation searchable through the same mechanism as everything else. The compiler can read raw files as instructions at compile time AND the compiled chunks are searchable at query time — no conflict. |
+| Package registry | GitHub repos with `codectx-[name]` convention, discovered via GitHub API | Custom registry infrastructure | Zero infrastructure to build and maintain. Git tags are versions. Commit SHAs are integrity verification. GitHub provides hosting, discovery (API search), and quality signals (stars, issues, activity). Naming convention makes discovery trivial. |
 | Spec chunk surfacing | Shown as separate "Reasoning" section in query results | Pre-linked to parent instruction chunks only | Independent BM25 search over specs enables reasoning-focused queries like "why do we use repository pattern" that wouldn't match instruction content. |
 | Config file naming | `codectx.yaml` and `codectx.lock` | `package.yaml` and `package.lock` | Tool-named files are self-identifying in directory listings and PR diffs. Avoids collision with other tools that claim the `package.*` namespace. Follows convention of docker-compose.yaml, tsconfig.json, Cargo.toml. |
 | Dependency lock file | `codectx.lock` checked into version control | No lock file, or lock file gitignored | Deterministic reproducibility. Two developers running `codectx install` on the same codectx.yaml get identical package versions. Same pattern as package-lock.json, Cargo.lock, Gemfile.lock. |
