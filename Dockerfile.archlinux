@@ -7,6 +7,8 @@ RUN \
   pacman -S --noconfirm \
   git \
   go \
+  vim \
+  nvim \
   base-devel
 
 RUN \

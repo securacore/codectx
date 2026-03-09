@@ -8,9 +8,9 @@ prompt name prompt="Run the prompt against the repo.":
   name="{{name}}"
 
   if [[ -z "$name" ]]; then
-    echo "A plan name is required. Plan names are the"
-    echo "names of one of the directories in the docs/plans/"
-    echo "name."
+    echo "A prompt name is required. Prompt names are the"
+    echo "names of one of the directories in the docs/prompts/"
+    echo "directory."
     exit 1
   fi
 
@@ -24,8 +24,8 @@ prompt name prompt="Run the prompt against the repo.":
 
   prompt_path="{{justfile_directory()}}/docs/prompts/$name/README.md"
 
-  if [[ ! -d "$prompt_path" ]]; then
-    echo "Unable to find plan entrypoint:"
+  if [[ ! -f "$prompt_path" ]]; then
+    echo "Unable to find prompt entrypoint:"
     echo "$prompt_path"
     exit 1
   fi
