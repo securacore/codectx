@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/securacore/codectx/core/project"
+	"gopkg.in/yaml.v3"
 )
 
 func TestDefaultConfig_HasSensibleDefaults(t *testing.T) {
@@ -174,6 +175,102 @@ func TestAIConfig_WriteToFile(t *testing.T) {
 	}
 	if !strings.Contains(content, "cl100k_base") {
 		t.Error("expected ai config to contain encoding")
+	}
+}
+
+func TestAIConfig_WriteAndLoad_Roundtrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ai.yml")
+
+	original := project.DefaultAIConfig()
+	original.Compilation.Model = "gpt-4o"
+	original.Compilation.Encoding = "o200k_base"
+	original.Consumption.ContextWindow = 128000
+	original.OutputFormat = "xml_tags"
+
+	if err := original.WriteToFile(path); err != nil {
+		t.Fatalf("writing ai config: %v", err)
+	}
+
+	// Read back and parse manually (no LoadAIConfig exists).
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading ai config: %v", err)
+	}
+
+	var loaded project.AIConfig
+	// Skip the header comment lines — yaml.Unmarshal handles comments fine.
+	if err := yaml.Unmarshal(data, &loaded); err != nil {
+		t.Fatalf("unmarshaling ai config: %v", err)
+	}
+
+	if loaded.Compilation.Model != original.Compilation.Model {
+		t.Errorf("compilation model: expected %q, got %q", original.Compilation.Model, loaded.Compilation.Model)
+	}
+	if loaded.Compilation.Encoding != original.Compilation.Encoding {
+		t.Errorf("compilation encoding: expected %q, got %q", original.Compilation.Encoding, loaded.Compilation.Encoding)
+	}
+	if loaded.Consumption.Model != original.Consumption.Model {
+		t.Errorf("consumption model: expected %q, got %q", original.Consumption.Model, loaded.Consumption.Model)
+	}
+	if loaded.Consumption.ContextWindow != original.Consumption.ContextWindow {
+		t.Errorf("context window: expected %d, got %d", original.Consumption.ContextWindow, loaded.Consumption.ContextWindow)
+	}
+	if loaded.Consumption.ResultsCount != original.Consumption.ResultsCount {
+		t.Errorf("results count: expected %d, got %d", original.Consumption.ResultsCount, loaded.Consumption.ResultsCount)
+	}
+	if loaded.OutputFormat != original.OutputFormat {
+		t.Errorf("output format: expected %q, got %q", original.OutputFormat, loaded.OutputFormat)
+	}
+}
+
+func TestPreferencesConfig_WriteAndLoad_Roundtrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "preferences.yml")
+
+	original := project.DefaultPreferencesConfig()
+	original.Chunking.TargetTokens = 600
+	original.BM25.K1 = 1.5
+	original.Taxonomy.MaxAliasCount = 20
+	original.Validation.RequireSpec = true
+
+	if err := original.WriteToFile(path); err != nil {
+		t.Fatalf("writing preferences config: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading preferences config: %v", err)
+	}
+
+	var loaded project.PreferencesConfig
+	if err := yaml.Unmarshal(data, &loaded); err != nil {
+		t.Fatalf("unmarshaling preferences config: %v", err)
+	}
+
+	if loaded.Chunking.TargetTokens != original.Chunking.TargetTokens {
+		t.Errorf("target tokens: expected %d, got %d", original.Chunking.TargetTokens, loaded.Chunking.TargetTokens)
+	}
+	if loaded.Chunking.MinTokens != original.Chunking.MinTokens {
+		t.Errorf("min tokens: expected %d, got %d", original.Chunking.MinTokens, loaded.Chunking.MinTokens)
+	}
+	if loaded.BM25.K1 != original.BM25.K1 {
+		t.Errorf("bm25 k1: expected %f, got %f", original.BM25.K1, loaded.BM25.K1)
+	}
+	if loaded.BM25.B != original.BM25.B {
+		t.Errorf("bm25 b: expected %f, got %f", original.BM25.B, loaded.BM25.B)
+	}
+	if loaded.Taxonomy.MaxAliasCount != original.Taxonomy.MaxAliasCount {
+		t.Errorf("max alias count: expected %d, got %d", original.Taxonomy.MaxAliasCount, loaded.Taxonomy.MaxAliasCount)
+	}
+	if loaded.Taxonomy.POSExtraction != original.Taxonomy.POSExtraction {
+		t.Errorf("pos extraction: expected %v, got %v", original.Taxonomy.POSExtraction, loaded.Taxonomy.POSExtraction)
+	}
+	if loaded.Validation.RequireSpec != original.Validation.RequireSpec {
+		t.Errorf("require spec: expected %v, got %v", original.Validation.RequireSpec, loaded.Validation.RequireSpec)
+	}
+	if loaded.Validation.RequireHeadings != original.Validation.RequireHeadings {
+		t.Errorf("require headings: expected %v, got %v", original.Validation.RequireHeadings, loaded.Validation.RequireHeadings)
 	}
 }
 

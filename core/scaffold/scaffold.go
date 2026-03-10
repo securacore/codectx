@@ -2,12 +2,17 @@
 // codectx init. It creates the full project structure including the
 // documentation root, system/ documentation, config files, and .codectx/
 // tooling state directory.
+//
+// The scaffold package is the engine — it assumes all capability checks
+// (git, already initialized, writable, root conflicts) have been performed
+// by the calling command. It creates what it's told to create.
 package scaffold
 
 import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/securacore/codectx/core/project"
@@ -22,11 +27,17 @@ type Result struct {
 	// DocsRoot is the absolute path to the documentation root directory.
 	DocsRoot string
 
+	// Root is the documentation root directory name relative to ProjectDir.
+	Root string
+
 	// DirsCreated is the number of directories created.
 	DirsCreated int
 
 	// FilesCreated is the number of files written.
 	FilesCreated int
+
+	// GitInitialized is true if git init was run during scaffolding.
+	GitInitialized bool
 }
 
 // Options configures the scaffold operation.
@@ -42,6 +53,99 @@ type Options struct {
 	// Name is the project name for codectx.yml.
 	// Defaults to the base name of ProjectDir if empty.
 	Name string
+
+	// GitInit controls whether to run `git init` in ProjectDir before scaffolding.
+	GitInit bool
+
+	// Model is the AI model to write to ai.yml. Uses default if empty.
+	Model string
+
+	// Encoding is the tokenizer encoding to write to ai.yml. Uses default if empty.
+	Encoding string
+}
+
+// CheckResult holds the result of pre-scaffold capability checks.
+type CheckResult struct {
+	// AlreadyInitialized is true if codectx.yml exists in the target dir.
+	AlreadyInitialized bool
+
+	// NestedProject is true if codectx.yml exists in a parent directory.
+	// The path to the parent project is in NestedProjectPath.
+	NestedProject bool
+
+	// NestedProjectPath is the absolute path to the parent project's directory,
+	// if a nested project was detected.
+	NestedProjectPath string
+
+	// HasGit is true if .git/ exists in the target directory.
+	HasGit bool
+
+	// RootConflict is true if the target documentation root directory already
+	// exists and contains files.
+	RootConflict bool
+
+	// Writable is true if the target directory is writable.
+	Writable bool
+}
+
+// Check performs pre-scaffold capability checks on the target directory.
+// The command layer uses these results to display appropriate prompts and errors
+// before calling Init.
+func Check(projectDir, root string) (*CheckResult, error) {
+	absDir, err := filepath.Abs(projectDir)
+	if err != nil {
+		return nil, fmt.Errorf("resolving project directory: %w", err)
+	}
+
+	if root == "" {
+		root = project.DefaultRoot
+	}
+
+	result := &CheckResult{}
+
+	// Check if codectx.yml exists in the target directory.
+	configPath := filepath.Join(absDir, project.ConfigFileName)
+	if _, err := os.Stat(configPath); err == nil {
+		result.AlreadyInitialized = true
+	}
+
+	// Check if a parent directory has codectx.yml.
+	if !result.AlreadyInitialized {
+		parentDir := filepath.Dir(absDir)
+		if parentDir != absDir {
+			if found, err := project.Discover(parentDir); err == nil {
+				result.NestedProject = true
+				result.NestedProjectPath = found
+			}
+		}
+	}
+
+	// Check for .git/ directory.
+	gitDir := filepath.Join(absDir, ".git")
+	if info, err := os.Stat(gitDir); err == nil && info.IsDir() {
+		result.HasGit = true
+	}
+
+	// Check if documentation root already exists with content.
+	docsRoot := filepath.Join(absDir, root)
+	if entries, err := os.ReadDir(docsRoot); err == nil && len(entries) > 0 {
+		result.RootConflict = true
+	}
+
+	// Check if directory is writable by attempting to create a temp file.
+	result.Writable = isWritable(absDir)
+
+	return result, nil
+}
+
+// isWritable tests if a directory is writable by creating and removing a temp file.
+func isWritable(dir string) bool {
+	testFile := filepath.Join(dir, ".codectx-write-test")
+	if err := os.WriteFile(testFile, []byte{}, 0644); err != nil {
+		return false
+	}
+	_ = os.Remove(testFile)
+	return true
 }
 
 // Init creates the full codectx project structure. It is the implementation
@@ -55,8 +159,9 @@ type Options struct {
 //   - .codectx/ directory with ai.yml, preferences.yml, and compiled/packages/ subdirs
 //   - .gitignore additions for codectx artifacts
 //
-// Returns ErrAlreadyInitialized if codectx.yml already exists in ProjectDir
-// or any parent directory.
+// The calling command is responsible for performing Check() first and handling
+// any capability issues (already initialized, root conflict, etc.) before
+// calling Init.
 func Init(opts Options) (*Result, error) {
 	if opts.ProjectDir == "" {
 		return nil, errors.New("project directory is required")
@@ -67,11 +172,6 @@ func Init(opts Options) (*Result, error) {
 		return nil, fmt.Errorf("resolving project directory: %w", err)
 	}
 	opts.ProjectDir = absDir
-
-	// Check if already initialized (codectx.yml exists here or above).
-	if _, err := project.Discover(opts.ProjectDir); err == nil {
-		return nil, project.ErrAlreadyInitialized
-	}
 
 	root := opts.Root
 	if root == "" {
@@ -89,6 +189,15 @@ func Init(opts Options) (*Result, error) {
 	result := &Result{
 		ProjectDir: opts.ProjectDir,
 		DocsRoot:   docsRoot,
+		Root:       root,
+	}
+
+	// Optionally run git init.
+	if opts.GitInit {
+		if err := gitInit(opts.ProjectDir); err != nil {
+			return nil, fmt.Errorf("running git init: %w", err)
+		}
+		result.GitInitialized = true
 	}
 
 	// Create all directories.
@@ -101,7 +210,7 @@ func Init(opts Options) (*Result, error) {
 	}
 
 	// Write config files.
-	if err := writeConfigs(opts.ProjectDir, codectxDir, name, root); err != nil {
+	if err := writeConfigs(opts.ProjectDir, codectxDir, name, root, opts.Model, opts.Encoding); err != nil {
 		return nil, err
 	}
 	result.FilesCreated += 3 // codectx.yml, ai.yml, preferences.yml
@@ -120,6 +229,15 @@ func Init(opts Options) (*Result, error) {
 	result.FilesCreated++
 
 	return result, nil
+}
+
+// gitInit runs `git init` in the given directory.
+func gitInit(dir string) error {
+	cmd := exec.Command("git", "init")
+	cmd.Dir = dir
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	return cmd.Run()
 }
 
 // directories returns the full list of directories to create.
@@ -151,7 +269,7 @@ func directories(docsRoot, codectxDir string) []string {
 }
 
 // writeConfigs creates the three configuration files.
-func writeConfigs(projectDir, codectxDir, name, root string) error {
+func writeConfigs(projectDir, codectxDir, name, root, model, encoding string) error {
 	// codectx.yml at project root.
 	cfg := project.DefaultConfig(name, root)
 	cfgPath := filepath.Join(projectDir, project.ConfigFileName)
@@ -161,6 +279,13 @@ func writeConfigs(projectDir, codectxDir, name, root string) error {
 
 	// ai.yml in .codectx/.
 	aiCfg := project.DefaultAIConfig()
+	if model != "" {
+		aiCfg.Compilation.Model = model
+		aiCfg.Consumption.Model = model
+	}
+	if encoding != "" {
+		aiCfg.Compilation.Encoding = encoding
+	}
 	aiPath := filepath.Join(codectxDir, "ai.yml")
 	if err := aiCfg.WriteToFile(aiPath); err != nil {
 		return fmt.Errorf("writing ai.yml: %w", err)

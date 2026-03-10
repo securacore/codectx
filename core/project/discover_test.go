@@ -1,6 +1,7 @@
 package project_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -61,7 +62,7 @@ func TestDiscover_ReturnsErrNotFoundAtRoot(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 
-	if err != project.ErrNotFound {
+	if !errors.Is(err, project.ErrNotFound) {
 		t.Errorf("expected ErrNotFound, got: %v", err)
 	}
 }

@@ -2,5 +2,6 @@
 [group('root')]
 done:
   echo "Committing and pushing changes, please wait..."
-  just ai done
+  just prompt save
+  git push
   echo "Done"
