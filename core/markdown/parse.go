@@ -132,13 +132,6 @@ func renderBlockLines(node ast.Node, source []byte) string {
 	return b.String()
 }
 
-// nodeText returns the inline text content of a block node by rendering
-// all its inline children. For block nodes that store content in Lines()
-// (like code blocks), use renderBlockLines instead.
-func nodeText(node ast.Node, source []byte) string {
-	return renderInlineText(node, source)
-}
-
 // renderTableText extracts a plain text representation of a GFM table.
 // Preserves the tabular structure using pipe-delimited format.
 func renderTableText(node *east.Table, source []byte) string {

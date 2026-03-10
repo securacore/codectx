@@ -114,6 +114,30 @@ func TestConfig_WriteToFile_HasHeader(t *testing.T) {
 	}
 }
 
+func TestConfig_WriteToFile_CreatesParentDirs(t *testing.T) {
+	dir := t.TempDir()
+	nested := filepath.Join(dir, "a", "b", "c")
+	path := filepath.Join(nested, project.ConfigFileName)
+
+	cfg := project.DefaultConfig("test", "")
+	if err := cfg.WriteToFile(path); err != nil {
+		t.Fatalf("writing config to nested path: %v", err)
+	}
+
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("expected file to exist at nested path: %v", err)
+	}
+}
+
+func TestConfig_WriteToFile_ErrorOnInvalidPath(t *testing.T) {
+	cfg := project.DefaultConfig("test", "")
+	// Writing to /dev/null/impossible is invalid on all platforms.
+	err := cfg.WriteToFile("/dev/null/impossible/codectx.yml")
+	if err == nil {
+		t.Error("expected error writing to invalid path")
+	}
+}
+
 func TestLoadConfig_InvalidPath(t *testing.T) {
 	_, err := project.LoadConfig("/nonexistent/path/codectx.yml")
 	if err == nil {

@@ -336,6 +336,38 @@ func TestParse_MultiParagraphBlockquote(t *testing.T) {
 	}
 }
 
+func TestParse_BlockquoteWithCodeBlock(t *testing.T) {
+	input := "> Example:\n>\n>     indented code line\n"
+	doc := Parse([]byte(input))
+
+	if len(doc.Blocks) != 1 {
+		t.Fatalf("expected 1 block, got %d", len(doc.Blocks))
+	}
+	b := doc.Blocks[0]
+	if b.Type != BlockBlockquote {
+		t.Errorf("expected blockquote, got %s", b.Type)
+	}
+	if !strings.Contains(b.Content, "Example") {
+		t.Errorf("expected blockquote to contain 'Example', got %q", b.Content)
+	}
+}
+
+func TestParse_BlockquoteWithList(t *testing.T) {
+	input := "> Items:\n>\n> - first\n> - second\n"
+	doc := Parse([]byte(input))
+
+	if len(doc.Blocks) != 1 {
+		t.Fatalf("expected 1 block, got %d", len(doc.Blocks))
+	}
+	b := doc.Blocks[0]
+	if b.Type != BlockBlockquote {
+		t.Errorf("expected blockquote, got %s", b.Type)
+	}
+	if !strings.Contains(b.Content, "first") {
+		t.Errorf("expected blockquote to contain list items, got %q", b.Content)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Thematic breaks
 // ---------------------------------------------------------------------------

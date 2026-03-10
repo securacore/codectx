@@ -478,6 +478,80 @@ func TestScan_CleanVersion_NonVersionFirstField(t *testing.T) {
 	)
 }
 
+// ---------------------------------------------------------------------------
+// EncodingForModel
+// ---------------------------------------------------------------------------
+
+func TestEncodingForModel_GPT4o(t *testing.T) {
+	if enc := detect.EncodingForModel("gpt-4o"); enc != "o200k_base" {
+		t.Errorf("expected o200k_base for gpt-4o, got %q", enc)
+	}
+}
+
+func TestEncodingForModel_O1(t *testing.T) {
+	if enc := detect.EncodingForModel("o1"); enc != "o200k_base" {
+		t.Errorf("expected o200k_base for o1, got %q", enc)
+	}
+}
+
+func TestEncodingForModel_O3Mini(t *testing.T) {
+	if enc := detect.EncodingForModel("o3-mini"); enc != "o200k_base" {
+		t.Errorf("expected o200k_base for o3-mini, got %q", enc)
+	}
+}
+
+func TestEncodingForModel_Claude(t *testing.T) {
+	if enc := detect.EncodingForModel(detect.DefaultModel); enc != "cl100k_base" {
+		t.Errorf("expected cl100k_base for Claude, got %q", enc)
+	}
+}
+
+func TestEncodingForModel_Gemini(t *testing.T) {
+	if enc := detect.EncodingForModel("gemini-2.0-flash"); enc != "cl100k_base" {
+		t.Errorf("expected cl100k_base for Gemini, got %q", enc)
+	}
+}
+
+func TestEncodingForModel_Unknown(t *testing.T) {
+	if enc := detect.EncodingForModel("some-custom-model"); enc != "cl100k_base" {
+		t.Errorf("expected cl100k_base for unknown model, got %q", enc)
+	}
+}
+
+func TestEncodingForModel_Empty(t *testing.T) {
+	if enc := detect.EncodingForModel(""); enc != "cl100k_base" {
+		t.Errorf("expected cl100k_base for empty string, got %q", enc)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Result helpers
+// ---------------------------------------------------------------------------
+
+func TestResult_HasTools(t *testing.T) {
+	empty := detect.Result{}
+	if empty.HasTools() {
+		t.Error("empty result should not have tools")
+	}
+
+	withTool := detect.Result{Tools: []detect.Tool{{Name: "test"}}}
+	if !withTool.HasTools() {
+		t.Error("result with tool should have tools")
+	}
+}
+
+func TestResult_HasProviders(t *testing.T) {
+	empty := detect.Result{}
+	if empty.HasProviders() {
+		t.Error("empty result should not have providers")
+	}
+
+	withProvider := detect.Result{Providers: []detect.Provider{{Name: "test"}}}
+	if !withProvider.HasProviders() {
+		t.Error("result with provider should have providers")
+	}
+}
+
 func TestResult_HasAnything(t *testing.T) {
 	empty := detect.Result{}
 	if empty.HasAnything() {
@@ -492,5 +566,23 @@ func TestResult_HasAnything(t *testing.T) {
 	withProvider := detect.Result{Providers: []detect.Provider{{Name: "test"}}}
 	if !withProvider.HasAnything() {
 		t.Error("result with provider should have something")
+	}
+}
+
+func TestDefaultModel_IsSet(t *testing.T) {
+	if detect.DefaultModel == "" {
+		t.Error("DefaultModel should not be empty")
+	}
+	if detect.DefaultModel != "claude-sonnet-4-20250514" {
+		t.Errorf("expected default model %q, got %q", "claude-sonnet-4-20250514", detect.DefaultModel)
+	}
+}
+
+func TestDefaultEncoding_IsSet(t *testing.T) {
+	if detect.DefaultEncoding == "" {
+		t.Error("DefaultEncoding should not be empty")
+	}
+	if detect.DefaultEncoding != "cl100k_base" {
+		t.Errorf("expected default encoding %q, got %q", "cl100k_base", detect.DefaultEncoding)
 	}
 }

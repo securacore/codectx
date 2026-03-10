@@ -147,7 +147,7 @@ type blockExtractor struct {
 func (e *blockExtractor) extract(node ast.Node, doc *Document) {
 	switch n := node.(type) {
 	case *ast.Heading:
-		text := nodeText(n, e.source)
+		text := renderInlineText(n, e.source)
 
 		// Update heading hierarchy.
 		e.heading[n.Level] = text
@@ -168,7 +168,7 @@ func (e *blockExtractor) extract(node ast.Node, doc *Document) {
 	case *ast.Paragraph:
 		doc.Blocks = append(doc.Blocks, Block{
 			Type:     BlockParagraph,
-			Content:  nodeText(n, e.source),
+			Content:  renderInlineText(n, e.source),
 			Heading:  e.currentHeading(),
 			Position: e.pos,
 		})

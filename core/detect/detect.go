@@ -95,9 +95,11 @@ var knownProviders = []providerSpec{
 	{name: "Mistral", envVar: "MISTRAL_API_KEY", defaultModel: "mistral-large-latest"},
 }
 
-// defaultModel is the fallback when nothing is detected.
-const defaultModel = "claude-sonnet-4-20250514"
-const defaultEncoding = "cl100k_base"
+// DefaultModel is the fallback model when nothing is detected.
+const DefaultModel = "claude-sonnet-4-20250514"
+
+// DefaultEncoding is the fallback tokenizer encoding.
+const DefaultEncoding = "cl100k_base"
 
 // LookPathFunc is the function used to locate binaries. Defaults to exec.LookPath.
 // Override in tests to control detection results.
@@ -116,8 +118,8 @@ var RunCommandFunc = runCommand
 // what was found.
 func Scan() Result {
 	result := Result{
-		RecommendedModel:    defaultModel,
-		RecommendedEncoding: defaultEncoding,
+		RecommendedModel:    DefaultModel,
+		RecommendedEncoding: DefaultEncoding,
 	}
 
 	// Scan for installed tools.
@@ -165,38 +167,38 @@ func recommendModel(r Result) (string, string) {
 	// Priority 1: If Anthropic API key is set, use Claude.
 	for _, p := range r.Providers {
 		if p.Name == "Anthropic" {
-			return "claude-sonnet-4-20250514", "cl100k_base"
+			return DefaultModel, EncodingForModel(DefaultModel)
 		}
 	}
 
 	// Priority 2: If Claude Code is installed (implies Anthropic access).
 	for _, t := range r.Tools {
 		if t.Binary == "claude" {
-			return "claude-sonnet-4-20250514", "cl100k_base"
+			return DefaultModel, EncodingForModel(DefaultModel)
 		}
 	}
 
 	// Priority 3: If OpenAI API key is set, use GPT-4o.
 	for _, p := range r.Providers {
 		if p.Name == "OpenAI" {
-			return "gpt-4o", "o200k_base"
+			return "gpt-4o", EncodingForModel("gpt-4o")
 		}
 	}
 
 	// Priority 4: If Codex is installed (implies OpenAI access).
 	for _, t := range r.Tools {
 		if t.Binary == "codex" {
-			return "gpt-4o", "o200k_base"
+			return "gpt-4o", EncodingForModel("gpt-4o")
 		}
 	}
 
 	// Priority 5: First available provider.
 	if len(r.Providers) > 0 {
-		return r.Providers[0].DefaultModel, "cl100k_base"
+		return r.Providers[0].DefaultModel, EncodingForModel(r.Providers[0].DefaultModel)
 	}
 
 	// Fallback.
-	return defaultModel, defaultEncoding
+	return DefaultModel, DefaultEncoding
 }
 
 // runCommand executes a command and returns its stdout output.
@@ -243,6 +245,17 @@ func cleanVersion(raw string) string {
 
 	// Fall back to the full first line.
 	return raw
+}
+
+// EncodingForModel returns the appropriate tokenizer encoding for a model.
+// OpenAI models (gpt-4o, o1, o3-mini) use o200k_base; all others default to cl100k_base.
+func EncodingForModel(model string) string {
+	switch model {
+	case "gpt-4o", "o1", "o3-mini":
+		return "o200k_base"
+	default:
+		return DefaultEncoding
+	}
 }
 
 // HasTools returns true if any AI CLI tools were detected.

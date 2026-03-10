@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/securacore/codectx/core/detect"
 	"gopkg.in/yaml.v3"
 )
 
@@ -88,13 +89,7 @@ func DefaultConfig(name string, root string) Config {
 
 // WriteToFile marshals the config to YAML and writes it to the given path.
 func (c *Config) WriteToFile(path string) error {
-	data, err := yaml.Marshal(c)
-	if err != nil {
-		return fmt.Errorf("marshaling config: %w", err)
-	}
-
-	header := []byte("# codectx project configuration\n# See: https://github.com/securacore/codectx\n\n")
-	return os.WriteFile(path, append(header, data...), 0644)
+	return writeYAMLFile(path, "# codectx project configuration\n# See: https://github.com/securacore/codectx\n\n", c)
 }
 
 // LoadConfig reads and parses a codectx.yml file from the given path.
@@ -150,14 +145,16 @@ type AIConsumptionConfig struct {
 }
 
 // DefaultAIConfig returns an AIConfig with sensible defaults.
+// The default model and encoding are sourced from the detect package
+// to ensure consistency across detection, configuration, and scaffolding.
 func DefaultAIConfig() AIConfig {
 	return AIConfig{
 		Compilation: AICompilationConfig{
-			Model:    "claude-sonnet-4-20250514",
-			Encoding: "cl100k_base",
+			Model:    detect.DefaultModel,
+			Encoding: detect.DefaultEncoding,
 		},
 		Consumption: AIConsumptionConfig{
-			Model:         "claude-sonnet-4-20250514",
+			Model:         detect.DefaultModel,
 			ContextWindow: 200000,
 			ResultsCount:  10,
 		},
@@ -167,16 +164,7 @@ func DefaultAIConfig() AIConfig {
 
 // WriteToFile marshals the AI config to YAML and writes it to the given path.
 func (c *AIConfig) WriteToFile(path string) error {
-	data, err := yaml.Marshal(c)
-	if err != nil {
-		return fmt.Errorf("marshaling ai config: %w", err)
-	}
-
-	header := []byte("# codectx AI configuration\n# Model and behavior settings for compilation and consumption.\n# Checked into version control (no secrets).\n\n")
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return fmt.Errorf("creating directory for ai config: %w", err)
-	}
-	return os.WriteFile(path, append(header, data...), 0644)
+	return writeYAMLFile(path, "# codectx AI configuration\n# Model and behavior settings for compilation and consumption.\n# Checked into version control (no secrets).\n\n", c)
 }
 
 // PreferencesConfig represents the .codectx/preferences.yml file.
@@ -281,14 +269,21 @@ func DefaultPreferencesConfig() PreferencesConfig {
 
 // WriteToFile marshals the preferences config to YAML and writes it to the given path.
 func (c *PreferencesConfig) WriteToFile(path string) error {
-	data, err := yaml.Marshal(c)
+	return writeYAMLFile(path, "# codectx compiler preferences\n# Compiler and pipeline configuration.\n# Checked into version control.\n\n", c)
+}
+
+// writeYAMLFile marshals a value to YAML, prepends a header comment, ensures the
+// parent directory exists, and writes the file. This is the shared implementation
+// behind all config WriteToFile methods.
+func writeYAMLFile(path string, header string, v interface{}) error {
+	data, err := yaml.Marshal(v)
 	if err != nil {
-		return fmt.Errorf("marshaling preferences config: %w", err)
+		return fmt.Errorf("marshaling config: %w", err)
 	}
 
-	header := []byte("# codectx compiler preferences\n# Compiler and pipeline configuration.\n# Checked into version control.\n\n")
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return fmt.Errorf("creating directory for preferences config: %w", err)
+		return fmt.Errorf("creating directory: %w", err)
 	}
-	return os.WriteFile(path, append(header, data...), 0644)
+
+	return os.WriteFile(path, append([]byte(header), data...), 0644)
 }

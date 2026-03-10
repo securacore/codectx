@@ -289,7 +289,7 @@ func run(_ context.Context, cmd *cli.Command) error {
 		for _, p := range detection.Providers {
 			if !seen[p.DefaultModel] {
 				seen[p.DefaultModel] = true
-				enc := encodingForModel(p.DefaultModel)
+				enc := detect.EncodingForModel(p.DefaultModel)
 				options = append(options, huh.NewOption(
 					fmt.Sprintf("%s (%s)", p.DefaultModel, p.Name),
 					modelChoice{model: p.DefaultModel, encoding: enc},
@@ -447,15 +447,5 @@ func buildSummaryTree(root string, result *scaffold.Result) []tui.TreeNode {
 				},
 			},
 		},
-	}
-}
-
-// encodingForModel returns the appropriate tokenizer encoding for a model.
-func encodingForModel(model string) string {
-	switch model {
-	case "gpt-4o", "o1", "o3-mini":
-		return "o200k_base"
-	default:
-		return "cl100k_base"
 	}
 }

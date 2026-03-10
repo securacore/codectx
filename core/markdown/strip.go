@@ -65,10 +65,8 @@ func Strip(doc *Document) *Document {
 			}
 		}
 
-		// Strip emphasis from heading text.
-		if b.Type == BlockHeading {
-			b.Content = stripEmphasisMarkers(b.Content)
-		}
+		// Note: heading emphasis markers are already stripped by the goldmark
+		// AST parser during inline text rendering — no additional stripping needed.
 
 		// Recompute heading hierarchy.
 		if b.Type == BlockHeading {
@@ -91,23 +89,4 @@ func Strip(doc *Document) *Document {
 func isHTMLCommentContent(content string) bool {
 	trimmed := strings.TrimSpace(content)
 	return strings.HasPrefix(trimmed, "<!--")
-}
-
-// stripEmphasisMarkers removes any remaining bold/emphasis markdown markers
-// from text. Since the AST parser already strips these during inline rendering,
-// this is a safety net for edge cases where markers might persist.
-//
-// This handles cases like:
-//   - **Bold Heading** → Bold Heading
-//   - *Italic Heading* → Italic Heading
-//   - ***Bold Italic*** → Bold Italic
-//   - __Bold__ → Bold
-//   - _Italic_ → Italic
-func stripEmphasisMarkers(text string) string {
-	// The goldmark parser already handles emphasis in the AST — when we
-	// render inline text via renderInlineText, emphasis markers are naturally
-	// stripped because we read the text content, not the markdown syntax.
-	// This function exists as a no-op safety net. If we ever encounter
-	// markers in heading text, we can add stripping logic here.
-	return text
 }

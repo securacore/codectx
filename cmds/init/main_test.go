@@ -129,52 +129,6 @@ func TestResolveTarget_NestedNewDirs(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// encodingForModel
-// ---------------------------------------------------------------------------
-
-func TestEncodingForModel_GPT4o(t *testing.T) {
-	if enc := encodingForModel("gpt-4o"); enc != "o200k_base" {
-		t.Errorf("expected o200k_base for gpt-4o, got %q", enc)
-	}
-}
-
-func TestEncodingForModel_O1(t *testing.T) {
-	if enc := encodingForModel("o1"); enc != "o200k_base" {
-		t.Errorf("expected o200k_base for o1, got %q", enc)
-	}
-}
-
-func TestEncodingForModel_O3Mini(t *testing.T) {
-	if enc := encodingForModel("o3-mini"); enc != "o200k_base" {
-		t.Errorf("expected o200k_base for o3-mini, got %q", enc)
-	}
-}
-
-func TestEncodingForModel_Claude(t *testing.T) {
-	if enc := encodingForModel("claude-sonnet-4-20250514"); enc != "cl100k_base" {
-		t.Errorf("expected cl100k_base for Claude, got %q", enc)
-	}
-}
-
-func TestEncodingForModel_Gemini(t *testing.T) {
-	if enc := encodingForModel("gemini-2.0-flash"); enc != "cl100k_base" {
-		t.Errorf("expected cl100k_base for Gemini, got %q", enc)
-	}
-}
-
-func TestEncodingForModel_Unknown(t *testing.T) {
-	if enc := encodingForModel("some-custom-model"); enc != "cl100k_base" {
-		t.Errorf("expected cl100k_base for unknown model, got %q", enc)
-	}
-}
-
-func TestEncodingForModel_Empty(t *testing.T) {
-	if enc := encodingForModel(""); enc != "cl100k_base" {
-		t.Errorf("expected cl100k_base for empty string, got %q", enc)
-	}
-}
-
-// ---------------------------------------------------------------------------
 // buildSummaryTree
 // ---------------------------------------------------------------------------
 
