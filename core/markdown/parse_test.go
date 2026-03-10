@@ -615,6 +615,32 @@ func TestParse_ParagraphWithHardLineBreak(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Code span with soft line break
+// ---------------------------------------------------------------------------
+
+func TestParse_CodeSpanAcrossLines(t *testing.T) {
+	// A backtick code span that wraps across two source lines.
+	// Goldmark preserves the newline in the text segment (SoftLineBreak=false)
+	// rather than collapsing it to a space per CommonMark spec. Our renderer
+	// preserves goldmark's output faithfully.
+	input := "Here is `some code\nthat wraps` in a paragraph.\n"
+	doc := Parse([]byte(input))
+
+	if len(doc.Blocks) != 1 {
+		t.Fatalf("expected 1 block, got %d", len(doc.Blocks))
+	}
+
+	content := doc.Blocks[0].Content
+	// The code span text should be preserved with backticks.
+	if !strings.Contains(content, "`some code") {
+		t.Errorf("expected code span content to be preserved, got %q", content)
+	}
+	if !strings.Contains(content, "that wraps`") {
+		t.Errorf("expected code span closing to be preserved, got %q", content)
+	}
+}
+
+// ---------------------------------------------------------------------------
 // MinLevel computation
 // ---------------------------------------------------------------------------
 

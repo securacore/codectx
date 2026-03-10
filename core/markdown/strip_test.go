@@ -78,6 +78,26 @@ func TestStrip_HeadingNormalization_PreservesRelativeDepth(t *testing.T) {
 	}
 }
 
+func TestStrip_HeadingNormalization_ClampsToMinimumOne(t *testing.T) {
+	// Construct a synthetic document with a heading at level 1 and
+	// MinLevel > 1 to exercise the b.Level < 1 safety clamp.
+	// This can't happen through normal Parse but is defensive code.
+	doc := &Document{
+		Source: []byte("synthetic"),
+		Blocks: []Block{
+			{Type: BlockHeading, Content: "Broken Heading", Level: 1, Heading: []string{"Broken Heading"}, Position: 0},
+			{Type: BlockParagraph, Content: "Content.", Heading: []string{"Broken Heading"}, Position: 1},
+		},
+		MinLevel: 3, // Forces delta of 2, so level 1 - 2 = -1, clamped to 1.
+	}
+
+	stripped := Strip(doc)
+
+	if stripped.Blocks[0].Level != 1 {
+		t.Errorf("heading level should clamp to 1, got %d", stripped.Blocks[0].Level)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Heading hierarchy recomputation after normalization
 // ---------------------------------------------------------------------------
