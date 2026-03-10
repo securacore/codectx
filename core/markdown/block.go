@@ -92,6 +92,10 @@ type Block struct {
 	// Language is the language tag for fenced code blocks (e.g., "go", "python").
 	// Empty for non-code blocks and indented code blocks.
 	Language string
+
+	// Tokens is the token count of Content using the configured encoding.
+	// Zero until populated by tokens.CountBlocks().
+	Tokens int
 }
 
 // Document represents a parsed and block-extracted markdown file.
@@ -107,6 +111,10 @@ type Document struct {
 	// all headings can be shifted down by 2 to start at H1).
 	// Zero if the document has no headings.
 	MinLevel int
+
+	// TotalTokens is the sum of all block token counts.
+	// Zero until populated by tokens.CountBlocks().
+	TotalTokens int
 }
 
 // Parse parses markdown source bytes into a Document with semantic blocks.
