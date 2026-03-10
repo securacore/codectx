@@ -59,9 +59,6 @@ var ColorAccent = lightDark(lipgloss.Color("#0891B2"), lipgloss.Color("#22D3EE")
 // --- Styles ---
 // Pre-built lipgloss styles for common output patterns.
 
-// StyleSuccess renders text in the success color (green).
-var StyleSuccess = lipgloss.NewStyle().Foreground(ColorSuccess)
-
 // StyleWarning renders text in the warning color (yellow).
 var StyleWarning = lipgloss.NewStyle().Foreground(ColorWarning)
 

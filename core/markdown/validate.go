@@ -135,9 +135,9 @@ func checkReadme(dir, rootDir string, result *ValidationResult) error {
 	}
 
 	if hasMD && !hasReadme {
-		relPath, _ := filepath.Rel(rootDir, dir)
-		if relPath == "" {
-			relPath = "."
+		relPath, err := filepath.Rel(rootDir, dir)
+		if err != nil || relPath == "" {
+			relPath = dir
 		}
 		result.Warnings = append(result.Warnings,
 			fmt.Sprintf("directory %s has .md files but no README.md", relPath))
@@ -157,7 +157,10 @@ func checkHeadings(path, rootDir string, result *ValidationResult) error {
 	fileResult := ValidateFile(doc, true)
 
 	if fileResult.HasWarnings() {
-		relPath, _ := filepath.Rel(rootDir, path)
+		relPath, err := filepath.Rel(rootDir, path)
+		if err != nil {
+			relPath = path
+		}
 		for _, w := range fileResult.Warnings {
 			result.Warnings = append(result.Warnings,
 				fmt.Sprintf("%s: %s", relPath, w))

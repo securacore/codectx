@@ -1,11 +1,16 @@
 package markdown
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/yuin/goldmark/ast"
 	east "github.com/yuin/goldmark/extension/ast"
 )
+
+// ErrNilDocument is returned when a nil document is passed to functions
+// that require a valid document (chunking, token counting, etc.).
+var ErrNilDocument = errors.New("document is nil")
 
 // BlockType identifies the kind of semantic block extracted from markdown.
 type BlockType int
@@ -158,11 +163,7 @@ func (e *blockExtractor) extract(node ast.Node, doc *Document) {
 		text := renderInlineText(n, e.source)
 
 		// Update heading hierarchy.
-		e.heading[n.Level] = text
-		// Clear deeper levels.
-		for i := n.Level + 1; i <= 6; i++ {
-			e.heading[i] = ""
-		}
+		updateHeading(e.heading, n.Level, text)
 
 		doc.Blocks = append(doc.Blocks, Block{
 			Type:     BlockHeading,
@@ -259,6 +260,16 @@ func (e *blockExtractor) extract(node ast.Node, doc *Document) {
 // excluding empty levels. The result is a fresh slice safe from mutation.
 func (e *blockExtractor) currentHeading() []string {
 	return headingSnapshot(e.heading)
+}
+
+// updateHeading sets the heading text at the given level and clears all deeper
+// levels. This is the single implementation of the heading hierarchy update
+// pattern used during both parsing and stripping.
+func updateHeading(heading []string, level int, text string) {
+	heading[level] = text
+	for i := level + 1; i <= 6; i++ {
+		heading[i] = ""
+	}
 }
 
 // headingSnapshot builds a heading hierarchy from a 7-element tracker array

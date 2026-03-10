@@ -1,6 +1,7 @@
 package chunk_test
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -211,6 +212,9 @@ func TestChunkDocument_NilDocument(t *testing.T) {
 	_, err := chunk.ChunkDocument(nil, "test.md", chunk.ChunkObject, defaultOpts())
 	if err == nil {
 		t.Fatal("expected error for nil document")
+	}
+	if !errors.Is(err, markdown.ErrNilDocument) {
+		t.Errorf("expected ErrNilDocument sentinel, got %v", err)
 	}
 }
 
@@ -1152,6 +1156,17 @@ func TestChunkDocument_InvalidOptions_NegativeMaxTokens(t *testing.T) {
 	_, err := chunk.ChunkDocument(d, "test.md", chunk.ChunkObject, opts)
 	if err == nil {
 		t.Fatal("expected error for negative max tokens")
+	}
+}
+
+func TestChunkDocument_InvalidOptions_NegativeMinTokens(t *testing.T) {
+	d := doc(paragraphBlock("text", 100, nil))
+	opts := defaultOpts()
+	opts.MinTokens = -1
+
+	_, err := chunk.ChunkDocument(d, "test.md", chunk.ChunkObject, opts)
+	if err == nil {
+		t.Fatal("expected error for negative min tokens")
 	}
 }
 

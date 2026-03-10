@@ -139,7 +139,7 @@ func Check(projectDir, root string) (*CheckResult, error) {
 // isWritable tests if a directory is writable by creating and removing a temp file.
 func isWritable(dir string) bool {
 	testFile := filepath.Join(dir, ".codectx-write-test")
-	if err := os.WriteFile(testFile, []byte{}, 0644); err != nil {
+	if err := os.WriteFile(testFile, []byte{}, project.FilePerm); err != nil {
 		return false
 	}
 	_ = os.Remove(testFile)
@@ -198,7 +198,7 @@ func Init(opts Options) (*Result, error) {
 	// Create all directories.
 	dirs := directories(docsRoot, codectxDir)
 	for _, dir := range dirs {
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, project.DirPerm); err != nil {
 			return nil, fmt.Errorf("creating directory %s: %w", dir, err)
 		}
 		result.DirsCreated++
@@ -253,12 +253,12 @@ func directories(docsRoot, codectxDir string) []string {
 		filepath.Join(docsRoot, "system", "prompts"),
 
 		// Tooling state directory.
-		filepath.Join(codectxDir, "compiled", "objects"),
-		filepath.Join(codectxDir, "compiled", "specs"),
-		filepath.Join(codectxDir, "compiled", "system"),
-		filepath.Join(codectxDir, "compiled", "bm25", "objects"),
-		filepath.Join(codectxDir, "compiled", "bm25", "specs"),
-		filepath.Join(codectxDir, "compiled", "bm25", "system"),
+		filepath.Join(codectxDir, project.CompiledDir, "objects"),
+		filepath.Join(codectxDir, project.CompiledDir, "specs"),
+		filepath.Join(codectxDir, project.CompiledDir, "system"),
+		filepath.Join(codectxDir, project.CompiledDir, project.BM25Dir, "objects"),
+		filepath.Join(codectxDir, project.CompiledDir, project.BM25Dir, "specs"),
+		filepath.Join(codectxDir, project.CompiledDir, project.BM25Dir, "system"),
 		filepath.Join(codectxDir, "packages"),
 	}
 }
@@ -308,7 +308,7 @@ func writeSystemDefaults(docsRoot string) (int, error) {
 		}
 
 		destPath := filepath.Join(docsRoot, f.DestPath)
-		if err := os.WriteFile(destPath, content, 0644); err != nil {
+		if err := os.WriteFile(destPath, content, project.FilePerm); err != nil {
 			return written, fmt.Errorf("writing %s: %w", f.DestPath, err)
 		}
 		written++

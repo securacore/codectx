@@ -4,15 +4,14 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+
+	"github.com/securacore/codectx/core/project"
 )
 
 // OutputDir returns the compiled subdirectory name for a chunk type.
 // Returns "objects", "specs", or "system".
 func OutputDir(ct ChunkType) string {
-	if m, ok := chunkTypeRegistry[ct]; ok {
-		return m.outDir
-	}
-	return defaultChunkTypeMeta.outDir
+	return lookupMeta(ct).outDir
 }
 
 // OutputFilename returns the filename for a chunk file: [hash].[seq].md.
@@ -38,7 +37,7 @@ func OutputPath(c *Chunk) string {
 	if c == nil {
 		return ""
 	}
-	return filepath.Join("compiled", OutputDir(c.Type), OutputFilename(c))
+	return filepath.Join(project.CompiledDir, OutputDir(c.Type), OutputFilename(c))
 }
 
 // ClassifySource determines the ChunkType from a source file path.

@@ -3,6 +3,8 @@ package tui
 import (
 	"fmt"
 	"strings"
+
+	"charm.land/lipgloss/v2"
 )
 
 // ErrorMsg represents a structured, actionable error message that answers
@@ -42,35 +44,7 @@ type Suggestion struct {
 //	  <suggestion text>
 //	    <command>
 func (e ErrorMsg) Render() string {
-	var b strings.Builder
-
-	// Error header.
-	fmt.Fprintf(&b, "\n%s %s\n",
-		ErrorIcon(),
-		StyleError.Render("Error: "+e.Title),
-	)
-
-	// Detail lines.
-	if len(e.Detail) > 0 {
-		b.WriteString("\n")
-		for _, line := range e.Detail {
-			fmt.Fprintf(&b, "%s%s\n", Indent(1), line)
-		}
-	}
-
-	// Suggestions.
-	if len(e.Suggestions) > 0 {
-		b.WriteString("\n")
-		for _, s := range e.Suggestions {
-			fmt.Fprintf(&b, "%s%s\n", Indent(1), s.Text)
-			if s.Command != "" {
-				fmt.Fprintf(&b, "%s%s\n", Indent(2), StyleCommand.Render(s.Command))
-			}
-		}
-	}
-
-	b.WriteString("\n")
-	return b.String()
+	return renderMessage(ErrorIcon(), StyleError, "Error: "+e.Title, e.Detail, e.Suggestions)
 }
 
 // WarnMsg represents a non-fatal warning with the same structure as ErrorMsg.
@@ -84,17 +58,31 @@ type WarnMsg struct {
 
 // Render formats the warning message for terminal display.
 func (w WarnMsg) Render() string {
+	return renderMessage(Warning(), StyleWarning, w.Title, w.Detail, nil)
+}
+
+// renderMessage is the shared rendering core for ErrorMsg and WarnMsg.
+// It composes the icon, styled title, detail lines, and optional suggestions
+// into a consistent terminal output format.
+func renderMessage(icon string, titleStyle lipgloss.Style, title string, detail []string, suggestions []Suggestion) string {
 	var b strings.Builder
 
-	fmt.Fprintf(&b, "\n%s %s\n",
-		Warning(),
-		StyleWarning.Render(w.Title),
-	)
+	fmt.Fprintf(&b, "\n%s %s\n", icon, titleStyle.Render(title))
 
-	if len(w.Detail) > 0 {
+	if len(detail) > 0 {
 		b.WriteString("\n")
-		for _, line := range w.Detail {
+		for _, line := range detail {
 			fmt.Fprintf(&b, "%s%s\n", Indent(1), line)
+		}
+	}
+
+	if len(suggestions) > 0 {
+		b.WriteString("\n")
+		for _, s := range suggestions {
+			fmt.Fprintf(&b, "%s%s\n", Indent(1), s.Text)
+			if s.Command != "" {
+				fmt.Fprintf(&b, "%s%s\n", Indent(2), StyleCommand.Render(s.Command))
+			}
 		}
 	}
 

@@ -117,6 +117,13 @@ func renderCodeSpanText(b *strings.Builder, node *ast.CodeSpan, source []byte) {
 	}
 }
 
+// splitLines splits text into lines, trimming a trailing newline first to avoid
+// producing an empty final element. This is a common pattern when rendering
+// multi-line block content.
+func splitLines(s string) []string {
+	return strings.Split(strings.TrimRight(s, "\n"), "\n")
+}
+
 // renderBlockLines extracts the raw text content from a block node's line segments.
 // Used for code blocks and HTML blocks that store content in Lines().
 func renderBlockLines(node ast.Node, source []byte) string {
@@ -207,7 +214,7 @@ func renderListItemContent(b *strings.Builder, item ast.Node, source []byte) {
 			}
 			b.WriteByte('\n')
 			lines := renderBlockLines(n, source)
-			for _, line := range strings.Split(strings.TrimRight(lines, "\n"), "\n") {
+			for _, line := range splitLines(lines) {
 				b.WriteString("  ")
 				b.WriteString(line)
 				b.WriteByte('\n')
@@ -216,7 +223,7 @@ func renderListItemContent(b *strings.Builder, item ast.Node, source []byte) {
 
 		case *ast.CodeBlock:
 			lines := renderBlockLines(n, source)
-			for _, line := range strings.Split(strings.TrimRight(lines, "\n"), "\n") {
+			for _, line := range splitLines(lines) {
 				b.WriteString("      ")
 				b.WriteString(line)
 				b.WriteByte('\n')
@@ -225,7 +232,7 @@ func renderListItemContent(b *strings.Builder, item ast.Node, source []byte) {
 		case *ast.List:
 			// Nested list.
 			nested := renderListText(n, source)
-			for _, line := range strings.Split(strings.TrimRight(nested, "\n"), "\n") {
+			for _, line := range splitLines(nested) {
 				b.WriteString("  ")
 				b.WriteString(line)
 				b.WriteByte('\n')
@@ -233,7 +240,7 @@ func renderListItemContent(b *strings.Builder, item ast.Node, source []byte) {
 
 		case *ast.Blockquote:
 			content := renderBlockquoteText(n, source)
-			for _, line := range strings.Split(strings.TrimRight(content, "\n"), "\n") {
+			for _, line := range splitLines(content) {
 				b.WriteString("  > ")
 				b.WriteString(line)
 				b.WriteByte('\n')

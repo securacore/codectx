@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/securacore/codectx/core/project"
 )
 
 // indexFileName is the name of the serialized index file within each
@@ -20,8 +22,8 @@ const indexFileName = "index.gob"
 // Parent directories are created as needed.
 func (idx *Index) Save(compiledDir string) error {
 	for it, bm25 := range idx.Indexes {
-		dir := filepath.Join(compiledDir, "bm25", string(it))
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		dir := filepath.Join(compiledDir, project.BM25Dir, string(it))
+		if err := os.MkdirAll(dir, project.DirPerm); err != nil {
 			return fmt.Errorf("creating index directory %s: %w", dir, err)
 		}
 
@@ -45,7 +47,7 @@ func Load(compiledDir string) (*Index, error) {
 	}
 
 	for _, it := range AllIndexTypes() {
-		path := filepath.Join(compiledDir, "bm25", string(it), indexFileName)
+		path := filepath.Join(compiledDir, project.BM25Dir, string(it), indexFileName)
 		bm25, err := loadIndex(path)
 		if err != nil {
 			return nil, fmt.Errorf("loading %s index: %w", it, err)

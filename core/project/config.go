@@ -31,6 +31,18 @@ const DefaultContextWindow = 200000
 // DefaultResultsCount is the default number of results returned by codectx query.
 const DefaultResultsCount = 10
 
+// DirPerm is the standard directory permission mode used throughout the project.
+const DirPerm = 0755
+
+// FilePerm is the standard file permission mode used throughout the project.
+const FilePerm = 0644
+
+// CompiledDir is the directory name under .codectx/ for compiled output.
+const CompiledDir = "compiled"
+
+// BM25Dir is the directory name under compiled/ for BM25 index files.
+const BM25Dir = "bm25"
+
 // ResolveRoot returns root if non-empty, otherwise DefaultRoot.
 // This is the single place for the "if root == "" { root = DefaultRoot }" pattern.
 func ResolveRoot(root string) string {
@@ -339,9 +351,9 @@ func writeYAMLFile(path string, header string, v interface{}) error {
 		return fmt.Errorf("closing encoder: %w", err)
 	}
 
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), DirPerm); err != nil {
 		return fmt.Errorf("creating directory: %w", err)
 	}
 
-	return os.WriteFile(path, append([]byte(header), buf.Bytes()...), 0644)
+	return os.WriteFile(path, append([]byte(header), buf.Bytes()...), FilePerm)
 }

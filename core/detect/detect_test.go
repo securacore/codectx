@@ -483,7 +483,7 @@ func TestScan_CleanVersion_NonVersionFirstField(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestEncodingForModel_GPT4o(t *testing.T) {
-	if enc := detect.EncodingForModel("gpt-4o"); enc != "o200k_base" {
+	if enc := detect.EncodingForModel(detect.ModelGPT4o); enc != "o200k_base" {
 		t.Errorf("expected o200k_base for gpt-4o, got %q", enc)
 	}
 }

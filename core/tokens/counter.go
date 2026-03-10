@@ -17,7 +17,6 @@
 package tokens
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/securacore/codectx/core/markdown"
@@ -80,7 +79,7 @@ func (c *Counter) Encoding() string {
 // and TotalTokens may be incomplete.
 func CountBlocks(doc *markdown.Document, c *Counter) error {
 	if doc == nil {
-		return errors.New("document is nil")
+		return markdown.ErrNilDocument
 	}
 	total := 0
 	for i := range doc.Blocks {

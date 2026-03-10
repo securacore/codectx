@@ -71,8 +71,8 @@ type providerSpec struct {
 // Order reflects detection priority — first found with a matching
 // provider gets to set the recommended model.
 var knownTools = []toolSpec{
-	{name: "Claude Code", binary: "claude", versionCmd: []string{"claude", "--version"}},
-	{name: "Codex", binary: "codex", versionCmd: []string{"codex", "--version"}},
+	{name: "Claude Code", binary: BinaryClaude, versionCmd: []string{BinaryClaude, "--version"}},
+	{name: "Codex", binary: BinaryCodex, versionCmd: []string{BinaryCodex, "--version"}},
 	{name: "Amp", binary: "amp", versionCmd: []string{"amp", "--version"}},
 	{name: "Aider", binary: "aider", versionCmd: []string{"aider", "--version"}},
 	{name: "OpenCode", binary: "opencode", versionCmd: []string{"opencode", "--version"}},
@@ -84,8 +84,8 @@ var knownTools = []toolSpec{
 // knownProviders is the ordered list of API providers to check.
 // Order reflects recommendation priority.
 var knownProviders = []providerSpec{
-	{name: "Anthropic", envVar: "ANTHROPIC_API_KEY", defaultModel: DefaultModel},
-	{name: "OpenAI", envVar: "OPENAI_API_KEY", defaultModel: "gpt-4o"},
+	{name: ProviderAnthropic, envVar: "ANTHROPIC_API_KEY", defaultModel: DefaultModel},
+	{name: ProviderOpenAI, envVar: "OPENAI_API_KEY", defaultModel: ModelGPT4o},
 	{name: "Google", envVar: "GEMINI_API_KEY", defaultModel: "gemini-2.0-flash"},
 	{name: "Google", envVar: "GOOGLE_API_KEY", defaultModel: "gemini-2.0-flash"},
 	{name: "Groq", envVar: "GROQ_API_KEY", defaultModel: "llama-3.3-70b-versatile"},
@@ -101,6 +101,21 @@ const (
 
 	// DefaultEncoding is the fallback tokenizer encoding.
 	DefaultEncoding = "cl100k_base"
+
+	// ModelGPT4o is the OpenAI GPT-4o model identifier.
+	ModelGPT4o = "gpt-4o"
+
+	// ProviderAnthropic is the Anthropic provider name.
+	ProviderAnthropic = "Anthropic"
+
+	// ProviderOpenAI is the OpenAI provider name.
+	ProviderOpenAI = "OpenAI"
+
+	// BinaryClaude is the Claude Code CLI binary name.
+	BinaryClaude = "claude"
+
+	// BinaryCodex is the Codex CLI binary name.
+	BinaryCodex = "codex"
 )
 
 // LookPathFunc is the function used to locate binaries. Defaults to exec.LookPath.
@@ -168,29 +183,29 @@ func Scan() Result {
 func recommendModel(r Result) (string, string) {
 	// Priority 1: If Anthropic API key is set, use Claude.
 	for _, p := range r.Providers {
-		if p.Name == "Anthropic" {
+		if p.Name == ProviderAnthropic {
 			return DefaultModel, EncodingForModel(DefaultModel)
 		}
 	}
 
 	// Priority 2: If Claude Code is installed (implies Anthropic access).
 	for _, t := range r.Tools {
-		if t.Binary == "claude" {
+		if t.Binary == BinaryClaude {
 			return DefaultModel, EncodingForModel(DefaultModel)
 		}
 	}
 
 	// Priority 3: If OpenAI API key is set, use GPT-4o.
 	for _, p := range r.Providers {
-		if p.Name == "OpenAI" {
-			return "gpt-4o", EncodingForModel("gpt-4o")
+		if p.Name == ProviderOpenAI {
+			return ModelGPT4o, EncodingForModel(ModelGPT4o)
 		}
 	}
 
 	// Priority 4: If Codex is installed (implies OpenAI access).
 	for _, t := range r.Tools {
-		if t.Binary == "codex" {
-			return "gpt-4o", EncodingForModel("gpt-4o")
+		if t.Binary == BinaryCodex {
+			return ModelGPT4o, EncodingForModel(ModelGPT4o)
 		}
 	}
 
@@ -253,7 +268,7 @@ func cleanVersion(raw string) string {
 // OpenAI models (gpt-4o, o1, o3-mini) use o200k_base; all others default to cl100k_base.
 func EncodingForModel(model string) string {
 	switch model {
-	case "gpt-4o", "o1", "o3-mini":
+	case ModelGPT4o, "o1", "o3-mini":
 		return "o200k_base"
 	default:
 		return DefaultEncoding

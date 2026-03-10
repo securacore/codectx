@@ -288,3 +288,46 @@ func TestEnsureGitignore_ReplacesManagedBlock(t *testing.T) {
 		t.Errorf("expected exactly 1 managed block, got %d", count)
 	}
 }
+
+func TestEnsureGitignore_ResolvesReverseConflict(t *testing.T) {
+	dir := t.TempDir()
+
+	// Simulate reverse conflict: existing has a negation rule that conflicts
+	// with our managed ignore rule.
+	existing := "# User override\n!docs/.codectx/compiled/\n"
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(existing), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := project.EnsureGitignore(dir, "docs"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	if err != nil {
+		t.Fatalf("reading .gitignore: %v", err)
+	}
+
+	content := string(data)
+
+	// The conflicting negation rule should be removed from the user section
+	// because our managed block has the ignore rule.
+	lines := strings.Split(content, "\n")
+	inManaged := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "# codectx managed entries" {
+			inManaged = true
+			continue
+		}
+		// Before the managed block, the negation should be gone.
+		if !inManaged && trimmed == "!docs/.codectx/compiled/" {
+			t.Error("expected conflicting negation rule to be removed from user section")
+		}
+	}
+
+	// The managed block should contain our ignore rule.
+	if !strings.Contains(content, "docs/.codectx/compiled/") {
+		t.Error("expected managed ignore rule to be present")
+	}
+}

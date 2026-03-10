@@ -73,10 +73,7 @@ func Strip(doc *Document) *Document {
 
 		// Recompute heading hierarchy.
 		if b.Type == BlockHeading {
-			heading[b.Level] = b.Content
-			for i := b.Level + 1; i <= 6; i++ {
-				heading[i] = ""
-			}
+			updateHeading(heading, b.Level, b.Content)
 		}
 		b.Heading = headingSnapshot(heading)
 

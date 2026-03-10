@@ -49,6 +49,14 @@ var chunkTypeRegistry = map[ChunkType]chunkTypeMeta{
 // defaultChunkTypeMeta is used when a ChunkType is not in the registry.
 var defaultChunkTypeMeta = chunkTypeMeta{prefix: "obj", outDir: "objects"}
 
+// lookupMeta returns the metadata for a chunk type, falling back to defaults.
+func lookupMeta(ct ChunkType) chunkTypeMeta {
+	if m, ok := chunkTypeRegistry[ct]; ok {
+		return m
+	}
+	return defaultChunkTypeMeta
+}
+
 // Chunk represents a compiled chunk of semantic blocks with metadata.
 type Chunk struct {
 	// ID is the unique chunk identifier, e.g. "obj:a1b2c3d4e5f67890.3".
@@ -105,10 +113,7 @@ func FormatID(ct ChunkType, hash string, seq int) string {
 
 // idPrefix returns the short ID prefix for a chunk type.
 func idPrefix(ct ChunkType) string {
-	if m, ok := chunkTypeRegistry[ct]; ok {
-		return m.prefix
-	}
-	return defaultChunkTypeMeta.prefix
+	return lookupMeta(ct).prefix
 }
 
 // FormatHeading joins a heading hierarchy into a breadcrumb string.

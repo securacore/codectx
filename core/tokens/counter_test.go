@@ -1,6 +1,7 @@
 package tokens_test
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -548,5 +549,8 @@ func TestCountBlocks_NilDocument(t *testing.T) {
 	err = tokens.CountBlocks(nil, c)
 	if err == nil {
 		t.Fatal("expected error for nil document")
+	}
+	if !errors.Is(err, markdown.ErrNilDocument) {
+		t.Errorf("expected ErrNilDocument sentinel, got %v", err)
 	}
 }

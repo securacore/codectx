@@ -443,6 +443,26 @@ func TestDefaultPreferencesConfig_HasHashLength(t *testing.T) {
 	}
 }
 
+func TestResolveRoot(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"", project.DefaultRoot},
+		{"docs", "docs"},
+		{"ai-docs", "ai-docs"},
+		{".codectx-docs", ".codectx-docs"},
+		{"custom/path", "custom/path"},
+	}
+
+	for _, tt := range tests {
+		got := project.ResolveRoot(tt.input)
+		if got != tt.expected {
+			t.Errorf("ResolveRoot(%q) = %q, want %q", tt.input, got, tt.expected)
+		}
+	}
+}
+
 func TestClampHashLength(t *testing.T) {
 	tests := []struct {
 		input    int

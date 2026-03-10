@@ -91,7 +91,6 @@ func NewBM25(k1, b float64) *BM25 {
 // AddDocument must be called before Build(). Adding documents after
 // Build() invalidates the cached IDF values and avgDocLen.
 func (idx *BM25) AddDocument(chunkID string, tokens []string) {
-	docIndex := idx.DocCount
 	idx.DocCount++
 
 	idx.DocIDs = append(idx.DocIDs, chunkID)
@@ -107,7 +106,6 @@ func (idx *BM25) AddDocument(chunkID string, tokens []string) {
 	// Update corpus-level document frequency counts.
 	// Each term is counted once per document, regardless of how many
 	// times it appears in that document.
-	_ = docIndex // used implicitly via DocCount
 	for term := range termFreq {
 		idx.TermDocFreq[term]++
 	}

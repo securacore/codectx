@@ -57,7 +57,7 @@ func OptionsFromConfig(cfg project.ChunkingConfig) Options {
 // chunkType determines the ID prefix and output routing.
 func ChunkDocument(doc *markdown.Document, sourcePath string, chunkType ChunkType, opts Options) ([]Chunk, error) {
 	if doc == nil {
-		return nil, errors.New("document is nil")
+		return nil, markdown.ErrNilDocument
 	}
 	if len(doc.Blocks) == 0 {
 		return nil, nil
@@ -72,15 +72,20 @@ func ChunkDocument(doc *markdown.Document, sourcePath string, chunkType ChunkTyp
 	var currentBlocks []markdown.Block
 	currentTokens := 0
 
+	// flush emits the current accumulator as a chunk and resets state.
+	flush := func() {
+		chunks = append(chunks, buildChunk(currentBlocks, currentTokens, sourcePath, chunkType, opts, false))
+		currentBlocks = nil
+		currentTokens = 0
+	}
+
 	for _, block := range doc.Blocks {
 		// If this single block exceeds max_tokens on its own, it becomes
 		// its own oversized chunk.
 		if block.Tokens > opts.MaxTokens {
 			// Flush current accumulator first.
 			if len(currentBlocks) > 0 {
-				chunks = append(chunks, buildChunk(currentBlocks, currentTokens, sourcePath, chunkType, opts, false))
-				currentBlocks = nil
-				currentTokens = 0
+				flush()
 			}
 			chunks = append(chunks, buildChunk([]markdown.Block{block}, block.Tokens, sourcePath, chunkType, opts, true))
 			continue
@@ -91,22 +96,16 @@ func ChunkDocument(doc *markdown.Document, sourcePath string, chunkType ChunkTyp
 		if wouldExceed && len(currentBlocks) > 0 {
 			// (a) Heading → always break before it.
 			if block.Type == markdown.BlockHeading {
-				chunks = append(chunks, buildChunk(currentBlocks, currentTokens, sourcePath, chunkType, opts, false))
-				currentBlocks = nil
-				currentTokens = 0
+				flush()
 			} else if currentTokens >= flexThreshold {
 				// (b) Current chunk >= flexibility_window of target → break.
-				chunks = append(chunks, buildChunk(currentBlocks, currentTokens, sourcePath, chunkType, opts, false))
-				currentBlocks = nil
-				currentTokens = 0
+				flush()
 			}
 			// (c) Current < flexibility_window → include the block (go over target).
 		} else if block.Type == markdown.BlockHeading && len(currentBlocks) > 0 {
 			// Even if we wouldn't exceed, headings should start new chunks
 			// when there's existing content.
-			chunks = append(chunks, buildChunk(currentBlocks, currentTokens, sourcePath, chunkType, opts, false))
-			currentBlocks = nil
-			currentTokens = 0
+			flush()
 		}
 
 		currentBlocks = append(currentBlocks, block)
@@ -115,7 +114,7 @@ func ChunkDocument(doc *markdown.Document, sourcePath string, chunkType ChunkTyp
 
 	// Flush remaining blocks.
 	if len(currentBlocks) > 0 {
-		chunks = append(chunks, buildChunk(currentBlocks, currentTokens, sourcePath, chunkType, opts, false))
+		flush()
 	}
 
 	// Rebalance: if the last chunk is below MinTokens, rebalance with previous.

@@ -18,6 +18,7 @@ package init
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -95,7 +96,7 @@ func run(_ context.Context, cmd *cli.Command) error {
 				{Text: "Check directory permissions"},
 			},
 		}.Render())
-		return fmt.Errorf("directory not writable: %s", targetDir)
+		return fmt.Errorf("directory not writable: %q", targetDir)
 	}
 
 	if check.AlreadyInitialized {
@@ -108,13 +109,13 @@ func run(_ context.Context, cmd *cli.Command) error {
 				{Text: "To reinitialize, remove codectx.yml first"},
 			},
 		}.Render())
-		return fmt.Errorf("already initialized in %s", targetDir)
+		return fmt.Errorf("already initialized in %q", targetDir)
 	}
 
 	// --- Step 3: Handle nested project warning ---
 	if check.NestedProject {
 		if !interactive {
-			return fmt.Errorf("cannot init inside existing project at %s (use --root or a different directory)", check.NestedProjectPath)
+			return fmt.Errorf("cannot init inside existing project at %q (use --root or a different directory)", check.NestedProjectPath)
 		}
 
 		fmt.Print(tui.WarnMsg{
@@ -134,7 +135,7 @@ func run(_ context.Context, cmd *cli.Command) error {
 			return err
 		}
 		if !proceed {
-			return fmt.Errorf("initialization canceled")
+			return errors.New("initialization canceled")
 		}
 	}
 
@@ -156,13 +157,10 @@ func run(_ context.Context, cmd *cli.Command) error {
 	// --- Step 5: Handle root conflict ---
 	if check.RootConflict {
 		if !interactive {
-			return fmt.Errorf("documentation root conflict: directory already has content (use --root to specify an alternative)")
+			return errors.New("documentation root conflict: directory already has content (use --root to specify an alternative)")
 		}
 
-		effectiveRoot := root
-		if effectiveRoot == "" {
-			effectiveRoot = project.DefaultRoot
-		}
+		effectiveRoot := project.ResolveRoot(root)
 
 		fmt.Print(tui.WarnMsg{
 			Title: "Documentation root conflict",
@@ -344,10 +342,7 @@ func run(_ context.Context, cmd *cli.Command) error {
 	}
 
 	// --- Step 10: Summary ---
-	effectiveRoot := root
-	if effectiveRoot == "" {
-		effectiveRoot = project.DefaultRoot
-	}
+	effectiveRoot := project.ResolveRoot(root)
 
 	tree := buildSummaryTree(effectiveRoot)
 
@@ -395,7 +390,7 @@ func resolveTarget(args []string) (string, bool, error) {
 	// If the path already exists, use it.
 	if info, err := os.Stat(target); err == nil {
 		if !info.IsDir() {
-			return "", false, fmt.Errorf("%s exists but is not a directory", target)
+			return "", false, fmt.Errorf("%q exists but is not a directory", target)
 		}
 		abs, err := filepath.Abs(target)
 		if err != nil {
@@ -405,8 +400,8 @@ func resolveTarget(args []string) (string, bool, error) {
 	}
 
 	// Create the directory.
-	if err := os.MkdirAll(target, 0755); err != nil {
-		return "", false, fmt.Errorf("creating directory %s: %w", target, err)
+	if err := os.MkdirAll(target, project.DirPerm); err != nil {
+		return "", false, fmt.Errorf("creating directory %q: %w", target, err)
 	}
 	abs, err := filepath.Abs(target)
 	if err != nil {

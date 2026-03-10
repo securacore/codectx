@@ -56,7 +56,7 @@ func EnsureGitignore(projectDir string, root string) error {
 
 	merged := mergeGitignore(existing, entries)
 
-	return os.WriteFile(path, []byte(merged), 0644)
+	return os.WriteFile(path, []byte(merged), FilePerm)
 }
 
 // gitignoreEntriesForRoot returns the codectx gitignore entries with the

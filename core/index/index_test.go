@@ -502,3 +502,47 @@ func TestBuildFromChunks_TokenizesBlockContent(t *testing.T) {
 		t.Error("expected to find 'jwt.verify' as dotted path")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// NewFromConfig
+// ---------------------------------------------------------------------------
+
+func TestNewFromConfig_UsesConfigParams(t *testing.T) {
+	cfg := project.BM25Config{K1: 1.5, B: 0.80}
+	idx := NewFromConfig(cfg)
+
+	if idx == nil {
+		t.Fatal("expected non-nil index")
+	}
+	if len(idx.Indexes) != 3 {
+		t.Errorf("expected 3 indexes, got %d", len(idx.Indexes))
+	}
+
+	// Verify the parameters propagated to each BM25 index.
+	for it, bm25 := range idx.Indexes {
+		if bm25.K1 != cfg.K1 {
+			t.Errorf("index %s: K1 = %f, want %f", it, bm25.K1, cfg.K1)
+		}
+		if bm25.B != cfg.B {
+			t.Errorf("index %s: B = %f, want %f", it, bm25.B, cfg.B)
+		}
+	}
+}
+
+func TestNewFromConfig_DefaultParams(t *testing.T) {
+	defaults := project.DefaultPreferencesConfig().BM25
+	idx := NewFromConfig(defaults)
+
+	if idx == nil {
+		t.Fatal("expected non-nil index")
+	}
+
+	for it, bm25 := range idx.Indexes {
+		if bm25.K1 != defaults.K1 {
+			t.Errorf("index %s: K1 = %f, want %f", it, bm25.K1, defaults.K1)
+		}
+		if bm25.B != defaults.B {
+			t.Errorf("index %s: B = %f, want %f", it, bm25.B, defaults.B)
+		}
+	}
+}
