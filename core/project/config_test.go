@@ -25,11 +25,11 @@ func TestDefaultConfig_HasSensibleDefaults(t *testing.T) {
 	if cfg.Session == nil {
 		t.Fatal("expected session config to be set")
 	}
-	if cfg.Session.Budget != 30000 {
-		t.Errorf("expected budget 30000, got %d", cfg.Session.Budget)
+	if cfg.Session.Budget != project.DefaultSessionBudget {
+		t.Errorf("expected budget %d, got %d", project.DefaultSessionBudget, cfg.Session.Budget)
 	}
-	if cfg.Registry != "github.com" {
-		t.Errorf("expected registry %q, got %q", "github.com", cfg.Registry)
+	if cfg.Registry != project.DefaultRegistry {
+		t.Errorf("expected registry %q, got %q", project.DefaultRegistry, cfg.Registry)
 	}
 }
 
@@ -168,11 +168,11 @@ func TestDefaultAIConfig_HasSensibleDefaults(t *testing.T) {
 	if cfg.Compilation.Encoding != "cl100k_base" {
 		t.Errorf("expected encoding %q, got %q", "cl100k_base", cfg.Compilation.Encoding)
 	}
-	if cfg.Consumption.ContextWindow != 200000 {
-		t.Errorf("expected context window 200000, got %d", cfg.Consumption.ContextWindow)
+	if cfg.Consumption.ContextWindow != project.DefaultContextWindow {
+		t.Errorf("expected context window %d, got %d", project.DefaultContextWindow, cfg.Consumption.ContextWindow)
 	}
-	if cfg.Consumption.ResultsCount != 10 {
-		t.Errorf("expected results count 10, got %d", cfg.Consumption.ResultsCount)
+	if cfg.Consumption.ResultsCount != project.DefaultResultsCount {
+		t.Errorf("expected results count %d, got %d", project.DefaultResultsCount, cfg.Consumption.ResultsCount)
 	}
 	if cfg.OutputFormat != "markdown" {
 		t.Errorf("expected output format %q, got %q", "markdown", cfg.OutputFormat)
@@ -365,5 +365,104 @@ func TestPreferencesConfig_WriteToFile(t *testing.T) {
 	}
 	if !strings.Contains(content, "target_tokens") {
 		t.Error("expected preferences config to contain chunking settings")
+	}
+}
+
+func TestYAMLFiles_Use2SpaceIndent(t *testing.T) {
+	dir := t.TempDir()
+
+	// Write all three config types.
+	cfgPath := filepath.Join(dir, project.ConfigFileName)
+	cfg := project.DefaultConfig("indent-test", "docs")
+	if err := cfg.WriteToFile(cfgPath); err != nil {
+		t.Fatalf("writing config: %v", err)
+	}
+
+	aiPath := filepath.Join(dir, "ai.yml")
+	ai := project.DefaultAIConfig()
+	if err := ai.WriteToFile(aiPath); err != nil {
+		t.Fatalf("writing ai config: %v", err)
+	}
+
+	prefsPath := filepath.Join(dir, "preferences.yml")
+	prefs := project.DefaultPreferencesConfig()
+	if err := prefs.WriteToFile(prefsPath); err != nil {
+		t.Fatalf("writing preferences config: %v", err)
+	}
+
+	files := map[string]string{
+		"codectx.yml":     cfgPath,
+		"ai.yml":          aiPath,
+		"preferences.yml": prefsPath,
+	}
+
+	for name, path := range files {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("reading %s: %v", name, err)
+		}
+		content := string(data)
+
+		// Must not contain tabs.
+		if strings.Contains(content, "\t") {
+			t.Errorf("%s: contains tab characters", name)
+		}
+
+		// Verify 2-space indent: find lines that start with spaces and
+		// check that the indent is a multiple of 2 (not 4-only).
+		lines := strings.Split(content, "\n")
+		for i, line := range lines {
+			if strings.HasPrefix(line, "#") || line == "" {
+				continue
+			}
+			indent := len(line) - len(strings.TrimLeft(line, " "))
+			if indent > 0 && indent%2 != 0 {
+				t.Errorf("%s line %d: indent %d is not a multiple of 2: %q", name, i+1, indent, line)
+			}
+		}
+
+		// Verify that nested keys use 2-space indent (not 4).
+		// The preferences.yml has nested keys under "chunking:" that must
+		// be indented 2 spaces.
+		if name == "preferences.yml" {
+			if !strings.Contains(content, "  target_tokens:") {
+				t.Errorf("%s: expected 2-space indent for target_tokens", name)
+			}
+			if strings.Contains(content, "    target_tokens:") {
+				t.Errorf("%s: found 4-space indent for target_tokens, expected 2-space", name)
+			}
+		}
+	}
+}
+
+func TestDefaultPreferencesConfig_HasHashLength(t *testing.T) {
+	cfg := project.DefaultPreferencesConfig()
+
+	if cfg.Chunking.HashLength != project.DefaultHashLength {
+		t.Errorf("expected hash length %d, got %d", project.DefaultHashLength, cfg.Chunking.HashLength)
+	}
+}
+
+func TestClampHashLength(t *testing.T) {
+	tests := []struct {
+		input    int
+		expected int
+	}{
+		{0, project.DefaultHashLength},
+		{-1, project.DefaultHashLength},
+		{4, project.MinHashLength},
+		{7, project.MinHashLength},
+		{8, 8},
+		{16, 16},
+		{64, 64},
+		{100, project.MaxHashLength},
+		{1000, project.MaxHashLength},
+	}
+
+	for _, tt := range tests {
+		got := project.ClampHashLength(tt.input)
+		if got != tt.expected {
+			t.Errorf("ClampHashLength(%d) = %d, want %d", tt.input, got, tt.expected)
+		}
 	}
 }

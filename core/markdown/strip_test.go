@@ -383,3 +383,10 @@ func TestStrip_EmphasisInProsePreserved(t *testing.T) {
 	}
 	t.Error("expected prose with emphasis text to be preserved")
 }
+
+func TestStrip_NilDocument(t *testing.T) {
+	got := Strip(nil)
+	if got != nil {
+		t.Errorf("expected nil for nil document, got %v", got)
+	}
+}

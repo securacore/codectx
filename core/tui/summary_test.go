@@ -181,14 +181,6 @@ func TestDetectedTool_Format(t *testing.T) {
 	}
 }
 
-func TestNotDetectedTool_Format(t *testing.T) {
-	result := tui.NotDetectedTool("Cursor")
-
-	if !strings.Contains(result, "Cursor") {
-		t.Error("expected tool name")
-	}
-}
-
 func TestKeyValue_Format(t *testing.T) {
 	result := tui.KeyValue("Model", "claude-sonnet-4")
 

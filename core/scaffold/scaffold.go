@@ -97,9 +97,7 @@ func Check(projectDir, root string) (*CheckResult, error) {
 		return nil, fmt.Errorf("resolving project directory: %w", err)
 	}
 
-	if root == "" {
-		root = project.DefaultRoot
-	}
+	root = project.ResolveRoot(root)
 
 	result := &CheckResult{}
 
@@ -157,7 +155,7 @@ func isWritable(dir string) bool {
 //   - system/ subdirectory with default compiler documentation
 //   - foundation/, topics/, plans/, prompts/ directories
 //   - .codectx/ directory with ai.yml, preferences.yml, and compiled/packages/ subdirs
-//   - .gitignore additions for codectx artifacts
+//   - .gitignore at the git repo root with codectx entries (merged with existing)
 //
 // The calling command is responsible for performing Check() first and handling
 // any capability issues (already initialized, root conflict, etc.) before
@@ -173,10 +171,7 @@ func Init(opts Options) (*Result, error) {
 	}
 	opts.ProjectDir = absDir
 
-	root := opts.Root
-	if root == "" {
-		root = project.DefaultRoot
-	}
+	root := project.ResolveRoot(opts.Root)
 
 	name := opts.Name
 	if name == "" {
@@ -222,8 +217,8 @@ func Init(opts Options) (*Result, error) {
 	}
 	result.FilesCreated += written
 
-	// Write .gitignore for codectx artifacts.
-	if err := writeGitignore(docsRoot); err != nil {
+	// Ensure .gitignore at repo root contains codectx entries.
+	if err := project.EnsureGitignore(opts.ProjectDir, root); err != nil {
 		return nil, err
 	}
 	result.FilesCreated++
@@ -320,20 +315,4 @@ func writeSystemDefaults(docsRoot string) (int, error) {
 	}
 
 	return written, nil
-}
-
-// writeGitignore creates the .gitignore file in the docs root that ignores
-// compiled output, installed packages, and local API key configuration.
-func writeGitignore(docsRoot string) error {
-	content := `# codectx — tooling state and compiled output
-.codectx/compiled/
-.codectx/packages/
-.codectx/ai.local.yml
-
-# Force-include checked-in config
-!.codectx/ai.yml
-!.codectx/preferences.yml
-`
-	path := filepath.Join(docsRoot, ".codectx", ".gitignore")
-	return os.WriteFile(path, []byte(content), 0644)
 }

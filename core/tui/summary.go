@@ -91,14 +91,6 @@ func DetectedTool(name, version string) string {
 	)
 }
 
-// NotDetectedTool formats a single not-detected tool line.
-func NotDetectedTool(name string) string {
-	return fmt.Sprintf("%s %s",
-		StyleMuted.Render(IconBullet),
-		StyleMuted.Render(name),
-	)
-}
-
 // KeyValue formats a key-value pair with the key in muted and value in default color.
 func KeyValue(key, value string) string {
 	return fmt.Sprintf("%s %s", StyleMuted.Render(key+":"), value)

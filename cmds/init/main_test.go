@@ -133,7 +133,7 @@ func TestResolveTarget_NestedNewDirs(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestBuildSummaryTree_DefaultRoot(t *testing.T) {
-	tree := buildSummaryTree("docs", nil)
+	tree := buildSummaryTree("docs")
 
 	if len(tree) != 2 {
 		t.Fatalf("expected 2 top-level nodes, got %d", len(tree))
@@ -162,7 +162,7 @@ func TestBuildSummaryTree_DefaultRoot(t *testing.T) {
 }
 
 func TestBuildSummaryTree_CustomRoot(t *testing.T) {
-	tree := buildSummaryTree("ai-docs", nil)
+	tree := buildSummaryTree("ai-docs")
 
 	if tree[1].Name != "ai-docs/" {
 		t.Errorf("expected root name 'ai-docs/', got %q", tree[1].Name)
@@ -170,7 +170,7 @@ func TestBuildSummaryTree_CustomRoot(t *testing.T) {
 }
 
 func TestBuildSummaryTree_SystemChildren(t *testing.T) {
-	tree := buildSummaryTree("docs", nil)
+	tree := buildSummaryTree("docs")
 
 	// Find system/ node.
 	var systemNode *tui.TreeNode
@@ -191,7 +191,7 @@ func TestBuildSummaryTree_SystemChildren(t *testing.T) {
 }
 
 func TestBuildSummaryTree_CodectxChildren(t *testing.T) {
-	tree := buildSummaryTree("docs", nil)
+	tree := buildSummaryTree("docs")
 
 	// Find .codectx/ node.
 	var codectxNode *tui.TreeNode

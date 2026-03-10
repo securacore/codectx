@@ -84,7 +84,7 @@ var knownTools = []toolSpec{
 // knownProviders is the ordered list of API providers to check.
 // Order reflects recommendation priority.
 var knownProviders = []providerSpec{
-	{name: "Anthropic", envVar: "ANTHROPIC_API_KEY", defaultModel: "claude-sonnet-4-20250514"},
+	{name: "Anthropic", envVar: "ANTHROPIC_API_KEY", defaultModel: DefaultModel},
 	{name: "OpenAI", envVar: "OPENAI_API_KEY", defaultModel: "gpt-4o"},
 	{name: "Google", envVar: "GEMINI_API_KEY", defaultModel: "gemini-2.0-flash"},
 	{name: "Google", envVar: "GOOGLE_API_KEY", defaultModel: "gemini-2.0-flash"},
@@ -95,11 +95,13 @@ var knownProviders = []providerSpec{
 	{name: "Mistral", envVar: "MISTRAL_API_KEY", defaultModel: "mistral-large-latest"},
 }
 
-// DefaultModel is the fallback model when nothing is detected.
-const DefaultModel = "claude-sonnet-4-20250514"
+const (
+	// DefaultModel is the fallback model when nothing is detected.
+	DefaultModel = "claude-sonnet-4-20250514"
 
-// DefaultEncoding is the fallback tokenizer encoding.
-const DefaultEncoding = "cl100k_base"
+	// DefaultEncoding is the fallback tokenizer encoding.
+	DefaultEncoding = "cl100k_base"
+)
 
 // LookPathFunc is the function used to locate binaries. Defaults to exec.LookPath.
 // Override in tests to control detection results.

@@ -4,6 +4,7 @@
 package project
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,6 +18,27 @@ const ConfigFileName = "codectx.yml"
 
 // DefaultRoot is the default documentation root directory.
 const DefaultRoot = "docs"
+
+// DefaultSessionBudget is the default token budget for always-loaded context.
+const DefaultSessionBudget = 30000
+
+// DefaultRegistry is the default package registry.
+const DefaultRegistry = "github.com"
+
+// DefaultContextWindow is the default AI model context window size in tokens.
+const DefaultContextWindow = 200000
+
+// DefaultResultsCount is the default number of results returned by codectx query.
+const DefaultResultsCount = 10
+
+// ResolveRoot returns root if non-empty, otherwise DefaultRoot.
+// This is the single place for the "if root == "" { root = DefaultRoot }" pattern.
+func ResolveRoot(root string) string {
+	if root == "" {
+		return DefaultRoot
+	}
+	return root
+}
 
 // Config represents the project-level codectx.yml file.
 // This is the source of truth for package identity, dependencies,
@@ -69,9 +91,7 @@ type DependencyConfig struct {
 
 // DefaultConfig returns a Config with sensible defaults for a new project.
 func DefaultConfig(name string, root string) Config {
-	if root == "" {
-		root = DefaultRoot
-	}
+	root = ResolveRoot(root)
 	return Config{
 		Root:        root,
 		Name:        name,
@@ -80,10 +100,10 @@ func DefaultConfig(name string, root string) Config {
 		Description: "",
 		Session: &SessionConfig{
 			AlwaysLoaded: []string{},
-			Budget:       30000,
+			Budget:       DefaultSessionBudget,
 		},
 		Dependencies: map[string]*DependencyConfig{},
-		Registry:     "github.com",
+		Registry:     DefaultRegistry,
 	}
 }
 
@@ -155,8 +175,8 @@ func DefaultAIConfig() AIConfig {
 		},
 		Consumption: AIConsumptionConfig{
 			Model:         detect.DefaultModel,
-			ContextWindow: 200000,
-			ResultsCount:  10,
+			ContextWindow: DefaultContextWindow,
+			ResultsCount:  DefaultResultsCount,
 		},
 		OutputFormat: "markdown",
 	}
@@ -198,6 +218,36 @@ type ChunkingConfig struct {
 	// if the next block would exceed target. E.g., 0.8 means break
 	// after 80% of target.
 	FlexibilityWindow float64 `yaml:"flexibility_window"`
+
+	// HashLength is the number of hex characters to use from the SHA-256
+	// content hash when generating chunk IDs. Clamped to [8, 64].
+	HashLength int `yaml:"hash_length"`
+}
+
+const (
+	// MinHashLength is the minimum allowed hash length for chunk IDs.
+	MinHashLength = 8
+
+	// MaxHashLength is the maximum allowed hash length for chunk IDs (full SHA-256).
+	MaxHashLength = 64
+
+	// DefaultHashLength is the default hash length for chunk IDs.
+	DefaultHashLength = 16
+)
+
+// ClampHashLength ensures a hash length value falls within [MinHashLength, MaxHashLength].
+// Values of zero are treated as the default.
+func ClampHashLength(n int) int {
+	if n <= 0 {
+		return DefaultHashLength
+	}
+	if n < MinHashLength {
+		return MinHashLength
+	}
+	if n > MaxHashLength {
+		return MaxHashLength
+	}
+	return n
 }
 
 // BM25Config controls BM25 index parameters.
@@ -247,6 +297,7 @@ func DefaultPreferencesConfig() PreferencesConfig {
 			MinTokens:         200,
 			MaxTokens:         800,
 			FlexibilityWindow: 0.8,
+			HashLength:        DefaultHashLength,
 		},
 		BM25: BM25Config{
 			K1: 1.2,
@@ -272,18 +323,25 @@ func (c *PreferencesConfig) WriteToFile(path string) error {
 	return writeYAMLFile(path, "# codectx compiler preferences\n# Compiler and pipeline configuration.\n# Checked into version control.\n\n", c)
 }
 
-// writeYAMLFile marshals a value to YAML, prepends a header comment, ensures the
-// parent directory exists, and writes the file. This is the shared implementation
-// behind all config WriteToFile methods.
+// writeYAMLFile marshals a value to YAML with 2-space indentation, prepends a
+// header comment, ensures the parent directory exists, and writes the file.
+// This is the shared implementation behind all config WriteToFile methods.
 func writeYAMLFile(path string, header string, v interface{}) error {
-	data, err := yaml.Marshal(v)
-	if err != nil {
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+
+	if err := enc.Encode(v); err != nil {
 		return fmt.Errorf("marshaling config: %w", err)
+	}
+
+	if err := enc.Close(); err != nil {
+		return fmt.Errorf("closing encoder: %w", err)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return fmt.Errorf("creating directory: %w", err)
 	}
 
-	return os.WriteFile(path, append([]byte(header), data...), 0644)
+	return os.WriteFile(path, append([]byte(header), buf.Bytes()...), 0644)
 }

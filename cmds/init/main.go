@@ -26,6 +26,7 @@ import (
 	"charm.land/huh/v2/spinner"
 	"github.com/charmbracelet/x/term"
 	"github.com/securacore/codectx/core/detect"
+	"github.com/securacore/codectx/core/project"
 	"github.com/securacore/codectx/core/scaffold"
 	"github.com/securacore/codectx/core/tui"
 	"github.com/urfave/cli/v3"
@@ -160,7 +161,7 @@ func run(_ context.Context, cmd *cli.Command) error {
 
 		effectiveRoot := root
 		if effectiveRoot == "" {
-			effectiveRoot = "docs"
+			effectiveRoot = project.DefaultRoot
 		}
 
 		fmt.Print(tui.WarnMsg{
@@ -345,10 +346,10 @@ func run(_ context.Context, cmd *cli.Command) error {
 	// --- Step 10: Summary ---
 	effectiveRoot := root
 	if effectiveRoot == "" {
-		effectiveRoot = "docs"
+		effectiveRoot = project.DefaultRoot
 	}
 
-	tree := buildSummaryTree(effectiveRoot, result)
+	tree := buildSummaryTree(effectiveRoot)
 
 	nextSteps := []string{
 		fmt.Sprintf("Add foundation documents to %s",
@@ -415,7 +416,7 @@ func resolveTarget(args []string) (string, bool, error) {
 }
 
 // buildSummaryTree creates the tree structure for the init summary display.
-func buildSummaryTree(root string, result *scaffold.Result) []tui.TreeNode {
+func buildSummaryTree(root string) []tui.TreeNode {
 	return []tui.TreeNode{
 		{
 			Name: "codectx.yml",

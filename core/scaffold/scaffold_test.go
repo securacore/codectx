@@ -186,7 +186,8 @@ func TestInit_CreatesGitignore(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	gitignorePath := filepath.Join(dir, "docs", ".codectx", ".gitignore")
+	// .gitignore should be at the project root (not inside .codectx/).
+	gitignorePath := filepath.Join(dir, ".gitignore")
 	data, err := os.ReadFile(gitignorePath)
 	if err != nil {
 		t.Fatalf("reading .gitignore: %v", err)
@@ -194,17 +195,118 @@ func TestInit_CreatesGitignore(t *testing.T) {
 
 	content := string(data)
 	expectedEntries := []string{
-		".codectx/compiled/",
-		".codectx/packages/",
-		".codectx/ai.local.yml",
-		"!.codectx/ai.yml",
-		"!.codectx/preferences.yml",
+		"docs/.codectx/compiled/",
+		"docs/.codectx/packages/",
+		"docs/.codectx/ai.local.yml",
+		"!docs/.codectx/ai.yml",
+		"!docs/.codectx/preferences.yml",
 	}
 
 	for _, entry := range expectedEntries {
 		if !strings.Contains(content, entry) {
 			t.Errorf("expected .gitignore to contain %q", entry)
 		}
+	}
+
+	// Verify the old location does NOT exist.
+	oldPath := filepath.Join(dir, "docs", ".codectx", ".gitignore")
+	if _, err := os.Stat(oldPath); err == nil {
+		t.Error("expected .gitignore to NOT exist at old location docs/.codectx/.gitignore")
+	}
+}
+
+func TestInit_GitignoreIdempotent(t *testing.T) {
+	dir := t.TempDir()
+
+	// Run init twice.
+	for i := range 2 {
+		_, err := scaffold.Init(scaffold.Options{
+			ProjectDir: dir,
+			Name:       "idempotent-test",
+		})
+		if err != nil {
+			t.Fatalf("init run %d: unexpected error: %v", i+1, err)
+		}
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	if err != nil {
+		t.Fatalf("reading .gitignore: %v", err)
+	}
+
+	content := string(data)
+
+	// Count occurrences of a managed pattern — should appear exactly once.
+	count := strings.Count(content, "docs/.codectx/compiled/")
+	if count != 1 {
+		t.Errorf("expected exactly 1 occurrence of compiled/ pattern, got %d", count)
+	}
+}
+
+func TestInit_GitignorePreservesExisting(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a pre-existing .gitignore with custom content.
+	existing := "# My project ignores\nnode_modules/\n*.log\n"
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(existing), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := scaffold.Init(scaffold.Options{
+		ProjectDir: dir,
+		Name:       "preserve-test",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	if err != nil {
+		t.Fatalf("reading .gitignore: %v", err)
+	}
+
+	content := string(data)
+
+	// Existing content should be preserved.
+	if !strings.Contains(content, "node_modules/") {
+		t.Error("expected existing node_modules/ entry to be preserved")
+	}
+	if !strings.Contains(content, "*.log") {
+		t.Error("expected existing *.log entry to be preserved")
+	}
+
+	// codectx entries should also be present.
+	if !strings.Contains(content, "docs/.codectx/compiled/") {
+		t.Error("expected codectx entries to be present")
+	}
+}
+
+func TestInit_GitignoreCustomRoot(t *testing.T) {
+	dir := t.TempDir()
+
+	_, err := scaffold.Init(scaffold.Options{
+		ProjectDir: dir,
+		Root:       "custom",
+		Name:       "custom-root-gitignore",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	if err != nil {
+		t.Fatalf("reading .gitignore: %v", err)
+	}
+
+	content := string(data)
+
+	// Should use custom root path.
+	if !strings.Contains(content, "custom/.codectx/compiled/") {
+		t.Error("expected .gitignore to use custom root 'custom'")
+	}
+	// Should NOT contain default "docs" root.
+	if strings.Contains(content, "docs/.codectx/") {
+		t.Error("expected .gitignore to NOT contain default 'docs' root with custom root")
 	}
 }
 

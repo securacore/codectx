@@ -20,8 +20,6 @@ const (
 	IconSuccess = "✓"
 	IconWarning = "⚠"
 	IconError   = "✗"
-	IconArrow   = "→"
-	IconBullet  = "•"
 	IconIndent  = "  "
 )
 
@@ -52,9 +50,6 @@ var ColorWarning = lightDark(lipgloss.Color("#CA8A04"), lipgloss.Color("#FACC15"
 // ColorError is used for failed operations, validation errors, and critical states.
 var ColorError = lightDark(lipgloss.Color("#DC2626"), lipgloss.Color("#F87171"))
 
-// ColorInfo is used for informational output, counts, and metadata values.
-var ColorInfo = lightDark(lipgloss.Color("#2563EB"), lipgloss.Color("#60A5FA"))
-
 // ColorMuted is used for secondary information, timestamps, and pending states.
 var ColorMuted = lightDark(lipgloss.Color("#6B7280"), lipgloss.Color("#9CA3AF"))
 
@@ -73,9 +68,6 @@ var StyleWarning = lipgloss.NewStyle().Foreground(ColorWarning)
 // StyleError renders text in the error color (red).
 var StyleError = lipgloss.NewStyle().Foreground(ColorError)
 
-// StyleInfo renders text in the info color (blue).
-var StyleInfo = lipgloss.NewStyle().Foreground(ColorInfo)
-
 // StyleMuted renders text in the muted color (gray).
 var StyleMuted = lipgloss.NewStyle().Foreground(ColorMuted)
 
@@ -93,9 +85,6 @@ var StyleSuccessIcon = lipgloss.NewStyle().Foreground(ColorSuccess).Bold(true)
 
 // StyleWarningIcon renders the warning icon (⚠) in warning color, bold.
 var StyleWarningIcon = lipgloss.NewStyle().Foreground(ColorWarning).Bold(true)
-
-// StyleHeading renders a section heading — bold with accent color.
-var StyleHeading = lipgloss.NewStyle().Foreground(ColorAccent).Bold(true)
 
 // StyleCommand renders inline command references — accent colored for visibility.
 var StyleCommand = lipgloss.NewStyle().Foreground(ColorAccent)
@@ -120,6 +109,10 @@ func ErrorIcon() string { return StyleErrorIcon.Render(IconError) }
 // --- Indentation Helpers ---
 
 // Indent returns a string with n levels of indentation (2 spaces each).
+// Returns an empty string for zero or negative values.
 func Indent(n int) string {
+	if n <= 0 {
+		return ""
+	}
 	return strings.Repeat(IconIndent, n)
 }

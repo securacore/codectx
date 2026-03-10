@@ -24,6 +24,9 @@ import (
 // Excessive blank lines are implicitly handled by block extraction — the parser
 // only produces semantic blocks, so whitespace between them is irrelevant.
 func Strip(doc *Document) *Document {
+	if doc == nil {
+		return nil
+	}
 	result := &Document{
 		Source: doc.Source,
 	}

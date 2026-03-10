@@ -586,3 +586,31 @@ func TestDefaultEncoding_IsSet(t *testing.T) {
 		t.Errorf("expected default encoding %q, got %q", "cl100k_base", detect.DefaultEncoding)
 	}
 }
+
+func TestScan_CleanVersion_WhitespaceOnly(t *testing.T) {
+	withMocks(
+		func(binary string) (string, error) {
+			if binary == "goose" {
+				return "/usr/bin/goose", nil
+			}
+			return "", fmt.Errorf("not found")
+		},
+		func(string) string { return "" },
+		func(name string, _ ...string) (string, error) {
+			if name == "goose" {
+				return "   \n  \n", nil // Whitespace-only output
+			}
+			return "", fmt.Errorf("not found")
+		},
+		func() {
+			result := detect.Scan()
+			if len(result.Tools) == 0 {
+				t.Fatal("expected at least one tool")
+			}
+			// cleanVersion should return empty string for whitespace-only input.
+			if result.Tools[0].Version != "" {
+				t.Errorf("expected empty version for whitespace-only output, got %q", result.Tools[0].Version)
+			}
+		},
+	)
+}

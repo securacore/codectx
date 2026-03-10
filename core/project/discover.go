@@ -39,9 +39,6 @@ func Discover(startDir string) (string, error) {
 // projectDir is the directory containing codectx.yml.
 // Returns the absolute path to the documentation root.
 func RootDir(projectDir string, cfg *Config) string {
-	root := cfg.Root
-	if root == "" {
-		root = DefaultRoot
-	}
+	root := ResolveRoot(cfg.Root)
 	return filepath.Join(projectDir, root)
 }

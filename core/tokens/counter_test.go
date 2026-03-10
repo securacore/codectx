@@ -538,3 +538,15 @@ func TestEncodingConstants(t *testing.T) {
 		t.Errorf("R50kBase = %q, want %q", tokens.R50kBase, "r50k_base")
 	}
 }
+
+func TestCountBlocks_NilDocument(t *testing.T) {
+	c, err := tokens.New(tokens.Cl100kBase)
+	if err != nil {
+		t.Fatalf("creating counter: %v", err)
+	}
+
+	err = tokens.CountBlocks(nil, c)
+	if err == nil {
+		t.Fatal("expected error for nil document")
+	}
+}

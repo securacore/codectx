@@ -1,0 +1,72 @@
+package chunk
+
+import (
+	"fmt"
+	"path/filepath"
+	"strings"
+)
+
+// OutputDir returns the compiled subdirectory name for a chunk type.
+// Returns "objects", "specs", or "system".
+func OutputDir(ct ChunkType) string {
+	if m, ok := chunkTypeRegistry[ct]; ok {
+		return m.outDir
+	}
+	return defaultChunkTypeMeta.outDir
+}
+
+// OutputFilename returns the filename for a chunk file: [hash].[seq].md.
+// The hash is extracted from the chunk ID (after the prefix and colon).
+// Returns an empty string for nil chunks.
+func OutputFilename(c *Chunk) string {
+	if c == nil {
+		return ""
+	}
+	// ID format: "prefix:hash.seq"
+	// We want "hash.seq.md"
+	parts := strings.SplitN(c.ID, ":", 2)
+	if len(parts) != 2 {
+		return fmt.Sprintf("unknown.%d.md", c.Sequence)
+	}
+	return parts[1] + ".md"
+}
+
+// OutputPath returns the full relative path under compiled/ for a chunk.
+// E.g. "compiled/objects/a1b2c3d4e5f67890.3.md"
+// Returns an empty string for nil chunks.
+func OutputPath(c *Chunk) string {
+	if c == nil {
+		return ""
+	}
+	return filepath.Join("compiled", OutputDir(c.Type), OutputFilename(c))
+}
+
+// ClassifySource determines the ChunkType from a source file path.
+//
+// Rules (in priority order):
+//  1. Any file ending in .spec.md → ChunkSpec
+//  2. Files under the system directory (non-spec) → ChunkSystem
+//  3. All other .md files → ChunkObject
+//
+// The systemDir parameter is the system directory name relative to the
+// documentation root (typically "system").
+func ClassifySource(sourcePath string, systemDir string) ChunkType {
+	// Normalize to forward slashes for consistent matching.
+	normalized := filepath.ToSlash(sourcePath)
+
+	// Rule 1: spec files always produce spec chunks.
+	if strings.HasSuffix(normalized, ".spec.md") {
+		return ChunkSpec
+	}
+
+	// Rule 2: files under system/ directory (non-spec) produce system chunks.
+	if systemDir != "" {
+		prefix := systemDir + "/"
+		if strings.HasPrefix(normalized, prefix) || normalized == systemDir {
+			return ChunkSystem
+		}
+	}
+
+	// Rule 3: everything else is an object chunk.
+	return ChunkObject
+}

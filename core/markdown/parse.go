@@ -171,7 +171,7 @@ func renderListText(node *ast.List, source []byte) string {
 		}
 
 		// Render item content (may contain multiple block children).
-		renderListItemContent(&b, item, source, node.IsOrdered())
+		renderListItemContent(&b, item, source)
 	}
 
 	return b.String()
@@ -183,7 +183,7 @@ func formatOrderedMarker(num int, marker byte) string {
 }
 
 // renderListItemContent renders the content blocks within a list item.
-func renderListItemContent(b *strings.Builder, item ast.Node, source []byte, ordered bool) {
+func renderListItemContent(b *strings.Builder, item ast.Node, source []byte) {
 	firstBlock := true
 	for child := item.FirstChild(); child != nil; child = child.NextSibling() {
 		if !firstBlock {

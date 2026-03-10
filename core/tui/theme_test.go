@@ -12,8 +12,6 @@ func TestIcons_AreNotEmpty(t *testing.T) {
 		"IconSuccess": tui.IconSuccess,
 		"IconWarning": tui.IconWarning,
 		"IconError":   tui.IconError,
-		"IconArrow":   tui.IconArrow,
-		"IconBullet":  tui.IconBullet,
 		"IconIndent":  tui.IconIndent,
 	}
 	for name, icon := range icons {
@@ -83,5 +81,19 @@ func TestIndent_UsesSpaces(t *testing.T) {
 	trimmed := strings.TrimLeft(result, " ")
 	if trimmed != "" {
 		t.Errorf("Indent should use only spaces, got %q", result)
+	}
+}
+
+func TestIndent_NegativeReturnsEmpty(t *testing.T) {
+	result := tui.Indent(-1)
+	if result != "" {
+		t.Errorf("Indent(-1) should return empty string, got %q", result)
+	}
+}
+
+func TestIndent_ZeroReturnsEmpty(t *testing.T) {
+	result := tui.Indent(0)
+	if result != "" {
+		t.Errorf("Indent(0) should return empty string, got %q", result)
 	}
 }
