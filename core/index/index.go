@@ -26,17 +26,17 @@ var chunkTypeToIndex = map[chunk.ChunkType]IndexType{
 	chunk.ChunkSystem: IndexSystem,
 }
 
-// IndexTypeForChunk returns the IndexType corresponding to a ChunkType.
+// indexTypeForChunk returns the IndexType corresponding to a ChunkType.
 // Defaults to IndexObjects for unknown chunk types.
-func IndexTypeForChunk(ct chunk.ChunkType) IndexType {
+func indexTypeForChunk(ct chunk.ChunkType) IndexType {
 	if it, ok := chunkTypeToIndex[ct]; ok {
 		return it
 	}
 	return IndexObjects
 }
 
-// AllIndexTypes returns all three index types in a stable order.
-func AllIndexTypes() []IndexType {
+// allIndexTypes returns all three index types in a stable order.
+func allIndexTypes() []IndexType {
 	return []IndexType{IndexObjects, IndexSpecs, IndexSystem}
 }
 
@@ -75,7 +75,7 @@ func NewFromConfig(cfg project.BM25Config) *Index {
 func (idx *Index) BuildFromChunks(chunks []chunk.Chunk) {
 	for i := range chunks {
 		c := &chunks[i]
-		it := IndexTypeForChunk(c.Type)
+		it := indexTypeForChunk(c.Type)
 		bm25 := idx.Indexes[it]
 
 		tokens := Tokenize(c.Content)

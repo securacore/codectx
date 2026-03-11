@@ -376,7 +376,18 @@ func TestLinkedIntegrations_IgnoresNonCodectxFiles(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// NeedsUpdate — nonexistent entry point file
+// ---------------------------------------------------------------------------
+
+func TestNeedsUpdate_NonexistentFile(t *testing.T) {
+	dir := t.TempDir()
+	// No entry point files exist. NeedsUpdate should return empty.
+	needsUpdate := link.NeedsUpdate(filepath.Join(dir, "nonexistent"), "docs/.codectx/compiled/context.md")
+	if len(needsUpdate) != 0 {
+		t.Errorf("expected 0 updates needed for nonexistent dir, got %d", len(needsUpdate))
+	}
+}
+
 // ---------------------------------------------------------------------------
 // RenderLinkResults
 // ---------------------------------------------------------------------------

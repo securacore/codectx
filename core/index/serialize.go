@@ -46,7 +46,7 @@ func Load(compiledDir string) (*Index, error) {
 		Indexes: make(map[IndexType]*BM25, 3),
 	}
 
-	for _, it := range AllIndexTypes() {
+	for _, it := range allIndexTypes() {
 		path := filepath.Join(compiledDir, project.BM25Dir, string(it), indexFileName)
 		bm25, err := loadIndex(path)
 		if err != nil {

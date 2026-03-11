@@ -5,14 +5,18 @@
 // between how developers phrase queries and how documentation uses
 // terminology.
 //
-// The extraction pipeline runs in three passes:
+// The extraction pipeline runs in four passes:
 //
 //  1. Structural term extraction (pure parsing, no NLP): headings, code
 //     identifiers, bold/emphasized terms, structured positions.
-//  2. Deduplication and normalization: merge duplicates, score by frequency,
-//     filter by min_term_frequency threshold. Runs before relationship
-//     inference so that only surviving terms get relationships assigned.
-//  3. Relationship inference (structural analysis): heading hierarchy yields
+//  2. POS-based term extraction (lightweight NLP via prose): noun phrases,
+//     named entities, compound terms. Optional, controlled by POSExtraction
+//     preference.
+//  3. Deduplication and normalization: merge duplicates from all passes,
+//     score by frequency, filter by min_term_frequency threshold. Runs
+//     before relationship inference so that only surviving terms get
+//     relationships assigned.
+//  4. Relationship inference (structural analysis): heading hierarchy yields
 //     parent/child, cross-references yield lateral relationships.
 //
 // The data model is inspired by W3C SKOS (Simple Knowledge Organization
@@ -44,6 +48,7 @@ const (
 	SourceCodeIdentifier     = "code_identifier"
 	SourceBoldTerm           = "bold_term"
 	SourceStructuredPosition = "structured_position"
+	SourcePOS                = "pos_extraction"
 )
 
 // Taxonomy is the top-level structure for taxonomy.yml.
@@ -109,8 +114,10 @@ func sourceRank(source string) int {
 		return 2
 	case SourceStructuredPosition:
 		return 3
-	default:
+	case SourcePOS:
 		return 4
+	default:
+		return 5
 	}
 }
 

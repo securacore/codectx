@@ -452,7 +452,7 @@ func resolveTarget(args []string) (string, bool, error) {
 func buildSummaryTree(root string) []tui.TreeNode {
 	return []tui.TreeNode{
 		{
-			Name: "codectx.yml",
+			Name: project.ConfigFileName,
 		},
 		{
 			Name: root + "/",

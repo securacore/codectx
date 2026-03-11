@@ -36,7 +36,7 @@ func (v *ValidationResult) Merge(other *ValidationResult) {
 	v.Errors = append(v.Errors, other.Errors...)
 }
 
-// ValidateDir checks structural requirements for a documentation directory tree.
+// validateDir checks structural requirements for a documentation directory tree.
 //
 // Checks performed:
 //   - requireReadme: every subdirectory containing .md files must have a README.md
@@ -44,7 +44,7 @@ func (v *ValidationResult) Merge(other *ValidationResult) {
 //
 // The dir parameter should be the documentation root (e.g., "docs/").
 // Walks recursively through all subdirectories.
-func ValidateDir(dir string, requireReadme, requireHeadings bool) (*ValidationResult, error) {
+func validateDir(dir string, requireReadme, requireHeadings bool) (*ValidationResult, error) {
 	result := &ValidationResult{}
 
 	absDir, err := filepath.Abs(dir)

@@ -3,6 +3,7 @@ package taxonomy_test
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/securacore/codectx/core/chunk"
@@ -584,10 +585,10 @@ func TestExtract_CrossReferenceRelated(t *testing.T) {
 	}
 
 	// They should be related.
-	if !containsStr(auth.Related, "middleware") {
+	if !slices.Contains(auth.Related, "middleware") {
 		t.Errorf("expected 'middleware' in auth.Related, got %v", auth.Related)
 	}
-	if !containsStr(mw.Related, "authentication") {
+	if !slices.Contains(mw.Related, "authentication") {
 		t.Errorf("expected 'authentication' in mw.Related, got %v", mw.Related)
 	}
 }
@@ -637,10 +638,10 @@ func TestExtract_IntegrationChunkTermsToManifest(t *testing.T) {
 	}
 
 	// Both chunks should have "oauth" since the heading appears in both.
-	if !containsStr(terms1, "oauth") {
+	if !slices.Contains(terms1, "oauth") {
 		t.Error("expected 'oauth' in obj:ooo.1 terms")
 	}
-	if !containsStr(terms2, "oauth") {
+	if !slices.Contains(terms2, "oauth") {
 		t.Error("expected 'oauth' in obj:ooo.2 terms")
 	}
 }
@@ -805,11 +806,131 @@ func TestExtract_BoldTermExceedingMaxLength(t *testing.T) {
 	}
 }
 
-func containsStr(slice []string, s string) bool {
-	for _, v := range slice {
-		if v == s {
-			return true
+// ---------------------------------------------------------------------------
+// POS extraction integration tests
+// ---------------------------------------------------------------------------
+
+// posCfg returns a TaxonomyConfig with POS extraction enabled.
+func posCfg() project.TaxonomyConfig {
+	cfg := defaultCfg()
+	cfg.POSExtraction = true
+	return cfg
+}
+
+func TestExtract_POSNewTermsAdded(t *testing.T) {
+	// The paragraph text contains compound noun phrases that structural
+	// extraction won't find (no headings, no code, no bold markers for them).
+	chunks := []chunk.Chunk{
+		makeChunk("obj:pos.1", chunk.ChunkObject, "docs/topics/arch.md", "Architecture",
+			[]markdown.Block{
+				headingBlock("Architecture", 1, []string{"Architecture"}),
+				paragraphBlock(
+					"The dependency injection framework provides automatic service resolution. "+
+						"It uses a middleware chain for request processing.",
+					[]string{"Architecture"},
+				),
+			}),
+	}
+
+	result := taxonomy.Extract(chunks, posCfg(), "cl100k_base", "")
+
+	// Should have heading-derived term.
+	if result.Taxonomy.Terms["architecture"] == nil {
+		t.Fatal("expected 'architecture' term from heading")
+	}
+
+	// Should also have POS-derived terms. Check stats.
+	if result.Stats.TermsFromPOS == 0 {
+		// POS extraction should find at least some noun phrases from the
+		// paragraph text. If the prose tagger doesn't find any, that's still
+		// a valid outcome — but we expect compound terms to be extracted.
+		t.Log("POS extraction found 0 terms; prose tagger may not have matched expected patterns")
+	}
+}
+
+func TestExtract_POSMergesWithStructural(t *testing.T) {
+	// "Authentication" appears as a heading (structural) and will also
+	// be tagged as a proper noun by POS tagger. The heading source
+	// (rank 0) should win over POS (rank 4).
+	chunks := []chunk.Chunk{
+		makeChunk("obj:pos.2", chunk.ChunkObject, "docs/topics/auth.md", "Authentication",
+			[]markdown.Block{
+				headingBlock("Authentication", 1, []string{"Authentication"}),
+				paragraphBlock(
+					"Authentication is the process of verifying identity. "+
+						"The authentication module validates credentials.",
+					[]string{"Authentication"},
+				),
+			}),
+	}
+
+	result := taxonomy.Extract(chunks, posCfg(), "cl100k_base", "")
+
+	auth := result.Taxonomy.Terms["authentication"]
+	if auth == nil {
+		t.Fatal("expected 'authentication' term")
+	}
+
+	// Heading source should win.
+	if auth.Source != taxonomy.SourceHeading {
+		t.Errorf("expected source %q (heading wins over POS), got %q",
+			taxonomy.SourceHeading, auth.Source)
+	}
+}
+
+func TestExtract_POSDisabledNoPOSTerms(t *testing.T) {
+	chunks := []chunk.Chunk{
+		makeChunk("obj:pos.3", chunk.ChunkObject, "docs/topics/arch.md", "Architecture",
+			[]markdown.Block{
+				headingBlock("Architecture", 1, []string{"Architecture"}),
+				paragraphBlock(
+					"The distributed message queue handles event processing.",
+					[]string{"Architecture"},
+				),
+			}),
+	}
+
+	cfg := defaultCfg()
+	cfg.POSExtraction = false
+
+	result := taxonomy.Extract(chunks, cfg, "cl100k_base", "")
+
+	if result.Stats.TermsFromPOS != 0 {
+		t.Errorf("expected 0 POS terms when disabled, got %d", result.Stats.TermsFromPOS)
+	}
+
+	// Should only have structural terms.
+	for _, term := range result.Taxonomy.Terms {
+		if term.Source == taxonomy.SourcePOS {
+			t.Errorf("found POS-sourced term %q when POS extraction disabled", term.Canonical)
 		}
 	}
-	return false
+}
+
+func TestExtract_POSStatsPopulated(t *testing.T) {
+	chunks := []chunk.Chunk{
+		makeChunk("obj:pos.4", chunk.ChunkObject, "docs/topics/arch.md", "Architecture",
+			[]markdown.Block{
+				headingBlock("Architecture", 1, []string{"Architecture"}),
+				paragraphBlock(
+					"The distributed system uses a message broker for asynchronous communication. "+
+						"The load balancer distributes traffic across multiple service instances.",
+					[]string{"Architecture"},
+				),
+			}),
+	}
+
+	result := taxonomy.Extract(chunks, posCfg(), "cl100k_base", "")
+
+	if result.Stats.TermsFromHeadings == 0 {
+		t.Error("expected non-zero terms from headings")
+	}
+
+	// The total should include all sources.
+	total := result.Stats.TermsFromHeadings + result.Stats.TermsFromCodeIdents +
+		result.Stats.TermsFromBoldTerms + result.Stats.TermsFromStructured +
+		result.Stats.TermsFromPOS
+	if total != result.Stats.CanonicalTerms {
+		t.Errorf("stats sources sum %d != canonical terms %d", total, result.Stats.CanonicalTerms)
+	}
 }

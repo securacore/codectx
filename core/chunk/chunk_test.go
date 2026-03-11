@@ -1410,6 +1410,34 @@ func TestFormatID_UnknownChunkType(t *testing.T) {
 // HeadingSeparator constant
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// JoinContent — blocks with empty content
+// ---------------------------------------------------------------------------
+
+func TestJoinContent_EmptyContentBlocks(t *testing.T) {
+	blocks := []markdown.Block{
+		{Content: ""},
+		{Content: ""},
+	}
+	got := chunk.JoinContent(blocks)
+	if got != "\n\n" {
+		t.Errorf("expected two empty contents joined, got %q", got)
+	}
+}
+
+func TestJoinContent_MixedEmptyAndNonEmpty(t *testing.T) {
+	blocks := []markdown.Block{
+		{Content: "first"},
+		{Content: ""},
+		{Content: "third"},
+	}
+	got := chunk.JoinContent(blocks)
+	expected := "first\n\n\n\nthird"
+	if got != expected {
+		t.Errorf("got %q, want %q", got, expected)
+	}
+}
+
 func TestHeadingSeparator_UsedInFormatHeading(t *testing.T) {
 	got := chunk.FormatHeading([]string{"A", "B", "C"})
 	if got != "A"+chunk.HeadingSeparator+"B"+chunk.HeadingSeparator+"C" {

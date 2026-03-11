@@ -20,7 +20,8 @@ func TestSourceRank(t *testing.T) {
 		{SourceCodeIdentifier, 1},
 		{SourceBoldTerm, 2},
 		{SourceStructuredPosition, 3},
-		{"unknown", 4},
+		{SourcePOS, 4},
+		{"unknown", 5},
 	}
 
 	for _, tt := range tests {
@@ -30,7 +31,7 @@ func TestSourceRank(t *testing.T) {
 		}
 	}
 
-	// Verify ordering: heading < code < bold < structured.
+	// Verify ordering: heading < code < bold < structured < pos.
 	if sourceRank(SourceHeading) >= sourceRank(SourceCodeIdentifier) {
 		t.Error("heading should rank higher (lower number) than code identifier")
 	}
@@ -39,6 +40,9 @@ func TestSourceRank(t *testing.T) {
 	}
 	if sourceRank(SourceBoldTerm) >= sourceRank(SourceStructuredPosition) {
 		t.Error("bold term should rank higher than structured position")
+	}
+	if sourceRank(SourceStructuredPosition) >= sourceRank(SourcePOS) {
+		t.Error("structured position should rank higher than POS extraction")
 	}
 }
 

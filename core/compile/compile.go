@@ -461,6 +461,7 @@ func Run(cfg Config, progress ProgressFunc) (*Result, error) {
 		TermsFromCodeIdents:          taxResult.Stats.TermsFromCodeIdents,
 		TermsFromBoldTerms:           taxResult.Stats.TermsFromBoldTerms,
 		TermsFromStructuredPositions: taxResult.Stats.TermsFromStructured,
+		TermsFromPOSExtraction:       taxResult.Stats.TermsFromPOS,
 	})
 
 	timing := &manifest.TimingSection{

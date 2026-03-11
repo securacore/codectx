@@ -31,14 +31,17 @@ type Stats struct {
 	TermsFromCodeIdents int
 	TermsFromBoldTerms  int
 	TermsFromStructured int
+	TermsFromPOS        int
 }
 
-// Extract runs the full structural taxonomy extraction pipeline:
+// Extract runs the full taxonomy extraction pipeline:
 //
 //  1. Structural term extraction (headings, code identifiers, bold terms,
 //     structured positions)
-//  2. Deduplication and frequency filtering
-//  3. Relationship inference (heading hierarchy, cross-references)
+//  2. POS-based term extraction (noun phrases, named entities) — optional,
+//     controlled by cfg.POSExtraction
+//  3. Deduplication and frequency filtering (merges structural + POS candidates)
+//  4. Relationship inference (heading hierarchy, cross-references)
 //
 // The encoding and instructionsHash parameters are stored in the taxonomy
 // metadata for cache invalidation on incremental builds.
@@ -47,6 +50,12 @@ func Extract(chunks []chunk.Chunk, cfg project.TaxonomyConfig, encoding, instruc
 
 	// Pass 1: Structural term extraction.
 	candidates := extractStructural(chunks)
+
+	// Pass 3: POS-based term extraction (optional).
+	if cfg.POSExtraction {
+		posCandidates := extractPOS(chunks)
+		candidates = append(candidates, posCandidates...)
+	}
 
 	// Pass 4 (partial): Deduplication and frequency filtering.
 	// Runs before relationship inference so that only surviving terms
@@ -98,6 +107,8 @@ func computeStats(terms map[string]*Term) Stats {
 			s.TermsFromBoldTerms++
 		case SourceStructuredPosition:
 			s.TermsFromStructured++
+		case SourcePOS:
+			s.TermsFromPOS++
 		}
 	}
 

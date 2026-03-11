@@ -108,10 +108,10 @@ func TestValidationResult_MergeNil(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// ValidateDir
+// validateDir
 // ---------------------------------------------------------------------------
 
-func TestValidateDir_AllPass(t *testing.T) {
+func Test_validateDir_AllPass(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create a directory with README.md that has a heading.
@@ -120,7 +120,7 @@ func TestValidateDir_AllPass(t *testing.T) {
 	mustWriteFile(t, filepath.Join(topicDir, "README.md"), "# Topic A\n\nContent.\n")
 	mustWriteFile(t, filepath.Join(topicDir, "details.md"), "# Details\n\nMore content.\n")
 
-	result, err := ValidateDir(dir, true, true)
+	result, err := validateDir(dir, true, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -133,7 +133,7 @@ func TestValidateDir_AllPass(t *testing.T) {
 	}
 }
 
-func TestValidateDir_MissingReadme(t *testing.T) {
+func Test_validateDir_MissingReadme(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create a directory with .md files but no README.md.
@@ -141,7 +141,7 @@ func TestValidateDir_MissingReadme(t *testing.T) {
 	mustMkdir(t, topicDir)
 	mustWriteFile(t, filepath.Join(topicDir, "guide.md"), "# Guide\n\nContent.\n")
 
-	result, err := ValidateDir(dir, true, false)
+	result, err := validateDir(dir, true, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -161,14 +161,14 @@ func TestValidateDir_MissingReadme(t *testing.T) {
 	}
 }
 
-func TestValidateDir_ReadmeNotRequired(t *testing.T) {
+func Test_validateDir_ReadmeNotRequired(t *testing.T) {
 	dir := t.TempDir()
 
 	topicDir := filepath.Join(dir, "topic-c")
 	mustMkdir(t, topicDir)
 	mustWriteFile(t, filepath.Join(topicDir, "guide.md"), "# Guide\n\nContent.\n")
 
-	result, err := ValidateDir(dir, false, false)
+	result, err := validateDir(dir, false, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -178,7 +178,7 @@ func TestValidateDir_ReadmeNotRequired(t *testing.T) {
 	}
 }
 
-func TestValidateDir_FileWithNoHeadings(t *testing.T) {
+func Test_validateDir_FileWithNoHeadings(t *testing.T) {
 	dir := t.TempDir()
 
 	topicDir := filepath.Join(dir, "topic-d")
@@ -186,7 +186,7 @@ func TestValidateDir_FileWithNoHeadings(t *testing.T) {
 	mustWriteFile(t, filepath.Join(topicDir, "README.md"), "# Topic D\n")
 	mustWriteFile(t, filepath.Join(topicDir, "notes.md"), "Just text, no headings.\n")
 
-	result, err := ValidateDir(dir, false, true)
+	result, err := validateDir(dir, false, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -206,7 +206,7 @@ func TestValidateDir_FileWithNoHeadings(t *testing.T) {
 	}
 }
 
-func TestValidateDir_SkipsHiddenDirectories(t *testing.T) {
+func Test_validateDir_SkipsHiddenDirectories(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create .codectx/ with files that would fail validation.
@@ -219,7 +219,7 @@ func TestValidateDir_SkipsHiddenDirectories(t *testing.T) {
 	mustMkdir(t, topicDir)
 	mustWriteFile(t, filepath.Join(topicDir, "README.md"), "# Topic\n\nContent.\n")
 
-	result, err := ValidateDir(dir, true, true)
+	result, err := validateDir(dir, true, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -229,10 +229,10 @@ func TestValidateDir_SkipsHiddenDirectories(t *testing.T) {
 	}
 }
 
-func TestValidateDir_EmptyDirectory(t *testing.T) {
+func Test_validateDir_EmptyDirectory(t *testing.T) {
 	dir := t.TempDir()
 
-	result, err := ValidateDir(dir, true, true)
+	result, err := validateDir(dir, true, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -242,7 +242,7 @@ func TestValidateDir_EmptyDirectory(t *testing.T) {
 	}
 }
 
-func TestValidateDir_MultipleIssues(t *testing.T) {
+func Test_validateDir_MultipleIssues(t *testing.T) {
 	dir := t.TempDir()
 
 	// Dir without README.
@@ -255,7 +255,7 @@ func TestValidateDir_MultipleIssues(t *testing.T) {
 	mustMkdir(t, dirB)
 	mustWriteFile(t, filepath.Join(dirB, "notes.md"), "Also no heading.\n")
 
-	result, err := ValidateDir(dir, true, true)
+	result, err := validateDir(dir, true, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -266,14 +266,14 @@ func TestValidateDir_MultipleIssues(t *testing.T) {
 	}
 }
 
-func TestValidateDir_DirWithOnlyReadme(t *testing.T) {
+func Test_validateDir_DirWithOnlyReadme(t *testing.T) {
 	dir := t.TempDir()
 
 	topicDir := filepath.Join(dir, "topic-f")
 	mustMkdir(t, topicDir)
 	mustWriteFile(t, filepath.Join(topicDir, "README.md"), "# Topic F\n")
 
-	result, err := ValidateDir(dir, true, true)
+	result, err := validateDir(dir, true, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -284,8 +284,8 @@ func TestValidateDir_DirWithOnlyReadme(t *testing.T) {
 	}
 }
 
-func TestValidateDir_NonexistentDir(t *testing.T) {
-	_, err := ValidateDir("/nonexistent/path/12345", true, true)
+func Test_validateDir_NonexistentDir(t *testing.T) {
+	_, err := validateDir("/nonexistent/path/12345", true, true)
 	if err == nil {
 		t.Error("expected error for nonexistent directory")
 	}

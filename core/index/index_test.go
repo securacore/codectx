@@ -68,7 +68,7 @@ func TestNew_CreatesThreeIndexes(t *testing.T) {
 	if len(idx.Indexes) != 3 {
 		t.Fatalf("expected 3 indexes, got %d", len(idx.Indexes))
 	}
-	for _, it := range AllIndexTypes() {
+	for _, it := range allIndexTypes() {
 		if _, ok := idx.Indexes[it]; !ok {
 			t.Errorf("missing index for type %q", it)
 		}
@@ -103,9 +103,9 @@ func TestIndexTypeForChunk(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := IndexTypeForChunk(tt.ct)
+		got := indexTypeForChunk(tt.ct)
 		if got != tt.expected {
-			t.Errorf("IndexTypeForChunk(%q) = %q, want %q", tt.ct, got, tt.expected)
+			t.Errorf("indexTypeForChunk(%q) = %q, want %q", tt.ct, got, tt.expected)
 		}
 	}
 }
@@ -115,7 +115,7 @@ func TestIndexTypeForChunk(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestAllIndexTypes(t *testing.T) {
-	types := AllIndexTypes()
+	types := allIndexTypes()
 	if len(types) != 3 {
 		t.Fatalf("expected 3 index types, got %d", len(types))
 	}
@@ -146,7 +146,7 @@ func TestBuildFromChunks_EmptyChunks(t *testing.T) {
 	idx := New(1.2, 0.75)
 	idx.BuildFromChunks(nil)
 
-	for _, it := range AllIndexTypes() {
+	for _, it := range allIndexTypes() {
 		if idx.Indexes[it].DocCount != 0 {
 			t.Errorf("%s: expected 0 docs, got %d", it, idx.Indexes[it].DocCount)
 		}
@@ -338,7 +338,7 @@ func TestSaveLoad_RoundTrip(t *testing.T) {
 	}
 
 	// Verify files exist.
-	for _, it := range AllIndexTypes() {
+	for _, it := range allIndexTypes() {
 		path := filepath.Join(compiledDir, "bm25", string(it), indexFileName)
 		if _, err := os.Stat(path); err != nil {
 			t.Errorf("expected index file at %s: %v", path, err)
@@ -352,7 +352,7 @@ func TestSaveLoad_RoundTrip(t *testing.T) {
 	}
 
 	// Verify loaded indexes match original.
-	for _, it := range AllIndexTypes() {
+	for _, it := range allIndexTypes() {
 		origBM25 := original.Indexes[it]
 		loadBM25 := loaded.Indexes[it]
 
@@ -431,7 +431,7 @@ func TestSaveLoad_EmptyIndex(t *testing.T) {
 		t.Fatalf("Load empty index failed: %v", err)
 	}
 
-	for _, it := range AllIndexTypes() {
+	for _, it := range allIndexTypes() {
 		if loaded.Indexes[it].DocCount != 0 {
 			t.Errorf("%s: expected 0 docs, got %d", it, loaded.Indexes[it].DocCount)
 		}
@@ -639,5 +639,48 @@ func TestSaveLoad_RoundTrip_InternalFields(t *testing.T) {
 		} else if origIDF != loadIDF {
 			t.Errorf("IDFCache[%q]: %f vs %f", term, origIDF, loadIDF)
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Save — unwritable path
+// ---------------------------------------------------------------------------
+
+func TestSave_UnwritablePath(t *testing.T) {
+	// Create a read-only directory so Save cannot create subdirectories.
+	tmpDir := t.TempDir()
+	readOnlyDir := filepath.Join(tmpDir, "readonly")
+	if err := os.MkdirAll(readOnlyDir, 0o555); err != nil {
+		t.Fatalf("creating read-only dir: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chmod(readOnlyDir, 0o755)
+	})
+
+	idx := New(1.2, 0.75)
+	idx.BuildFromChunks(nil)
+
+	err := idx.Save(readOnlyDir)
+	if err == nil {
+		t.Error("expected error saving to unwritable directory")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Search — empty index returns empty results
+// ---------------------------------------------------------------------------
+
+func TestSearch_EmptyIndex(t *testing.T) {
+	idx := New(1.2, 0.75)
+	idx.BuildFromChunks(nil)
+
+	results := idx.Query(IndexObjects, "some query term", 10)
+	if len(results) != 0 {
+		t.Errorf("expected 0 results from empty index, got %d", len(results))
+	}
+
+	allResults := idx.QueryAll("some query term", 10)
+	if len(allResults) != 0 {
+		t.Errorf("expected 0 result groups from empty index, got %d", len(allResults))
 	}
 }

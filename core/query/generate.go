@@ -11,6 +11,7 @@ import (
 	"github.com/securacore/codectx/core/chunk"
 	"github.com/securacore/codectx/core/manifest"
 	"github.com/securacore/codectx/core/project"
+	"github.com/securacore/codectx/core/taxonomy"
 	"github.com/securacore/codectx/core/tokens"
 )
 
@@ -225,34 +226,15 @@ func assembleDocument(resolved []resolvedChunk, chunkIDs []string) string {
 
 // topicSlug derives a kebab-case topic slug from the heading of the first chunk.
 // The slug is used as the filename prefix for generated documents.
+// Delegates to taxonomy.NormalizeKey for the core slug transformation,
+// then applies truncation and a fallback for empty results.
 func topicSlug(resolved []resolvedChunk) string {
 	if len(resolved) == 0 {
 		return "generated"
 	}
 
 	heading := resolved[0].entry.Heading
-	// Use the full heading breadcrumb, kebab-cased.
-	slug := strings.ToLower(heading)
-	slug = strings.ReplaceAll(slug, " > ", "-")
-	slug = strings.ReplaceAll(slug, " ", "-")
-
-	// Remove any non-alphanumeric characters except hyphens.
-	var cleaned strings.Builder
-	for _, r := range slug {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
-			cleaned.WriteRune(r)
-		}
-	}
-
-	result := cleaned.String()
-
-	// Collapse consecutive hyphens.
-	for strings.Contains(result, "--") {
-		result = strings.ReplaceAll(result, "--", "-")
-	}
-
-	// Trim leading and trailing hyphens.
-	result = strings.Trim(result, "-")
+	result := taxonomy.NormalizeKey(heading)
 
 	if result == "" {
 		return "generated"
