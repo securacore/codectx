@@ -14,6 +14,7 @@ import (
 	"github.com/securacore/codectx/core/manifest"
 	"github.com/securacore/codectx/core/markdown"
 	"github.com/securacore/codectx/core/project"
+	"github.com/securacore/codectx/core/taxonomy"
 	"github.com/securacore/codectx/core/tokens"
 )
 
@@ -25,6 +26,7 @@ const (
 	StageChunk     = "chunk"
 	StageWrite     = "write"
 	StageIndex     = "index"
+	StageTaxonomy  = "taxonomy"
 	StageManifest  = "manifest"
 	StageContext   = "context"
 	StageLink      = "link"
@@ -60,6 +62,9 @@ type Config struct {
 
 	// Validation holds validation settings from preferences.yml.
 	Validation project.ValidationConfig
+
+	// Taxonomy holds taxonomy extraction settings from preferences.yml.
+	Taxonomy project.TaxonomyConfig
 
 	// ActiveDeps maps package names to active status.
 	// Only packages with a true value are included in compilation.
@@ -97,11 +102,15 @@ type Result struct {
 	SessionBudget  int
 	SessionEntries []SessionEntryResult
 
+	// Taxonomy extraction.
+	TaxonomyTerms int
+
 	// Timing.
 	TotalSeconds    float64
 	ParseSeconds    float64
 	ChunkSeconds    float64
 	IndexSeconds    float64
+	TaxonomySeconds float64
 	ManifestSeconds float64
 	ContextSeconds  float64
 	LinkSeconds     float64
@@ -121,12 +130,11 @@ type ProgressFunc func(stage, detail string)
 
 // Run executes the full compilation pipeline. It discovers source files,
 // parses and strips markdown, counts tokens, chunks documents, builds the
-// BM25 search index, and generates all manifest files.
+// BM25 search index, extracts taxonomy terms, and generates all manifest files.
 //
 // The progress callback is invoked at each stage transition. It may be nil.
 //
-// Stages 5-6 (Taxonomy, LLM Augmentation) from the spec are deferred
-// to later build steps.
+// Stage 6 (LLM Augmentation) from the spec is deferred to a later build step.
 func Run(cfg Config, progress ProgressFunc) (*Result, error) {
 	if progress == nil {
 		progress = func(string, string) {}
@@ -297,6 +305,30 @@ func Run(cfg Config, progress ProgressFunc) (*Result, error) {
 
 	result.IndexSeconds = time.Since(indexStart).Seconds()
 
+	// --- Stage: Extract taxonomy ---
+	progress(StageTaxonomy, fmt.Sprintf("Extracting taxonomy from %d chunks", result.TotalChunks))
+
+	// Hash the taxonomy-generation system directory for cache invalidation.
+	taxonomyInstructionsHash := ""
+	taxonomyDir := filepath.Join(cfg.RootDir, cfg.SystemDir, "topics", "taxonomy-generation")
+	if info, err := os.Stat(taxonomyDir); err == nil && info.IsDir() {
+		h, err := manifest.HashDir(taxonomyDir)
+		if err != nil {
+			return nil, fmt.Errorf("hashing taxonomy instructions: %w", err)
+		}
+		taxonomyInstructionsHash = h
+	}
+
+	taxResult := taxonomy.Extract(allChunks, cfg.Taxonomy, cfg.Encoding, taxonomyInstructionsHash)
+	result.TaxonomyTerms = taxResult.Stats.CanonicalTerms
+	result.TaxonomySeconds = taxResult.Seconds
+
+	// Write taxonomy.yml.
+	taxPath := taxonomy.TaxonomyPath(cfg.CompiledDir)
+	if err := taxResult.Taxonomy.WriteTo(taxPath); err != nil {
+		return nil, fmt.Errorf("writing taxonomy: %w", err)
+	}
+
 	// --- Stage: Generate manifests ---
 	progress(StageManifest, "Generating manifest files")
 
@@ -323,17 +355,32 @@ func Run(cfg Config, progress ProgressFunc) (*Result, error) {
 		systemHashes[cfg.SystemDir] = h
 	}
 
-	// Build manifest artifacts.
-	mfst := manifest.BuildManifest(allChunks, cfg.Encoding, nil)
+	// Build manifest artifacts with taxonomy terms.
+	mfst := manifest.BuildManifest(allChunks, cfg.Encoding, nil, taxResult.ChunkTerms)
 	meta := manifest.BuildMetadata(allChunks, blocksBySource)
 	hashes := manifest.BuildHashes(fileHashes, systemHashes)
 
 	heur := manifest.NewHeuristics(cfg.Version, cfg.Encoding)
-	heur.SetSources(result.TotalFiles, result.TotalFiles-result.SpecFiles, 0, result.TotalFiles, 0, 0, result.SpecFiles)
-	heur.SetChunkStats(
-		result.TotalChunks, result.ObjectChunks, result.SpecChunks, result.SystemChunks,
-		result.TotalTokens, result.AvgTokens, result.MinTokens, result.MaxTokens, result.Oversized,
-	)
+	heur.SetSources(&manifest.SourcesSection{
+		TotalFiles:   result.TotalFiles,
+		LocalFiles:   result.TotalFiles - result.SpecFiles,
+		PackageFiles: 0,
+		New:          result.TotalFiles,
+		Modified:     0,
+		Unchanged:    0,
+		SpecFiles:    result.SpecFiles,
+	})
+	heur.SetChunkStats(&manifest.ChunksSection{
+		Total:         result.TotalChunks,
+		Objects:       result.ObjectChunks,
+		Specs:         result.SpecChunks,
+		System:        result.SystemChunks,
+		TotalTokens:   result.TotalTokens,
+		AverageTokens: result.AvgTokens,
+		MinTokens:     result.MinTokens,
+		MaxTokens:     result.MaxTokens,
+		Oversized:     result.Oversized,
+	})
 	heur.SetBM25Stats(idx)
 
 	result.ManifestSeconds = time.Since(manifestStart).Seconds()
@@ -407,12 +454,22 @@ func Run(cfg Config, progress ProgressFunc) (*Result, error) {
 		}
 	}
 
+	// Populate taxonomy heuristics.
+	heur.SetTaxonomyStats(&manifest.TaxonomySection{
+		CanonicalTerms:               taxResult.Stats.CanonicalTerms,
+		TermsFromHeadings:            taxResult.Stats.TermsFromHeadings,
+		TermsFromCodeIdents:          taxResult.Stats.TermsFromCodeIdents,
+		TermsFromBoldTerms:           taxResult.Stats.TermsFromBoldTerms,
+		TermsFromStructuredPositions: taxResult.Stats.TermsFromStructured,
+	})
+
 	timing := &manifest.TimingSection{
 		TotalSeconds:       time.Since(totalStart).Seconds(),
 		ParseValidate:      result.ParseSeconds,
 		StripNormalize:     0, // combined with parse in this implementation
 		Chunking:           result.ChunkSeconds,
 		BM25Indexing:       result.IndexSeconds,
+		TaxonomyExtraction: result.TaxonomySeconds,
 		ManifestGeneration: result.ManifestSeconds,
 		ContextAssembly:    result.ContextSeconds,
 		SyncEntryPoints:    result.LinkSeconds,
@@ -443,13 +500,13 @@ func contextRelativePath(cfg Config) string {
 
 // writeEmptyManifests writes empty manifest files for projects with no source files.
 func writeEmptyManifests(cfg Config, _ *Result) error {
-	mfst := manifest.BuildManifest(nil, cfg.Encoding, nil)
+	mfst := manifest.BuildManifest(nil, cfg.Encoding, nil, nil)
 	meta := manifest.BuildMetadata(nil, nil)
 	hashes := manifest.BuildHashes(nil, nil)
 
 	heur := manifest.NewHeuristics(cfg.Version, cfg.Encoding)
-	heur.SetSources(0, 0, 0, 0, 0, 0, 0)
-	heur.SetChunkStats(0, 0, 0, 0, 0, 0, 0, 0, 0)
+	heur.SetSources(&manifest.SourcesSection{})
+	heur.SetChunkStats(&manifest.ChunksSection{})
 	heur.SetIncremental(&manifest.IncrementalSection{FullRecompile: true})
 
 	return writeManifests(cfg.CompiledDir, mfst, meta, hashes, heur)

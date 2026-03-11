@@ -12,6 +12,7 @@ import (
 	"github.com/securacore/codectx/core/index"
 	"github.com/securacore/codectx/core/manifest"
 	"github.com/securacore/codectx/core/project"
+	"github.com/securacore/codectx/core/taxonomy"
 	"github.com/securacore/codectx/core/tokens"
 )
 
@@ -46,6 +47,7 @@ func defaultTestConfig(rootDir, compiledDir string) compile.Config {
 		Chunking:    project.DefaultPreferencesConfig().Chunking,
 		BM25:        project.DefaultPreferencesConfig().BM25,
 		Validation:  project.DefaultPreferencesConfig().Validation,
+		Taxonomy:    project.DefaultPreferencesConfig().Taxonomy,
 		ActiveDeps:  nil,
 	}
 }
@@ -111,6 +113,7 @@ func TestRun_FullPipeline(t *testing.T) {
 		compile.StageChunk,
 		compile.StageWrite,
 		compile.StageIndex,
+		compile.StageTaxonomy,
 		compile.StageManifest,
 	}
 	for _, expected := range expectedStages {
@@ -210,6 +213,10 @@ func TestRun_ManifestFilesExistAndValid(t *testing.T) {
 	// Verify heuristics.yml exists.
 	heuristicsPath := manifest.HeuristicsPath(compiledDir)
 	assertFileExists(t, heuristicsPath)
+
+	// Verify taxonomy.yml exists.
+	taxonomyPath := taxonomy.TaxonomyPath(compiledDir)
+	assertFileExists(t, taxonomyPath)
 }
 
 func TestRun_ManifestContainsAllChunks(t *testing.T) {
@@ -550,6 +557,62 @@ func TestRun_NonexistentRootDir(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "discovering sources") {
 		t.Errorf("expected discovering sources error, got: %v", err)
+	}
+}
+
+func TestRun_TaxonomyExtraction(t *testing.T) {
+	rootDir, compiledDir := setupTestProject(t)
+	cfg := defaultTestConfig(rootDir, compiledDir)
+
+	result, err := compile.Run(cfg, nil)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	// Verify taxonomy terms were extracted.
+	if result.TaxonomyTerms == 0 {
+		t.Error("expected at least 1 taxonomy term")
+	}
+
+	// Verify taxonomy.yml is loadable.
+	taxPath := taxonomy.TaxonomyPath(compiledDir)
+	tax, loadErr := taxonomy.Load(taxPath)
+	if loadErr != nil {
+		t.Fatalf("loading taxonomy: %v", loadErr)
+	}
+
+	if tax.Encoding != "cl100k_base" {
+		t.Errorf("encoding: expected %q, got %q", "cl100k_base", tax.Encoding)
+	}
+	if tax.TermCount == 0 {
+		t.Error("expected non-zero term_count")
+	}
+	if len(tax.Terms) != tax.TermCount {
+		t.Errorf("term_count %d != len(terms) %d", tax.TermCount, len(tax.Terms))
+	}
+
+	// Verify manifest has terms populated.
+	mfstPath := manifest.EntryPath(compiledDir)
+	mfst, mfstErr := manifest.LoadManifest(mfstPath)
+	if mfstErr != nil {
+		t.Fatalf("loading manifest: %v", mfstErr)
+	}
+
+	// At least some object chunks should have terms.
+	hasTerms := false
+	for _, entry := range mfst.Objects {
+		if len(entry.Terms) > 0 {
+			hasTerms = true
+			break
+		}
+	}
+	if !hasTerms {
+		t.Error("expected at least one object chunk to have taxonomy terms")
+	}
+
+	// Verify timing was recorded.
+	if result.TaxonomySeconds <= 0 {
+		t.Error("expected taxonomy seconds > 0")
 	}
 }
 

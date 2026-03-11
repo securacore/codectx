@@ -287,3 +287,56 @@ func TestAssemble_ZeroBudgetNoWarning(t *testing.T) {
 		t.Errorf("expected no warnings with zero budget, got: %v", result.Warnings)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Phase 4.10: identifyLargestEntries multi-entry budget test
+// ---------------------------------------------------------------------------
+
+func TestAssemble_BudgetExceeded_MultipleEntries(t *testing.T) {
+	root := t.TempDir()
+
+	// Create 3 entries of varying sizes.
+	mustWriteFile(t, filepath.Join(root, "foundation", "small", "README.md"),
+		"# Small\n\nShort content.\n")
+	mustWriteFile(t, filepath.Join(root, "foundation", "medium", "README.md"),
+		"# Medium\n\n"+strings.Repeat("Medium-length paragraph with some words. ", 20)+"\n")
+	mustWriteFile(t, filepath.Join(root, "foundation", "large", "README.md"),
+		"# Large\n\n"+strings.Repeat("This is a much longer paragraph that uses many more tokens than the others. ", 40)+"\n")
+
+	entries, err := context.Resolve(root, "", []string{
+		"foundation/small",
+		"foundation/medium",
+		"foundation/large",
+	})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	// Set a small budget to trigger budget exceeded.
+	result, err := context.Assemble(entries, tokens.Cl100kBase, 10)
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+
+	if len(result.Entries) != 3 {
+		t.Fatalf("expected 3 entry results, got %d", len(result.Entries))
+	}
+
+	// Should have budget exceeded warning.
+	foundBudgetWarning := false
+	foundLargestWarning := false
+	for _, w := range result.Warnings {
+		if strings.Contains(w, "exceeds budget") {
+			foundBudgetWarning = true
+		}
+		if strings.Contains(w, "largest entry") {
+			foundLargestWarning = true
+		}
+	}
+	if !foundBudgetWarning {
+		t.Errorf("expected budget exceeded warning, got: %v", result.Warnings)
+	}
+	if !foundLargestWarning {
+		t.Errorf("expected largest entry warning, got: %v", result.Warnings)
+	}
+}

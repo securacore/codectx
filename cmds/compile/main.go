@@ -101,6 +101,7 @@ func run(_ context.Context, _ *cli.Command) error {
 		Chunking:    prefsCfg.Chunking,
 		BM25:        prefsCfg.BM25,
 		Validation:  prefsCfg.Validation,
+		Taxonomy:    prefsCfg.Taxonomy,
 		ActiveDeps:  activeDeps,
 		Session:     cfg.Session,
 	}
@@ -207,6 +208,15 @@ func renderSummary(result *compile.Result, projectName, model, compiledDir, proj
 		fmt.Fprintf(&b, "%s%s\n", tui.Indent(1),
 			tui.KeyValue("Tokens", fmt.Sprintf("avg %d, min %d, max %d per chunk",
 				result.AvgTokens, result.MinTokens, result.MaxTokens,
+			)),
+		)
+	}
+
+	// Taxonomy terms.
+	if result.TaxonomyTerms > 0 {
+		fmt.Fprintf(&b, "%s%s\n", tui.Indent(1),
+			tui.KeyValue("Taxonomy", fmt.Sprintf("%s terms extracted",
+				tui.FormatNumber(result.TaxonomyTerms),
 			)),
 		)
 	}

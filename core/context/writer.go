@@ -11,8 +11,8 @@ import (
 	"github.com/securacore/codectx/core/tui"
 )
 
-// ContextFile is the filename for the assembled session context.
-const ContextFile = "context.md"
+// contextFile is the filename for the assembled session context.
+const contextFile = "context.md"
 
 // WriteContextMD writes the assembled context.md to the compiled directory.
 // The file includes a metadata header with token count, budget, timestamp,
@@ -29,9 +29,9 @@ func WriteContextMD(compiledDir string, result *AssemblyResult) error {
 
 	content := renderContextMD(result)
 
-	path := filepath.Join(compiledDir, ContextFile)
+	path := filepath.Join(compiledDir, contextFile)
 	if err := os.WriteFile(path, []byte(content), project.FilePerm); err != nil {
-		return fmt.Errorf("writing %s: %w", ContextFile, err)
+		return fmt.Errorf("writing %s: %w", contextFile, err)
 	}
 
 	return nil
@@ -39,7 +39,7 @@ func WriteContextMD(compiledDir string, result *AssemblyResult) error {
 
 // ContextPath returns the path to context.md within the compiled directory.
 func ContextPath(compiledDir string) string {
-	return filepath.Join(compiledDir, ContextFile)
+	return filepath.Join(compiledDir, contextFile)
 }
 
 // renderContextMD produces the full context.md content with metadata header.

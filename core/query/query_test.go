@@ -61,7 +61,7 @@ func testFixture(t *testing.T) string {
 	}
 
 	// Build and save manifest.
-	mfst := manifest.BuildManifest(chunks, "cl100k_base", nil)
+	mfst := manifest.BuildManifest(chunks, "cl100k_base", nil, nil)
 	manifestPath := filepath.Join(dir, "manifest.yml")
 	if err := mfst.WriteTo(manifestPath); err != nil {
 		t.Fatalf("writing manifest: %v", err)

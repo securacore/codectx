@@ -10,11 +10,15 @@ import (
 
 	"github.com/securacore/codectx/core/chunk"
 	"github.com/securacore/codectx/core/manifest"
+	"github.com/securacore/codectx/core/project"
 	"github.com/securacore/codectx/core/tokens"
 )
 
 // tmpDir is the directory where generated files are written.
-const tmpDir = "/tmp/codectx"
+var tmpDir = filepath.Join(os.TempDir(), "codectx")
+
+// maxSlugLength is the maximum character length for topic slugs.
+const maxSlugLength = 60
 
 // GenerateResult holds the result of a generate (chunk assembly) operation.
 type GenerateResult struct {
@@ -254,16 +258,16 @@ func topicSlug(resolved []resolvedChunk) string {
 		return "generated"
 	}
 
-	// Truncate to 60 characters.
-	if len(result) > 60 {
-		result = result[:60]
+	// Truncate to maxSlugLength characters.
+	if len(result) > maxSlugLength {
+		result = result[:maxSlugLength]
 	}
 	return strings.TrimRight(result, "-")
 }
 
 // writeGeneratedFile writes the assembled document to /tmp/codectx/.
 func writeGeneratedFile(slug, content string) (string, error) {
-	if err := os.MkdirAll(tmpDir, 0755); err != nil {
+	if err := os.MkdirAll(tmpDir, project.DirPerm); err != nil {
 		return "", fmt.Errorf("creating output directory: %w", err)
 	}
 
@@ -271,7 +275,7 @@ func writeGeneratedFile(slug, content string) (string, error) {
 	filename := fmt.Sprintf("%s.%d.md", slug, timestamp)
 	path := filepath.Join(tmpDir, filename)
 
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(content), project.FilePerm); err != nil {
 		return "", fmt.Errorf("writing file: %w", err)
 	}
 
