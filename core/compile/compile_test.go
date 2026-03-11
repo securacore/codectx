@@ -372,6 +372,135 @@ func TestRun_SpecObjectLinking(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Context assembly integration
+// ---------------------------------------------------------------------------
+
+func TestRun_SessionContextAssembly(t *testing.T) {
+	rootDir, compiledDir := setupTestProject(t)
+	cfg := defaultTestConfig(rootDir, compiledDir)
+
+	// Add session config pointing to existing foundation docs.
+	cfg.Session = &project.SessionConfig{
+		AlwaysLoaded: []string{"foundation"},
+		Budget:       30000,
+	}
+
+	result, err := compile.Run(cfg, nil)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	// Session should have been assembled.
+	if result.SessionTokens == 0 {
+		t.Error("expected non-zero session tokens")
+	}
+	if result.SessionBudget != 30000 {
+		t.Errorf("expected budget 30000, got %d", result.SessionBudget)
+	}
+	if len(result.SessionEntries) != 1 {
+		t.Fatalf("expected 1 session entry, got %d", len(result.SessionEntries))
+	}
+	if result.SessionEntries[0].Reference != "foundation" {
+		t.Errorf("expected reference %q, got %q", "foundation", result.SessionEntries[0].Reference)
+	}
+
+	// context.md should exist.
+	contextPath := filepath.Join(compiledDir, "context.md")
+	if _, err := os.Stat(contextPath); err != nil {
+		t.Errorf("expected context.md to exist: %v", err)
+	}
+
+	// Read and verify content.
+	data, readErr := os.ReadFile(contextPath)
+	if readErr != nil {
+		t.Fatalf("reading context.md: %v", readErr)
+	}
+	content := string(data)
+	if !strings.Contains(content, "Project Engineering Context") {
+		t.Error("expected context.md header")
+	}
+}
+
+func TestRun_NoSessionConfig(t *testing.T) {
+	rootDir, compiledDir := setupTestProject(t)
+	cfg := defaultTestConfig(rootDir, compiledDir)
+
+	// No session config — context assembly should be skipped.
+	result, err := compile.Run(cfg, nil)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	if result.SessionTokens != 0 {
+		t.Errorf("expected 0 session tokens, got %d", result.SessionTokens)
+	}
+
+	// context.md should NOT exist.
+	contextPath := filepath.Join(compiledDir, "context.md")
+	if _, err := os.Stat(contextPath); err == nil {
+		t.Error("expected context.md to not exist when no session config")
+	}
+}
+
+func TestRun_SessionContextWithBudgetWarning(t *testing.T) {
+	rootDir, compiledDir := setupTestProject(t)
+	cfg := defaultTestConfig(rootDir, compiledDir)
+
+	// Set a very small budget to trigger a warning.
+	cfg.Session = &project.SessionConfig{
+		AlwaysLoaded: []string{"foundation"},
+		Budget:       1,
+	}
+
+	result, err := compile.Run(cfg, nil)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	// Should have a budget warning.
+	foundBudgetWarning := false
+	for _, w := range result.Warnings {
+		if strings.Contains(w, "exceeds budget") {
+			foundBudgetWarning = true
+			break
+		}
+	}
+	if !foundBudgetWarning {
+		t.Errorf("expected budget warning, got: %v", result.Warnings)
+	}
+}
+
+func TestRun_SessionContextStageReported(t *testing.T) {
+	rootDir, compiledDir := setupTestProject(t)
+	cfg := defaultTestConfig(rootDir, compiledDir)
+	cfg.Session = &project.SessionConfig{
+		AlwaysLoaded: []string{"foundation"},
+		Budget:       30000,
+	}
+
+	var stages []string
+	progress := func(stage, detail string) {
+		stages = append(stages, stage)
+	}
+
+	_, err := compile.Run(cfg, progress)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	found := false
+	for _, s := range stages {
+		if s == compile.StageContext {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected %q stage reported, got: %v", compile.StageContext, stages)
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Error path tests (C2)
 // ---------------------------------------------------------------------------
 

@@ -27,6 +27,7 @@ import (
 	"charm.land/huh/v2/spinner"
 	"github.com/charmbracelet/x/term"
 	"github.com/securacore/codectx/core/detect"
+	"github.com/securacore/codectx/core/link"
 	"github.com/securacore/codectx/core/project"
 	"github.com/securacore/codectx/core/scaffold"
 	"github.com/securacore/codectx/core/tui"
@@ -370,6 +371,43 @@ func run(_ context.Context, cmd *cli.Command) error {
 	}
 	fmt.Println()
 
+	// --- Step 11: Link prompt ---
+	if interactive {
+		if err := promptLink(targetDir); err != nil {
+			// Non-fatal: init succeeded even if link was skipped.
+			return nil //nolint:nilerr // link setup is optional
+		}
+	}
+
+	return nil
+}
+
+// promptLink prompts the user to set up AI tool entry point files after init.
+func promptLink(projectDir string) error {
+	selected, err := link.PromptIntegrations(projectDir, "Set up AI tool entry points?")
+	if err != nil {
+		return err
+	}
+
+	if len(selected) == 0 {
+		return nil
+	}
+
+	// Compute the context.md relative path.
+	// At init time, the config was just written, so load it fresh.
+	cfg, err := project.LoadConfig(filepath.Join(projectDir, project.ConfigFileName))
+	if err != nil {
+		return err
+	}
+
+	contextRelPath := project.ContextRelPath(cfg.Root)
+
+	results, err := link.Write(projectDir, contextRelPath, selected)
+	if err != nil {
+		return err
+	}
+
+	fmt.Print(link.RenderLinkResults(results))
 	return nil
 }
 

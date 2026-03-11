@@ -41,32 +41,11 @@ and generate manifest files. Produces compiled output in .codectx/compiled/.`,
 func run(_ context.Context, _ *cli.Command) error {
 	interactive := term.IsTerminal(os.Stdin.Fd())
 
-	// --- Step 1: Discover the project ---
-	projectDir, err := project.Discover(".")
+	// --- Step 1: Discover and load the project ---
+	projectDir, cfg, err := project.DiscoverAndLoad(".")
 	if err != nil {
-		fmt.Print(tui.ErrorMsg{
-			Title: "No codectx project found",
-			Detail: []string{
-				"Could not find codectx.yml in the current directory or any parent.",
-			},
-			Suggestions: []tui.Suggestion{
-				{Text: "Initialize a project first:", Command: "codectx init"},
-			},
-		}.Render())
+		fmt.Print(tui.ProjectNotFoundError())
 		return fmt.Errorf("project not found: %w", err)
-	}
-
-	// --- Step 2: Load configuration ---
-	cfg, err := project.LoadConfig(filepath.Join(projectDir, project.ConfigFileName))
-	if err != nil {
-		fmt.Print(tui.ErrorMsg{
-			Title: "Failed to load project configuration",
-			Detail: []string{
-				fmt.Sprintf("Error reading %s", tui.StylePath.Render(project.ConfigFileName)),
-				err.Error(),
-			},
-		}.Render())
-		return fmt.Errorf("loading config: %w", err)
 	}
 
 	rootDir := project.RootDir(projectDir, cfg)
@@ -123,6 +102,7 @@ func run(_ context.Context, _ *cli.Command) error {
 		BM25:        prefsCfg.BM25,
 		Validation:  prefsCfg.Validation,
 		ActiveDeps:  activeDeps,
+		Session:     cfg.Session,
 	}
 
 	// --- Step 3: Run compilation pipeline ---
@@ -171,6 +151,8 @@ func stageTitle(stage, detail string) string {
 		compile.StageWrite:     "Writing chunk files...",
 		compile.StageIndex:     "Building search index...",
 		compile.StageManifest:  "Generating manifests...",
+		compile.StageContext:   "Assembling session context...",
+		compile.StageLink:      "Updating entry points...",
 		compile.StageHeuristic: "Computing heuristics...",
 	}
 
@@ -218,6 +200,13 @@ func renderSummary(result *compile.Result, projectName, model, compiledDir, proj
 			tui.FormatNumber(result.TotalTokens),
 		)),
 	)
+
+	// Session line: token count vs budget (only if session context was assembled).
+	if result.SessionBudget > 0 && result.SessionTokens > 0 {
+		fmt.Fprintf(&b, "%s%s\n", tui.Indent(1),
+			tui.KeyValue("Session", tui.FormatBudget(result.SessionTokens, result.SessionBudget)),
+		)
+	}
 
 	// Index line: breakdown by type.
 	indexParts := []string{}

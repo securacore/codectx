@@ -114,6 +114,20 @@ func TestWarnMsg_Render_TitleOnly(t *testing.T) {
 	}
 }
 
+func TestProjectNotFoundError_ContainsExpectedContent(t *testing.T) {
+	result := tui.ProjectNotFoundError()
+
+	if !strings.Contains(result, "No codectx project found") {
+		t.Error("expected title in output")
+	}
+	if !strings.Contains(result, "codectx.yml") {
+		t.Error("expected codectx.yml mention in output")
+	}
+	if !strings.Contains(result, "codectx init") {
+		t.Error("expected init suggestion in output")
+	}
+}
+
 func TestWarnMsg_Render_WithDetail(t *testing.T) {
 	msg := tui.WarnMsg{
 		Title:  "nested project detected",

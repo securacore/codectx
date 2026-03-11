@@ -116,6 +116,33 @@ type SessionConfig struct {
 	Budget int `yaml:"budget,omitempty"`
 }
 
+// EffectiveBudget returns the session token budget, falling back to
+// DefaultSessionBudget if the budget is unset or non-positive.
+// Safe to call on a nil receiver.
+func (s *SessionConfig) EffectiveBudget() int {
+	if s == nil || s.Budget <= 0 {
+		return DefaultSessionBudget
+	}
+	return s.Budget
+}
+
+// ContextRelPath returns the path to context.md relative to the project root
+// for the given root configuration (e.g., "docs/.codectx/compiled/context.md").
+func ContextRelPath(root string) string {
+	return filepath.ToSlash(filepath.Join(
+		ResolveRoot(root),
+		CodectxDir,
+		CompiledDir,
+		"context.md",
+	))
+}
+
+// PackagesPath returns the absolute path to the packages directory under
+// the documentation root (e.g., /path/to/docs/.codectx/packages).
+func PackagesPath(rootDir string) string {
+	return filepath.Join(rootDir, CodectxDir, PackagesDir)
+}
+
 // DependencyConfig represents a single package dependency entry.
 type DependencyConfig struct {
 	// Active controls whether this package is included in compiled output.

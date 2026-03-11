@@ -35,6 +35,22 @@ func Discover(startDir string) (string, error) {
 	}
 }
 
+// DiscoverAndLoad walks up from the given directory to find codectx.yml,
+// then loads and returns the config. Returns (projectDir, config, error).
+func DiscoverAndLoad(startDir string) (string, *Config, error) {
+	projectDir, err := Discover(startDir)
+	if err != nil {
+		return "", nil, err
+	}
+
+	cfg, err := LoadConfig(filepath.Join(projectDir, ConfigFileName))
+	if err != nil {
+		return "", nil, err
+	}
+
+	return projectDir, cfg, nil
+}
+
 // RootDir resolves the documentation root directory for a project.
 // projectDir is the directory containing codectx.yml.
 // Returns the absolute path to the documentation root.

@@ -96,6 +96,16 @@ func KeyValue(key, value string) string {
 	return fmt.Sprintf("%s %s", StyleMuted.Render(key+":"), value)
 }
 
+// FormatBudget formats a token count against a budget as "X / Y tokens (Z%)".
+func FormatBudget(used, total int) string {
+	if total <= 0 {
+		return fmt.Sprintf("%s tokens", FormatNumber(used))
+	}
+	utilization := float64(used) / float64(total) * 100.0
+	return fmt.Sprintf("%s / %s tokens (%.1f%%)",
+		FormatNumber(used), FormatNumber(total), utilization)
+}
+
 // FormatNumber adds comma separators to large numbers for display.
 // E.g., 1438 -> "1,438", 42 -> "42".
 func FormatNumber(n int) string {

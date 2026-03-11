@@ -24,6 +24,8 @@ func TestStageTitle_KnownStages(t *testing.T) {
 		{corecompile.StageWrite, "", "Writing chunk files..."},
 		{corecompile.StageIndex, "", "Building search index..."},
 		{corecompile.StageManifest, "", "Generating manifests..."},
+		{corecompile.StageContext, "", "Assembling session context..."},
+		{corecompile.StageLink, "", "Updating entry points..."},
 		{corecompile.StageHeuristic, "", "Computing heuristics..."},
 	}
 
@@ -247,6 +249,55 @@ func TestRenderSummary_OnlyObjectChunks(t *testing.T) {
 	}
 	if strings.Contains(got, "system:") {
 		t.Error("should not show system when count is 0")
+	}
+}
+
+func TestRenderSummary_WithSessionData(t *testing.T) {
+	result := &corecompile.Result{
+		TotalFiles:    10,
+		TotalChunks:   25,
+		ObjectChunks:  25,
+		TotalTokens:   12500,
+		AvgTokens:     500,
+		MinTokens:     200,
+		MaxTokens:     800,
+		SessionTokens: 28450,
+		SessionBudget: 30000,
+		TotalSeconds:  1.0,
+	}
+
+	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp")
+
+	if !strings.Contains(got, "Session") {
+		t.Error("expected Session line in summary")
+	}
+	if !strings.Contains(got, "28,450") {
+		t.Error("expected session token count")
+	}
+	if !strings.Contains(got, "30,000") {
+		t.Error("expected session budget")
+	}
+	if !strings.Contains(got, "94.8%") {
+		t.Error("expected session utilization percentage")
+	}
+}
+
+func TestRenderSummary_NoSessionData(t *testing.T) {
+	result := &corecompile.Result{
+		TotalFiles:   5,
+		TotalChunks:  10,
+		ObjectChunks: 10,
+		TotalTokens:  5000,
+		AvgTokens:    500,
+		MinTokens:    200,
+		MaxTokens:    800,
+		TotalSeconds: 0.5,
+	}
+
+	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp")
+
+	if strings.Contains(got, "Session") {
+		t.Error("should not show Session line when no session data")
 	}
 }
 

@@ -7,6 +7,8 @@ import (
 
 	compilecmd "github.com/securacore/codectx/cmds/compile"
 	initcmd "github.com/securacore/codectx/cmds/init"
+	linkcmd "github.com/securacore/codectx/cmds/link"
+	sessioncmd "github.com/securacore/codectx/cmds/session"
 	"github.com/securacore/codectx/cmds/version"
 	"github.com/urfave/cli/v3"
 )
@@ -18,6 +20,8 @@ func main() {
 		Commands: []*cli.Command{
 			compilecmd.Command,
 			initcmd.Command,
+			linkcmd.Command,
+			sessioncmd.Command,
 			version.Command,
 		},
 	}

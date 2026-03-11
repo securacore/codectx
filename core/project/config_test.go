@@ -536,3 +536,35 @@ func TestClampHashLength(t *testing.T) {
 		}
 	}
 }
+
+// ---------------------------------------------------------------------------
+// SessionConfig.EffectiveBudget
+// ---------------------------------------------------------------------------
+
+func TestEffectiveBudget_NilReceiver(t *testing.T) {
+	var s *project.SessionConfig
+	if got := s.EffectiveBudget(); got != project.DefaultSessionBudget {
+		t.Errorf("nil.EffectiveBudget() = %d, want %d", got, project.DefaultSessionBudget)
+	}
+}
+
+func TestEffectiveBudget_ZeroBudget(t *testing.T) {
+	s := &project.SessionConfig{Budget: 0}
+	if got := s.EffectiveBudget(); got != project.DefaultSessionBudget {
+		t.Errorf("EffectiveBudget() with zero = %d, want %d", got, project.DefaultSessionBudget)
+	}
+}
+
+func TestEffectiveBudget_NegativeBudget(t *testing.T) {
+	s := &project.SessionConfig{Budget: -100}
+	if got := s.EffectiveBudget(); got != project.DefaultSessionBudget {
+		t.Errorf("EffectiveBudget() with negative = %d, want %d", got, project.DefaultSessionBudget)
+	}
+}
+
+func TestEffectiveBudget_CustomBudget(t *testing.T) {
+	s := &project.SessionConfig{Budget: 50000}
+	if got := s.EffectiveBudget(); got != 50000 {
+		t.Errorf("EffectiveBudget() = %d, want 50000", got)
+	}
+}

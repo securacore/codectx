@@ -272,6 +272,47 @@ func TestFormatDuration_Seconds(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// FormatBudget
+// ---------------------------------------------------------------------------
+
+func TestFormatBudget_Normal(t *testing.T) {
+	got := tui.FormatBudget(28450, 30000)
+	if !strings.Contains(got, "28,450") {
+		t.Errorf("FormatBudget missing used count: %q", got)
+	}
+	if !strings.Contains(got, "30,000") {
+		t.Errorf("FormatBudget missing total count: %q", got)
+	}
+	if !strings.Contains(got, "94.8%") {
+		t.Errorf("FormatBudget missing utilization: %q", got)
+	}
+}
+
+func TestFormatBudget_Exceeded(t *testing.T) {
+	got := tui.FormatBudget(35000, 30000)
+	if !strings.Contains(got, "116.7%") {
+		t.Errorf("FormatBudget should show >100%% utilization: %q", got)
+	}
+}
+
+func TestFormatBudget_ZeroTotal(t *testing.T) {
+	got := tui.FormatBudget(5000, 0)
+	if !strings.Contains(got, "5,000 tokens") {
+		t.Errorf("FormatBudget with zero total: %q", got)
+	}
+}
+
+func TestFormatBudget_ZeroUsed(t *testing.T) {
+	got := tui.FormatBudget(0, 30000)
+	if !strings.Contains(got, "0 / 30,000") {
+		t.Errorf("FormatBudget with zero used: %q", got)
+	}
+	if !strings.Contains(got, "0.0%") {
+		t.Errorf("FormatBudget should show 0.0%%: %q", got)
+	}
+}
+
 func TestFormatDuration_Minutes(t *testing.T) {
 	tests := []struct {
 		seconds float64

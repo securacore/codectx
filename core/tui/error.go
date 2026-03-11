@@ -61,6 +61,20 @@ func (w WarnMsg) Render() string {
 	return renderMessage(Warning(), StyleWarning, w.Title, w.Detail, nil)
 }
 
+// ProjectNotFoundError returns the rendered error message for when no
+// codectx project is found. Used by multiple CLI commands.
+func ProjectNotFoundError() string {
+	return ErrorMsg{
+		Title: "No codectx project found",
+		Detail: []string{
+			"Could not find codectx.yml in the current directory or any parent.",
+		},
+		Suggestions: []Suggestion{
+			{Text: "Initialize a project first:", Command: "codectx init"},
+		},
+	}.Render()
+}
+
 // renderMessage is the shared rendering core for ErrorMsg and WarnMsg.
 // It composes the icon, styled title, detail lines, and optional suggestions
 // into a consistent terminal output format.

@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/securacore/codectx/core/markdown"
 	"github.com/securacore/codectx/core/project"
 )
 
@@ -58,7 +59,7 @@ func DiscoverSources(rootDir string, activeDeps map[string]bool) ([]SourceFile, 
 		}
 
 		// Only process markdown files.
-		if !isMarkdown(d.Name()) {
+		if !markdown.IsMarkdown(d.Name()) {
 			return nil
 		}
 
@@ -134,7 +135,7 @@ func discoverPackages(rootDir, packagesDir string, activeDeps map[string]bool) (
 				return nil
 			}
 
-			if !isMarkdown(d.Name()) {
+			if !markdown.IsMarkdown(d.Name()) {
 				return nil
 			}
 
@@ -157,9 +158,4 @@ func discoverPackages(rootDir, packagesDir string, activeDeps map[string]bool) (
 	}
 
 	return sources, nil
-}
-
-// isMarkdown returns true if the filename has a .md extension.
-func isMarkdown(name string) bool {
-	return strings.HasSuffix(strings.ToLower(name), ".md")
 }

@@ -113,3 +113,82 @@ func TestRootDir_CustomRoot(t *testing.T) {
 		t.Errorf("expected %s, got %s", expected, result)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// DiscoverAndLoad
+// ---------------------------------------------------------------------------
+
+func TestDiscoverAndLoad_Success(t *testing.T) {
+	dir := t.TempDir()
+
+	cfg := project.DefaultConfig("test-project", "")
+	if err := cfg.WriteToFile(filepath.Join(dir, project.ConfigFileName)); err != nil {
+		t.Fatal(err)
+	}
+
+	projectDir, loadedCfg, err := project.DiscoverAndLoad(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if projectDir != dir {
+		t.Errorf("expected %s, got %s", dir, projectDir)
+	}
+	if loadedCfg.Name != "test-project" {
+		t.Errorf("expected name 'test-project', got %q", loadedCfg.Name)
+	}
+}
+
+func TestDiscoverAndLoad_NoProject(t *testing.T) {
+	dir := t.TempDir()
+
+	_, _, err := project.DiscoverAndLoad(dir)
+	if err == nil {
+		t.Fatal("expected error for missing project")
+	}
+}
+
+func TestDiscoverAndLoad_InvalidConfig(t *testing.T) {
+	dir := t.TempDir()
+
+	// Write invalid YAML.
+	if err := os.WriteFile(filepath.Join(dir, project.ConfigFileName), []byte(":\n\t\tinvalid"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := project.DiscoverAndLoad(dir)
+	if err == nil {
+		t.Fatal("expected error for invalid config")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ContextRelPath
+// ---------------------------------------------------------------------------
+
+func TestContextRelPath_DefaultRoot(t *testing.T) {
+	got := project.ContextRelPath("")
+	want := "docs/.codectx/compiled/context.md"
+	if got != want {
+		t.Errorf("ContextRelPath('') = %q, want %q", got, want)
+	}
+}
+
+func TestContextRelPath_CustomRoot(t *testing.T) {
+	got := project.ContextRelPath("ai-docs")
+	want := "ai-docs/.codectx/compiled/context.md"
+	if got != want {
+		t.Errorf("ContextRelPath('ai-docs') = %q, want %q", got, want)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// PackagesPath
+// ---------------------------------------------------------------------------
+
+func TestPackagesPath(t *testing.T) {
+	got := project.PackagesPath("/some/root")
+	want := filepath.Join("/some/root", project.CodectxDir, project.PackagesDir)
+	if got != want {
+		t.Errorf("PackagesPath('/some/root') = %q, want %q", got, want)
+	}
+}

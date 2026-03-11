@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/securacore/codectx/core/chunk"
+	codectx "github.com/securacore/codectx/core/context"
 	"github.com/securacore/codectx/core/index"
+	"github.com/securacore/codectx/core/link"
 	"github.com/securacore/codectx/core/manifest"
 	"github.com/securacore/codectx/core/markdown"
 	"github.com/securacore/codectx/core/project"
@@ -24,6 +26,8 @@ const (
 	StageWrite     = "write"
 	StageIndex     = "index"
 	StageManifest  = "manifest"
+	StageContext   = "context"
+	StageLink      = "link"
 	StageHeuristic = "heuristics"
 )
 
@@ -60,6 +64,10 @@ type Config struct {
 	// ActiveDeps maps package names to active status.
 	// Only packages with a true value are included in compilation.
 	ActiveDeps map[string]bool
+
+	// Session holds session context configuration from codectx.yml.
+	// If nil or AlwaysLoaded is empty, context assembly is skipped.
+	Session *project.SessionConfig
 }
 
 // Result holds compilation statistics for display by the CLI layer.
@@ -84,12 +92,26 @@ type Result struct {
 	// Validation output.
 	Warnings []string
 
+	// Session context assembly.
+	SessionTokens  int
+	SessionBudget  int
+	SessionEntries []SessionEntryResult
+
 	// Timing.
 	TotalSeconds    float64
 	ParseSeconds    float64
 	ChunkSeconds    float64
 	IndexSeconds    float64
 	ManifestSeconds float64
+	ContextSeconds  float64
+	LinkSeconds     float64
+}
+
+// SessionEntryResult holds the assembly result for a single always_loaded entry.
+type SessionEntryResult struct {
+	Reference string
+	Title     string
+	Tokens    int
 }
 
 // ProgressFunc is called by Run at the start of each pipeline stage.
@@ -103,8 +125,8 @@ type ProgressFunc func(stage, detail string)
 //
 // The progress callback is invoked at each stage transition. It may be nil.
 //
-// Stages 5-6 (Taxonomy, LLM Augmentation) and 8-9 (Context Assembly, Sync)
-// from the spec are deferred to later build steps.
+// Stages 5-6 (Taxonomy, LLM Augmentation) from the spec are deferred
+// to later build steps.
 func Run(cfg Config, progress ProgressFunc) (*Result, error) {
 	if progress == nil {
 		progress = func(string, string) {}
@@ -313,13 +335,87 @@ func Run(cfg Config, progress ProgressFunc) (*Result, error) {
 		result.TotalTokens, result.AvgTokens, result.MinTokens, result.MaxTokens, result.Oversized,
 	)
 	heur.SetBM25Stats(idx)
+
+	result.ManifestSeconds = time.Since(manifestStart).Seconds()
+
+	// --- Stage: Assemble session context ---
+	if cfg.Session != nil && len(cfg.Session.AlwaysLoaded) > 0 {
+		progress(StageContext, "Assembling session context")
+
+		contextStart := time.Now()
+
+		packagesDir := project.PackagesPath(cfg.RootDir)
+		resolved, resolveErr := codectx.Resolve(cfg.RootDir, packagesDir, cfg.Session.AlwaysLoaded)
+		if resolveErr != nil {
+			return nil, fmt.Errorf("resolving session context: %w", resolveErr)
+		}
+
+		budget := cfg.Session.EffectiveBudget()
+
+		assembly, assembleErr := codectx.Assemble(resolved, cfg.Encoding, budget)
+		if assembleErr != nil {
+			return nil, fmt.Errorf("assembling session context: %w", assembleErr)
+		}
+
+		if err := codectx.WriteContextMD(cfg.CompiledDir, assembly); err != nil {
+			return nil, fmt.Errorf("writing context.md: %w", err)
+		}
+
+		result.SessionTokens = assembly.TotalTokens
+		result.SessionBudget = assembly.Budget
+		result.Warnings = append(result.Warnings, assembly.Warnings...)
+
+		for _, entry := range assembly.Entries {
+			result.SessionEntries = append(result.SessionEntries, SessionEntryResult{
+				Reference: entry.Reference,
+				Title:     entry.Title,
+				Tokens:    entry.Tokens,
+			})
+		}
+
+		// Populate heuristics session section.
+		heurEntries := make([]manifest.SessionEntry, len(assembly.Entries))
+		for i, e := range assembly.Entries {
+			heurEntries[i] = manifest.SessionEntry{
+				Path:   e.Reference,
+				Tokens: e.Tokens,
+			}
+		}
+		utilization := fmt.Sprintf("%.1f%%", assembly.Utilization)
+		heur.SetSession(assembly.TotalTokens, assembly.Budget, utilization, heurEntries)
+
+		result.ContextSeconds = time.Since(contextStart).Seconds()
+	}
+
+	// --- Stage: Update linked entry points ---
+	if cfg.ProjectDir != "" {
+		contextRelPath := contextRelativePath(cfg)
+		needsUpdate := link.NeedsUpdate(cfg.ProjectDir, contextRelPath)
+
+		if len(needsUpdate) > 0 {
+			progress(StageLink, fmt.Sprintf("Updating %d entry point(s)", len(needsUpdate)))
+
+			linkStart := time.Now()
+
+			if _, linkErr := link.Write(cfg.ProjectDir, contextRelPath, needsUpdate); linkErr != nil {
+				// Non-fatal: warn but don't fail compilation.
+				result.Warnings = append(result.Warnings,
+					fmt.Sprintf("failed to update entry points: %v", linkErr))
+			}
+
+			result.LinkSeconds = time.Since(linkStart).Seconds()
+		}
+	}
+
 	timing := &manifest.TimingSection{
 		TotalSeconds:       time.Since(totalStart).Seconds(),
 		ParseValidate:      result.ParseSeconds,
 		StripNormalize:     0, // combined with parse in this implementation
 		Chunking:           result.ChunkSeconds,
 		BM25Indexing:       result.IndexSeconds,
-		ManifestGeneration: time.Since(manifestStart).Seconds(),
+		ManifestGeneration: result.ManifestSeconds,
+		ContextAssembly:    result.ContextSeconds,
+		SyncEntryPoints:    result.LinkSeconds,
 	}
 	heur.SetTiming(timing)
 	heur.SetIncremental(&manifest.IncrementalSection{
@@ -330,10 +426,19 @@ func Run(cfg Config, progress ProgressFunc) (*Result, error) {
 		return nil, err
 	}
 
-	result.ManifestSeconds = time.Since(manifestStart).Seconds()
 	result.TotalSeconds = time.Since(totalStart).Seconds()
 
 	return result, nil
+}
+
+// contextRelativePath computes the path to context.md relative to the project root.
+func contextRelativePath(cfg Config) string {
+	contextAbsPath := codectx.ContextPath(cfg.CompiledDir)
+	relPath, err := filepath.Rel(cfg.ProjectDir, contextAbsPath)
+	if err != nil {
+		return contextAbsPath
+	}
+	return filepath.ToSlash(relPath)
 }
 
 // writeEmptyManifests writes empty manifest files for projects with no source files.

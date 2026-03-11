@@ -8,6 +8,26 @@ import (
 )
 
 // ---------------------------------------------------------------------------
+// IsMarkdown
+// ---------------------------------------------------------------------------
+
+func TestIsMarkdown_ValidExtensions(t *testing.T) {
+	for _, name := range []string{"file.md", "README.md", "docs/guide.md", "FILE.MD", "test.Md"} {
+		if !IsMarkdown(name) {
+			t.Errorf("IsMarkdown(%q) = false, want true", name)
+		}
+	}
+}
+
+func TestIsMarkdown_InvalidExtensions(t *testing.T) {
+	for _, name := range []string{"file.txt", "file.go", "file.yaml", "file.mdx", "file.markdown", "md", ""} {
+		if IsMarkdown(name) {
+			t.Errorf("IsMarkdown(%q) = true, want false", name)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Basic parsing: simple inputs
 // ---------------------------------------------------------------------------
 
