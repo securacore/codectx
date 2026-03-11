@@ -296,6 +296,39 @@ func TestLoadAIConfigForProject_MissingFile(t *testing.T) {
 	}
 }
 
+func TestResolveEncoding_WithConfig(t *testing.T) {
+	dir := t.TempDir()
+	cfg := project.DefaultConfig("test", "docs")
+
+	// Set up ai.yml with a custom encoding.
+	rootDir := project.RootDir(dir, &cfg)
+	codectxDir := filepath.Join(rootDir, project.CodectxDir)
+	if err := os.MkdirAll(codectxDir, project.DirPerm); err != nil {
+		t.Fatal(err)
+	}
+
+	aiCfg := project.DefaultAIConfig()
+	aiCfg.Compilation.Encoding = "custom_encoding"
+	if err := aiCfg.WriteToFile(filepath.Join(codectxDir, project.AIConfigFile)); err != nil {
+		t.Fatal(err)
+	}
+
+	got := project.ResolveEncoding(dir, &cfg)
+	if got != "custom_encoding" {
+		t.Errorf("ResolveEncoding = %q, want %q", got, "custom_encoding")
+	}
+}
+
+func TestResolveEncoding_MissingConfig(t *testing.T) {
+	dir := t.TempDir()
+	cfg := project.DefaultConfig("test", "docs")
+
+	got := project.ResolveEncoding(dir, &cfg)
+	if got != project.DefaultEncoding {
+		t.Errorf("ResolveEncoding = %q, want %q", got, project.DefaultEncoding)
+	}
+}
+
 func TestLoadPreferencesConfigForProject(t *testing.T) {
 	dir := t.TempDir()
 	cfg := project.DefaultConfig("test", "docs")

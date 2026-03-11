@@ -263,6 +263,17 @@ func LoadAIConfigForProject(projectDir string, cfg *Config) (*AIConfig, error) {
 	return LoadAIConfig(filepath.Join(codectxDir, AIConfigFile))
 }
 
+// ResolveEncoding returns the tokenizer encoding for a project.
+// It attempts to load ai.yml and use the configured compilation encoding.
+// Falls back to DefaultEncoding if ai.yml is missing or encoding is unset.
+func ResolveEncoding(projectDir string, cfg *Config) string {
+	aiCfg, err := LoadAIConfigForProject(projectDir, cfg)
+	if err == nil && aiCfg.Compilation.Encoding != "" {
+		return aiCfg.Compilation.Encoding
+	}
+	return DefaultEncoding
+}
+
 // PreferencesConfig represents the .codectx/preferences.yml file.
 // Compiler and pipeline configuration. Checked into version control.
 type PreferencesConfig struct {

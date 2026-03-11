@@ -9,6 +9,7 @@ import (
 	generatecmd "github.com/securacore/codectx/cmds/generate"
 	initcmd "github.com/securacore/codectx/cmds/init"
 	linkcmd "github.com/securacore/codectx/cmds/link"
+	plancmd "github.com/securacore/codectx/cmds/plan"
 	querycmd "github.com/securacore/codectx/cmds/query"
 	sessioncmd "github.com/securacore/codectx/cmds/session"
 	"github.com/securacore/codectx/cmds/version"
@@ -24,6 +25,7 @@ func main() {
 			generatecmd.Command,
 			initcmd.Command,
 			linkcmd.Command,
+			plancmd.Command,
 			querycmd.Command,
 			sessioncmd.Command,
 			version.Command,

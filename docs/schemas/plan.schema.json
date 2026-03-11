@@ -1,33 +1,115 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Plan State",
-  "description": "Schema for plan.yml. Validates plan state files that provide lightweight status tracking for AI triage. AI reads this file to assess plan status without loading the full plan into context.",
+  "description": "Schema for plan.yml. Tracks multi-step workflow with dependency hashes for drift detection, per-step queries for re-search, and per-step chunk references for instant context replay.",
   "type": "object",
-  "required": ["plan", "status", "summary"],
+  "required": ["name", "status", "created", "updated", "steps", "current_step"],
   "additionalProperties": false,
   "properties": {
-    "plan": {
+    "name": {
       "type": "string",
-      "description": "Plan identifier. Matches the plan's ID in manifest.yml."
+      "description": "Human-readable plan name."
     },
     "status": {
       "type": "string",
-      "enum": ["not_started", "in_progress", "completed", "blocked"],
-      "description": "Current plan status."
+      "enum": ["draft", "in-progress", "blocked", "completed"],
+      "description": "Overall plan status."
     },
-    "started_at": {
+    "created": {
       "type": "string",
-      "format": "date",
-      "description": "Date the plan was started (YYYY-MM-DD)."
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of when the plan was created."
     },
-    "updated_at": {
+    "updated": {
       "type": "string",
-      "format": "date",
-      "description": "Date the plan state was last updated (YYYY-MM-DD)."
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of when the plan was last updated."
     },
-    "summary": {
-      "type": "string",
-      "description": "Brief current state for AI triage. One to three sentences describing what is done, what remains, and any blockers."
+    "dependencies": {
+      "type": "array",
+      "description": "Documentation paths this plan depends on, each with a content hash at the time the plan was last updated. Used for drift detection during plan resumption.",
+      "items": {
+        "type": "object",
+        "required": ["path", "hash"],
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Documentation path relative to docs root (e.g. 'foundation/architecture-principles')."
+          },
+          "hash": {
+            "type": "string",
+            "pattern": "^sha256:",
+            "description": "Content hash in 'sha256:<hex>' format, recorded at the time the plan was last updated."
+          }
+        }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "description": "Ordered steps in the plan with state, context queries, and chunk references.",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "status"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Numeric step identifier (1-based)."
+          },
+          "title": {
+            "type": "string",
+            "description": "Human-readable step description."
+          },
+          "status": {
+            "type": "string",
+            "enum": ["completed", "in-progress", "pending"],
+            "description": "Step status."
+          },
+          "completed_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601 timestamp of when the step was completed. Only set for completed steps."
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601 timestamp of when work began on this step. Only set for in-progress steps."
+          },
+          "notes": {
+            "type": "string",
+            "description": "Free-form notes about the step's progress or findings."
+          },
+          "queries": {
+            "type": "array",
+            "description": "Search terms the AI used to find relevant documentation for this step. Preserved for re-search when dependency hashes change.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "chunks": {
+            "type": "array",
+            "description": "Comma-delimited chunk ID strings, each representing one codectx generate call. Directly replayable if dependency hashes haven't changed.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "blocked_by": {
+            "type": "array",
+            "description": "Step IDs that must be completed before this step can start.",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      }
+    },
+    "current_step": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "ID of the step currently being worked on. 0 if no step is active."
     }
   }
 }

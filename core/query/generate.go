@@ -264,6 +264,21 @@ func writeGeneratedFile(slug, content string) (string, error) {
 	return path, nil
 }
 
+// ParseChunkIDs splits a comma-separated string of chunk IDs, trims
+// whitespace from each, and filters out empty entries.
+// Used by cmds/generate and core/plan for chunk ID parsing.
+func ParseChunkIDs(raw string) []string {
+	parts := strings.Split(raw, ",")
+	ids := make([]string, 0, len(parts))
+	for _, part := range parts {
+		id := strings.TrimSpace(part)
+		if id != "" {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
 // collectSources returns deduplicated source paths in order of first appearance.
 func collectSources(resolved []resolvedChunk) []string {
 	seen := make(map[string]bool)

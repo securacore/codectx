@@ -14,27 +14,12 @@ package generate
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/securacore/codectx/core/project"
 	corequery "github.com/securacore/codectx/core/query"
 	"github.com/securacore/codectx/core/tui"
 	"github.com/urfave/cli/v3"
 )
-
-// parseChunkIDs splits a comma-separated string of chunk IDs, trims
-// whitespace from each, and filters out empty entries.
-func parseChunkIDs(raw string) []string {
-	parts := strings.Split(raw, ",")
-	ids := make([]string, 0, len(parts))
-	for _, part := range parts {
-		id := strings.TrimSpace(part)
-		if id != "" {
-			ids = append(ids, id)
-		}
-	}
-	return ids
-}
 
 // Command is the CLI definition for `codectx generate`.
 var Command = &cli.Command{
@@ -69,7 +54,7 @@ func run(_ context.Context, cmd *cli.Command) error {
 	}
 
 	// Parse comma-separated chunk IDs, trimming whitespace.
-	chunkIDs := parseChunkIDs(cmd.Args().First())
+	chunkIDs := corequery.ParseChunkIDs(cmd.Args().First())
 
 	if len(chunkIDs) == 0 {
 		fmt.Print(tui.ErrorMsg{
@@ -93,12 +78,7 @@ func run(_ context.Context, cmd *cli.Command) error {
 
 	// --- Step 2: Resolve compiled directory and load encoding ---
 	compiledDir := corequery.CompiledDir(projectDir, cfg)
-
-	encoding := project.DefaultEncoding
-	aiCfg, aiErr := project.LoadAIConfigForProject(projectDir, cfg)
-	if aiErr == nil && aiCfg.Compilation.Encoding != "" {
-		encoding = aiCfg.Compilation.Encoding
-	}
+	encoding := project.ResolveEncoding(projectDir, cfg)
 
 	// --- Step 3: Run generate ---
 	result, err := corequery.RunGenerate(compiledDir, encoding, chunkIDs)
