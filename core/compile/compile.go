@@ -84,6 +84,11 @@ type Config struct {
 	// Session holds session context configuration from codectx.yml.
 	// If nil or AlwaysLoaded is empty, context assembly is skipped.
 	Session *project.SessionConfig
+
+	// Incremental enables incremental compilation mode. When true and
+	// previous hashes exist, only changed files are reprocessed through
+	// expensive pipeline stages. Default: true.
+	Incremental bool
 }
 
 // Result holds compilation statistics for display by the CLI layer.
@@ -123,6 +128,13 @@ type Result struct {
 	LLMSkipped     bool
 	LLMSkipReason  string
 
+	// Incremental compilation.
+	IncrementalMode bool // true if incremental mode was active (not first compile)
+	NewFiles        int  // files not in previous hashes
+	ModifiedFiles   int  // files whose hash changed
+	UnchangedFiles  int  // files with identical hashes
+	DeletedFiles    int  // files in previous hashes but no longer discovered
+
 	// Timing.
 	TotalSeconds    float64
 	ParseSeconds    float64
@@ -146,10 +158,62 @@ type SessionEntryResult struct {
 // provides additional context (e.g., file counts).
 type ProgressFunc func(stage, detail string)
 
+// parsedFile holds a parsed source file with both original and stripped ASTs.
+type parsedFile struct {
+	source   SourceFile
+	doc      *markdown.Document
+	stripped *markdown.Document
+}
+
+// pipelineState carries intermediate results between pipeline stages.
+// Each stage reads from and writes to this shared state, keeping Run()
+// as a thin orchestrator.
+type pipelineState struct {
+	cfg      Config
+	result   *Result
+	progress ProgressFunc
+
+	// Source discovery.
+	sources    []SourceFile
+	fileHashes map[string]string
+
+	// Incremental detection.
+	incremental      bool
+	changeSet        *ChangeSet
+	prevManifest     *manifest.Manifest
+	prevTaxonomy     *taxonomy.Taxonomy
+	prevSystemHashes map[string]string
+
+	// Parse/chunk output.
+	parsed            []parsedFile
+	blocksBySource    map[string]*markdown.Document
+	newChunks         []chunk.Chunk
+	unchangedChunks   []chunk.Chunk
+	unchangedChunkIDs map[string]bool
+	allChunks         []chunk.Chunk
+
+	// Index.
+	idx *index.Index
+
+	// Taxonomy.
+	taxResult    *taxonomy.Result
+	systemHashes map[string]string
+
+	// LLM.
+	augResult *llm.AugmentResult
+
+	// Heuristics (accumulated across stages).
+	heur *manifest.Heuristics
+}
+
 // Run executes the full compilation pipeline. It discovers source files,
 // parses and strips markdown, counts tokens, chunks documents, builds the
 // BM25 search index, extracts taxonomy terms, runs LLM augmentation for
 // alias generation and bridge summaries, and generates all manifest files.
+//
+// When cfg.Incremental is true and previous hashes exist, only changed files
+// are re-parsed and re-chunked. Unchanged chunks are loaded from disk.
+// All chunks (new + unchanged) are used for BM25, taxonomy, and manifests.
 //
 // The progress callback is invoked at each stage transition. It may be nil.
 func Run(cfg Config, progress ProgressFunc) (*Result, error) {
@@ -158,417 +222,678 @@ func Run(cfg Config, progress ProgressFunc) (*Result, error) {
 	}
 
 	totalStart := time.Now()
-	result := &Result{
-		MinTokens: math.MaxInt,
-	}
 
-	// --- Stage: Prepare output directories ---
-	progress(StagePrepare, "Cleaning output directories")
-
-	if err := PrepareOutputDirs(cfg.CompiledDir); err != nil {
-		return nil, fmt.Errorf("preparing output directories: %w", err)
+	ps := &pipelineState{
+		cfg:      cfg,
+		result:   &Result{MinTokens: math.MaxInt},
+		progress: progress,
 	}
 
 	// --- Stage: Discover source files ---
-	progress(StageDiscover, "Scanning for markdown files")
-
-	sources, err := DiscoverSources(cfg.RootDir, cfg.ActiveDeps)
-	if err != nil {
-		return nil, fmt.Errorf("discovering sources: %w", err)
+	if err := ps.stageDiscover(); err != nil {
+		return nil, err
 	}
 
-	result.TotalFiles = len(sources)
-	for _, s := range sources {
-		if s.IsSpec {
-			result.SpecFiles++
-		}
-	}
-
-	if result.TotalFiles == 0 {
-		// No files to compile. Write empty manifests and return.
-		progress(StageManifest, "No files to compile")
+	if ps.result.TotalFiles == 0 {
+		ps.progress(StageManifest, "No files to compile")
 		if err := writeEmptyManifests(cfg); err != nil {
 			return nil, err
 		}
-		result.TotalSeconds = time.Since(totalStart).Seconds()
-		result.MinTokens = 0
-		return result, nil
+		ps.result.TotalSeconds = time.Since(totalStart).Seconds()
+		ps.result.MinTokens = 0
+		return ps.result, nil
 	}
 
-	// --- Stage: Parse, validate, strip, count tokens ---
-	progress(StageParse, fmt.Sprintf("Processing %d files", result.TotalFiles))
+	// --- Hash source files ---
+	if err := ps.stageHash(); err != nil {
+		return nil, err
+	}
+
+	// --- Incremental detection ---
+	ps.stageIncrementalDetection()
+
+	// --- Prepare output directories ---
+	if err := ps.stagePrepareOutputDirs(); err != nil {
+		return nil, err
+	}
+
+	// --- Parse, validate, strip, count tokens ---
+	if err := ps.stageParse(); err != nil {
+		return nil, err
+	}
+
+	// --- Chunk + load unchanged ---
+	if err := ps.stageChunk(); err != nil {
+		return nil, err
+	}
+
+	// --- Write chunk files ---
+	if err := ps.stageWriteChunks(); err != nil {
+		return nil, err
+	}
+
+	// --- Build BM25 index ---
+	if err := ps.stageIndex(); err != nil {
+		return nil, err
+	}
+
+	// --- Extract taxonomy ---
+	if err := ps.stageTaxonomy(); err != nil {
+		return nil, err
+	}
+
+	// --- LLM augmentation ---
+	if err := ps.stageLLM(); err != nil {
+		return nil, err
+	}
+
+	// --- Generate manifests ---
+	if err := ps.stageManifests(); err != nil {
+		return nil, err
+	}
+
+	// --- Assemble session context ---
+	if err := ps.stageContext(); err != nil {
+		return nil, err
+	}
+
+	// --- Update linked entry points ---
+	ps.stageLink()
+
+	// --- Finalize heuristics and write ---
+	if err := ps.stageFinalize(totalStart); err != nil {
+		return nil, err
+	}
+
+	ps.result.TotalSeconds = time.Since(totalStart).Seconds()
+
+	return ps.result, nil
+}
+
+// stageDiscover scans for markdown source files.
+func (ps *pipelineState) stageDiscover() error {
+	ps.progress(StageDiscover, "Scanning for markdown files")
+
+	sources, err := DiscoverSources(ps.cfg.RootDir, ps.cfg.ActiveDeps)
+	if err != nil {
+		return fmt.Errorf("discovering sources: %w", err)
+	}
+
+	ps.sources = sources
+	ps.result.TotalFiles = len(sources)
+	for _, s := range sources {
+		if s.IsSpec {
+			ps.result.SpecFiles++
+		}
+	}
+
+	return nil
+}
+
+// stageHash computes SHA-256 content hashes for all source files.
+func (ps *pipelineState) stageHash() error {
+	ps.fileHashes = make(map[string]string, len(ps.sources))
+	for _, src := range ps.sources {
+		h, err := manifest.HashFile(src.AbsPath)
+		if err != nil {
+			return fmt.Errorf("hashing %s: %w", src.Path, err)
+		}
+		ps.fileHashes[src.Path] = h
+	}
+	return nil
+}
+
+// stageIncrementalDetection compares current hashes against previous
+// compilation to classify files as new, modified, or unchanged.
+func (ps *pipelineState) stageIncrementalDetection() {
+	if !ps.cfg.Incremental {
+		ps.result.NewFiles = ps.result.TotalFiles
+		return
+	}
+
+	prevHashes, prevErr := manifest.LoadHashes(manifest.HashesPath(ps.cfg.CompiledDir))
+	if prevErr != nil || len(prevHashes.Files) == 0 {
+		// First compile or corrupted hashes — treat as full recompile.
+		ps.result.NewFiles = ps.result.TotalFiles
+		return
+	}
+
+	ps.changeSet = ClassifyFiles(ps.fileHashes, prevHashes)
+	ps.prevSystemHashes = prevHashes.System
+
+	// Only use incremental mode if there are actually unchanged files.
+	if ps.changeSet.UnchangedCount > 0 {
+		ps.incremental = true
+
+		// Load previous manifest for reconstructing unchanged chunks.
+		// Errors are intentionally ignored — incremental mode gracefully
+		// degrades to a full recompile if previous artifacts are missing.
+		ps.prevManifest, _ = manifest.LoadManifest(manifest.EntryPath(ps.cfg.CompiledDir))
+
+		// Load previous taxonomy for preserving aliases on unchanged terms.
+		// Same graceful degradation as above.
+		ps.prevTaxonomy, _ = taxonomy.Load(taxonomy.TaxonomyPath(ps.cfg.CompiledDir))
+	}
+
+	ps.result.IncrementalMode = ps.incremental
+
+	if ps.incremental {
+		ps.result.NewFiles = ps.changeSet.NewCount
+		ps.result.ModifiedFiles = ps.changeSet.ModifiedCount
+		ps.result.UnchangedFiles = ps.changeSet.UnchangedCount
+		ps.result.DeletedFiles = len(ps.changeSet.Deleted)
+	} else {
+		ps.result.NewFiles = ps.result.TotalFiles
+	}
+}
+
+// stagePrepareOutputDirs sets up compiled output directories. In incremental
+// mode, preserves existing files and removes only stale/modified chunks.
+// In full mode, wipes and recreates all directories.
+func (ps *pipelineState) stagePrepareOutputDirs() error {
+	if ps.incremental {
+		ps.progress(StagePrepare, "Preserving unchanged chunk files")
+		if err := EnsureOutputDirs(ps.cfg.CompiledDir); err != nil {
+			return fmt.Errorf("ensuring output directories: %w", err)
+		}
+
+		if ps.prevManifest != nil {
+			if err := ps.removeStaleChunkFiles(); err != nil {
+				return err
+			}
+		}
+	} else {
+		ps.progress(StagePrepare, "Cleaning output directories")
+		if err := PrepareOutputDirs(ps.cfg.CompiledDir); err != nil {
+			return fmt.Errorf("preparing output directories: %w", err)
+		}
+	}
+	return nil
+}
+
+// removeStaleChunkFiles removes chunk files for deleted and modified sources
+// during incremental compilation.
+func (ps *pipelineState) removeStaleChunkFiles() error {
+	// Remove chunks for deleted sources.
+	if len(ps.changeSet.Deleted) > 0 {
+		deletedChunkIDs := chunksForSources(ps.prevManifest, ps.changeSet.Deleted)
+		if err := RemoveChunkFiles(ps.cfg.CompiledDir, deletedChunkIDs); err != nil {
+			return fmt.Errorf("removing deleted chunks: %w", err)
+		}
+	}
+
+	// Remove chunks for modified sources (they will be re-chunked).
+	var modifiedSources []string
+	for path, status := range ps.changeSet.Status {
+		if status == FileModified {
+			modifiedSources = append(modifiedSources, path)
+		}
+	}
+	if len(modifiedSources) > 0 {
+		modifiedChunkIDs := chunksForSources(ps.prevManifest, modifiedSources)
+		if err := RemoveChunkFiles(ps.cfg.CompiledDir, modifiedChunkIDs); err != nil {
+			return fmt.Errorf("removing modified chunks: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// sourcesToProcess returns the source files that need parsing/chunking.
+// In incremental mode, only new and modified files are returned.
+func (ps *pipelineState) sourcesToProcess() []SourceFile {
+	if !ps.incremental {
+		return ps.sources
+	}
+
+	var toProcess []SourceFile
+	for _, src := range ps.sources {
+		status := ps.changeSet.Status[src.Path]
+		if status == FileNew || status == FileModified {
+			toProcess = append(toProcess, src)
+		}
+	}
+	return toProcess
+}
+
+// stageParse reads, parses, validates, strips, and counts tokens for source files.
+func (ps *pipelineState) stageParse() error {
+	toProcess := ps.sourcesToProcess()
+	ps.progress(StageParse, fmt.Sprintf("Processing %d files", len(toProcess)))
 
 	parseStart := time.Now()
 
-	counter, err := tokens.New(cfg.Encoding)
+	counter, err := tokens.New(ps.cfg.Encoding)
 	if err != nil {
-		return nil, fmt.Errorf("creating token counter: %w", err)
+		return fmt.Errorf("creating token counter: %w", err)
 	}
 
-	type parsedFile struct {
-		source   SourceFile
-		doc      *markdown.Document
-		stripped *markdown.Document
-	}
+	ps.parsed = make([]parsedFile, 0, len(toProcess))
 
-	parsed := make([]parsedFile, 0, len(sources))
-
-	for _, src := range sources {
+	for _, src := range toProcess {
 		data, err := os.ReadFile(src.AbsPath)
 		if err != nil {
-			return nil, fmt.Errorf("reading %s: %w", src.Path, err)
+			return fmt.Errorf("reading %s: %w", src.Path, err)
 		}
 
-		// Parse markdown to AST.
 		doc := markdown.Parse(data)
 
-		// Validate the document.
-		vResult := markdown.ValidateFile(doc, cfg.Validation.RequireHeadings)
+		vResult := markdown.ValidateFile(doc, ps.cfg.Validation.RequireHeadings)
 		for _, w := range vResult.Warnings {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("%s: %s", src.Path, w))
+			ps.result.Warnings = append(ps.result.Warnings, fmt.Sprintf("%s: %s", src.Path, w))
 		}
 
-		// Strip formatting overhead.
 		stripped := markdown.Strip(doc)
 
-		// Count tokens on stripped blocks.
 		if err := tokens.CountBlocks(stripped, counter); err != nil {
-			return nil, fmt.Errorf("counting tokens for %s: %w", src.Path, err)
+			return fmt.Errorf("counting tokens for %s: %w", src.Path, err)
 		}
 
-		parsed = append(parsed, parsedFile{
+		ps.parsed = append(ps.parsed, parsedFile{
 			source:   src,
 			doc:      doc,
 			stripped: stripped,
 		})
 	}
 
-	result.ParseSeconds = time.Since(parseStart).Seconds()
+	ps.result.ParseSeconds = time.Since(parseStart).Seconds()
+	return nil
+}
 
-	// --- Stage: Chunk ---
-	progress(StageChunk, fmt.Sprintf("Chunking %d files", result.TotalFiles))
+// stageChunk splits parsed files into chunks and loads unchanged chunks
+// from disk in incremental mode.
+func (ps *pipelineState) stageChunk() error {
+	toProcess := ps.sourcesToProcess()
+	ps.progress(StageChunk, fmt.Sprintf("Chunking %d files", len(toProcess)))
 
 	chunkStart := time.Now()
 
-	opts := chunk.OptionsFromConfig(cfg.Chunking)
+	opts := chunk.OptionsFromConfig(ps.cfg.Chunking)
+	ps.blocksBySource = make(map[string]*markdown.Document, len(ps.parsed))
 
-	var allChunks []chunk.Chunk
-	// Map from source path to original parsed document (for metadata title extraction).
-	blocksBySource := make(map[string]*markdown.Document, len(parsed))
-
-	for _, pf := range parsed {
-		ct := chunk.ClassifySource(pf.source.Path, cfg.SystemDir)
+	for _, pf := range ps.parsed {
+		ct := chunk.ClassifySource(pf.source.Path, ps.cfg.SystemDir)
 		chunks, err := chunk.ChunkDocument(pf.stripped, pf.source.Path, ct, opts)
 		if err != nil {
-			return nil, fmt.Errorf("chunking %s: %w", pf.source.Path, err)
+			return fmt.Errorf("chunking %s: %w", pf.source.Path, err)
 		}
-		allChunks = append(allChunks, chunks...)
-		// Use the original (non-stripped) doc for title derivation.
-		blocksBySource[pf.source.Path] = pf.doc
+		ps.newChunks = append(ps.newChunks, chunks...)
+		ps.blocksBySource[pf.source.Path] = pf.doc
 	}
 
-	// Check for hash collisions across all chunks.
-	if err := chunk.CheckCollisions(allChunks); err != nil {
-		return nil, fmt.Errorf("chunk collision detected: %w", err)
+	// Load unchanged chunks from disk in incremental mode.
+	ps.unchangedChunkIDs = make(map[string]bool)
+	if ps.incremental && ps.prevManifest != nil {
+		ps.loadUnchangedChunks()
 	}
 
-	// Compute chunk statistics.
-	for i := range allChunks {
-		c := &allChunks[i]
+	// Combine new + unchanged chunks for downstream stages.
+	ps.allChunks = make([]chunk.Chunk, 0, len(ps.newChunks)+len(ps.unchangedChunks))
+	ps.allChunks = append(ps.allChunks, ps.newChunks...)
+	ps.allChunks = append(ps.allChunks, ps.unchangedChunks...)
+
+	if err := chunk.CheckCollisions(ps.allChunks); err != nil {
+		return fmt.Errorf("chunk collision detected: %w", err)
+	}
+
+	ps.computeChunkStats()
+	ps.result.ChunkSeconds = time.Since(chunkStart).Seconds()
+
+	return nil
+}
+
+// loadUnchangedChunks loads chunks from disk for sources that haven't changed.
+func (ps *pipelineState) loadUnchangedChunks() {
+	var unchangedSources []string
+	for path, status := range ps.changeSet.Status {
+		if status == FileUnchanged {
+			unchangedSources = append(unchangedSources, path)
+		}
+	}
+
+	loadedChunks := chunksFromManifest(ps.prevManifest, unchangedSources)
+	for _, lc := range loadedChunks {
+		loaded, loadErr := chunk.LoadChunkFromDisk(ps.cfg.CompiledDir, lc)
+		if loadErr != nil {
+			// If a chunk file is missing, skip it — will be treated as if modified.
+			ps.result.Warnings = append(ps.result.Warnings,
+				fmt.Sprintf("incremental: failed to load chunk %s: %v", lc.ID, loadErr))
+			continue
+		}
+		ps.unchangedChunks = append(ps.unchangedChunks, loaded)
+		ps.unchangedChunkIDs[loaded.ID] = true
+	}
+}
+
+// computeChunkStats aggregates chunk statistics into the result.
+func (ps *pipelineState) computeChunkStats() {
+	for i := range ps.allChunks {
+		c := &ps.allChunks[i]
 		switch c.Type {
 		case chunk.ChunkObject:
-			result.ObjectChunks++
+			ps.result.ObjectChunks++
 		case chunk.ChunkSpec:
-			result.SpecChunks++
+			ps.result.SpecChunks++
 		case chunk.ChunkSystem:
-			result.SystemChunks++
+			ps.result.SystemChunks++
 		}
-		result.TotalTokens += c.Tokens
-		if c.Tokens < result.MinTokens {
-			result.MinTokens = c.Tokens
+		ps.result.TotalTokens += c.Tokens
+		if c.Tokens < ps.result.MinTokens {
+			ps.result.MinTokens = c.Tokens
 		}
-		if c.Tokens > result.MaxTokens {
-			result.MaxTokens = c.Tokens
+		if c.Tokens > ps.result.MaxTokens {
+			ps.result.MaxTokens = c.Tokens
 		}
 		if c.Oversized {
-			result.Oversized++
+			ps.result.Oversized++
 		}
 	}
-	result.TotalChunks = len(allChunks)
-	if result.TotalChunks > 0 {
-		result.AvgTokens = result.TotalTokens / result.TotalChunks
+	ps.result.TotalChunks = len(ps.allChunks)
+	if ps.result.TotalChunks > 0 {
+		ps.result.AvgTokens = ps.result.TotalTokens / ps.result.TotalChunks
 	}
+}
 
-	result.ChunkSeconds = time.Since(chunkStart).Seconds()
+// stageWriteChunks writes new/modified chunk files to disk.
+func (ps *pipelineState) stageWriteChunks() error {
+	ps.progress(StageWrite, fmt.Sprintf("Writing %d chunk files", len(ps.newChunks)))
 
-	// --- Stage: Write chunk files ---
-	progress(StageWrite, fmt.Sprintf("Writing %d chunk files", result.TotalChunks))
-
-	if _, err := WriteChunkFiles(cfg.CompiledDir, allChunks); err != nil {
-		return nil, fmt.Errorf("writing chunk files: %w", err)
+	if _, err := WriteChunkFiles(ps.cfg.CompiledDir, ps.newChunks); err != nil {
+		return fmt.Errorf("writing chunk files: %w", err)
 	}
+	return nil
+}
 
-	// --- Stage: Build BM25 index ---
-	progress(StageIndex, "Building search index")
+// stageIndex builds the BM25 search index from all chunks.
+func (ps *pipelineState) stageIndex() error {
+	ps.progress(StageIndex, "Building search index")
 
 	indexStart := time.Now()
 
-	idx := index.NewFromConfig(cfg.BM25)
-	idx.BuildFromChunks(allChunks)
+	ps.idx = index.NewFromConfig(ps.cfg.BM25)
+	ps.idx.BuildFromChunks(ps.allChunks)
 
-	if err := idx.Save(cfg.CompiledDir); err != nil {
-		return nil, fmt.Errorf("saving BM25 index: %w", err)
+	if err := ps.idx.Save(ps.cfg.CompiledDir); err != nil {
+		return fmt.Errorf("saving BM25 index: %w", err)
 	}
 
-	result.IndexSeconds = time.Since(indexStart).Seconds()
+	ps.result.IndexSeconds = time.Since(indexStart).Seconds()
+	return nil
+}
 
-	// --- Stage: Extract taxonomy ---
-	progress(StageTaxonomy, fmt.Sprintf("Extracting taxonomy from %d chunks", result.TotalChunks))
+// stageTaxonomy extracts taxonomy terms from all chunks and preserves
+// aliases from unchanged terms in incremental mode.
+func (ps *pipelineState) stageTaxonomy() error {
+	ps.progress(StageTaxonomy, fmt.Sprintf("Extracting taxonomy from %d chunks", ps.result.TotalChunks))
 
-	// Hash the taxonomy-generation system directory for cache invalidation.
-	taxonomyInstructionsHash := ""
-	taxonomyDir := filepath.Join(cfg.RootDir, cfg.SystemDir, "topics", "taxonomy-generation")
-	if info, err := os.Stat(taxonomyDir); err == nil && info.IsDir() {
-		h, err := manifest.HashDir(taxonomyDir)
-		if err != nil {
-			return nil, fmt.Errorf("hashing taxonomy instructions: %w", err)
-		}
-		taxonomyInstructionsHash = h
+	// Compute per-subdirectory system instruction hashes.
+	topicsDir := filepath.Join(ps.cfg.RootDir, ps.cfg.SystemDir, "topics")
+	var err error
+	ps.systemHashes, err = manifest.HashSystemDirs(topicsDir)
+	if err != nil {
+		return fmt.Errorf("hashing system instruction directories: %w", err)
 	}
 
-	taxResult := taxonomy.Extract(allChunks, cfg.Taxonomy, cfg.Encoding, taxonomyInstructionsHash)
-	result.TaxonomyTerms = taxResult.Stats.CanonicalTerms
-	result.TaxonomySeconds = taxResult.Seconds
+	taxonomyInstructionsHash := ps.systemHashes["taxonomy-generation"]
+
+	ps.taxResult = taxonomy.Extract(ps.allChunks, ps.cfg.Taxonomy, ps.cfg.Encoding, taxonomyInstructionsHash)
+	ps.result.TaxonomyTerms = ps.taxResult.Stats.CanonicalTerms
+	ps.result.TaxonomySeconds = ps.taxResult.Seconds
+
+	// Preserve existing aliases for terms whose source chunks haven't changed.
+	if ps.incremental && ps.prevTaxonomy != nil {
+		preserveUnchangedAliases(ps.taxResult.Taxonomy, ps.prevTaxonomy, ps.taxResult.ChunkTerms, ps.unchangedChunkIDs)
+	}
 
 	// Write taxonomy.yml.
-	taxPath := taxonomy.TaxonomyPath(cfg.CompiledDir)
-	if err := taxResult.Taxonomy.WriteTo(taxPath); err != nil {
-		return nil, fmt.Errorf("writing taxonomy: %w", err)
+	taxPath := taxonomy.TaxonomyPath(ps.cfg.CompiledDir)
+	if err := ps.taxResult.Taxonomy.WriteTo(taxPath); err != nil {
+		return fmt.Errorf("writing taxonomy: %w", err)
 	}
 
-	// --- Stage: LLM Augmentation ---
-	progress(StageLLM, "Augmenting with LLM")
+	return nil
+}
+
+// stageLLM runs LLM augmentation for alias generation and bridge summaries.
+func (ps *pipelineState) stageLLM() error {
+	ps.progress(StageLLM, "Augmenting with LLM")
 
 	llmStart := time.Now()
-	instructionsDir := filepath.Join(cfg.RootDir, cfg.SystemDir, "topics")
+	instructionsDir := filepath.Join(ps.cfg.RootDir, ps.cfg.SystemDir, "topics")
 
-	augResult := llm.Augment(context.Background(), llm.AugmentConfig{
-		Provider:        cfg.Provider,
-		APIKey:          cfg.APIKey,
-		Model:           cfg.Model,
+	ps.augResult = llm.Augment(context.Background(), llm.AugmentConfig{
+		Provider:        ps.cfg.Provider,
+		APIKey:          ps.cfg.APIKey,
+		Model:           ps.cfg.Model,
 		ClaudeBinary:    "claude",
-		Taxonomy:        taxResult.Taxonomy,
-		Chunks:          allChunks,
-		TaxonomyConfig:  cfg.Taxonomy,
+		Taxonomy:        ps.taxResult.Taxonomy,
+		Chunks:          ps.allChunks,
+		TaxonomyConfig:  ps.cfg.Taxonomy,
 		InstructionsDir: instructionsDir,
 	})
 
 	// Apply aliases to taxonomy and rewrite.
-	if !augResult.Skipped && len(augResult.Aliases) > 0 {
-		for key, aliases := range augResult.Aliases {
-			if term, ok := taxResult.Taxonomy.Terms[key]; ok {
+	if !ps.augResult.Skipped && len(ps.augResult.Aliases) > 0 {
+		for key, aliases := range ps.augResult.Aliases {
+			if term, ok := ps.taxResult.Taxonomy.Terms[key]; ok {
 				term.Aliases = aliases
 			}
 		}
-		taxResult.Taxonomy.CompiledWith = cfg.Model
-		if err := taxResult.Taxonomy.WriteTo(taxPath); err != nil {
-			return nil, fmt.Errorf("rewriting taxonomy with aliases: %w", err)
+		ps.taxResult.Taxonomy.CompiledWith = ps.cfg.Model
+		taxPath := taxonomy.TaxonomyPath(ps.cfg.CompiledDir)
+		if err := ps.taxResult.Taxonomy.WriteTo(taxPath); err != nil {
+			return fmt.Errorf("rewriting taxonomy with aliases: %w", err)
 		}
 	}
 
-	result.LLMAliasCount = augResult.AliasCount
-	result.LLMBridgeCount = augResult.BridgeCount
-	result.LLMSeconds = time.Since(llmStart).Seconds()
-	result.LLMSkipped = augResult.Skipped
-	result.LLMSkipReason = augResult.SkipReason
+	ps.result.LLMAliasCount = ps.augResult.AliasCount
+	ps.result.LLMBridgeCount = ps.augResult.BridgeCount
+	ps.result.LLMSeconds = time.Since(llmStart).Seconds()
+	ps.result.LLMSkipped = ps.augResult.Skipped
+	ps.result.LLMSkipReason = ps.augResult.SkipReason
 
-	// --- Stage: Generate manifests ---
-	progress(StageManifest, "Generating manifest files")
+	return nil
+}
+
+// stageManifests generates manifest, metadata, and hashes files.
+func (ps *pipelineState) stageManifests() error {
+	ps.progress(StageManifest, "Generating manifest files")
 
 	manifestStart := time.Now()
 
-	// Hash source files.
-	fileHashes := make(map[string]string, len(sources))
-	for _, src := range sources {
-		h, err := manifest.HashFile(src.AbsPath)
-		if err != nil {
-			return nil, fmt.Errorf("hashing %s: %w", src.Path, err)
-		}
-		fileHashes[src.Path] = h
-	}
-
-	// Hash system directory if it exists.
-	systemHashes := make(map[string]string)
-	systemAbsDir := filepath.Join(cfg.RootDir, cfg.SystemDir)
-	if info, err := os.Stat(systemAbsDir); err == nil && info.IsDir() {
-		h, err := manifest.HashDir(systemAbsDir)
-		if err != nil {
-			return nil, fmt.Errorf("hashing system directory: %w", err)
-		}
-		systemHashes[cfg.SystemDir] = h
-	}
-
-	// Hash bridge-summaries directory for manifest cache invalidation.
+	// Derive bridge hash from the per-subdirectory system hashes.
 	var bridgeHash *string
-	bridgeDir := filepath.Join(cfg.RootDir, cfg.SystemDir, "topics", "bridge-summaries")
-	if info, err := os.Stat(bridgeDir); err == nil && info.IsDir() {
-		h, hashErr := manifest.HashDir(bridgeDir)
-		if hashErr != nil {
-			return nil, fmt.Errorf("hashing bridge instructions: %w", hashErr)
-		}
+	if h, ok := ps.systemHashes["bridge-summaries"]; ok {
 		bridgeHash = &h
 	}
 
-	// Build manifest artifacts with taxonomy terms and bridge hash.
-	mfst := manifest.BuildManifest(allChunks, cfg.Encoding, bridgeHash, taxResult.ChunkTerms)
+	mfst := manifest.BuildManifest(ps.allChunks, ps.cfg.Encoding, bridgeHash, ps.taxResult.ChunkTerms)
 
-	// Apply bridge summaries to manifest entries.
-	if !augResult.Skipped && len(augResult.Bridges) > 0 {
-		for id, bridge := range augResult.Bridges {
+	// Apply bridge summaries from LLM.
+	if !ps.augResult.Skipped && len(ps.augResult.Bridges) > 0 {
+		for id, bridge := range ps.augResult.Bridges {
 			if entry := mfst.LookupEntry(id); entry != nil {
 				b := bridge
 				entry.BridgeToNext = &b
 			}
 		}
 	}
-	meta := manifest.BuildMetadata(allChunks, blocksBySource)
-	hashes := manifest.BuildHashes(fileHashes, systemHashes)
 
-	heur := manifest.NewHeuristics(cfg.Version, cfg.Encoding)
-	heur.SetSources(&manifest.SourcesSection{
-		TotalFiles:   result.TotalFiles,
-		LocalFiles:   result.TotalFiles - result.SpecFiles,
+	// Preserve bridges from previous manifest for unchanged chunk pairs.
+	if ps.incremental && ps.prevManifest != nil {
+		preserveUnchangedBridges(mfst, ps.prevManifest, ps.unchangedChunkIDs)
+	}
+
+	meta := manifest.BuildMetadata(ps.allChunks, ps.blocksBySource)
+	hashes := manifest.BuildHashes(ps.fileHashes, ps.systemHashes)
+
+	ps.heur = manifest.NewHeuristics(ps.cfg.Version, ps.cfg.Encoding)
+	ps.heur.SetSources(&manifest.SourcesSection{
+		TotalFiles:   ps.result.TotalFiles,
+		LocalFiles:   ps.result.TotalFiles - ps.result.SpecFiles,
 		PackageFiles: 0,
-		New:          result.TotalFiles,
-		Modified:     0,
-		Unchanged:    0,
-		SpecFiles:    result.SpecFiles,
+		New:          ps.result.NewFiles,
+		Modified:     ps.result.ModifiedFiles,
+		Unchanged:    ps.result.UnchangedFiles,
+		SpecFiles:    ps.result.SpecFiles,
 	})
-	heur.SetChunkStats(&manifest.ChunksSection{
-		Total:         result.TotalChunks,
-		Objects:       result.ObjectChunks,
-		Specs:         result.SpecChunks,
-		System:        result.SystemChunks,
-		TotalTokens:   result.TotalTokens,
-		AverageTokens: result.AvgTokens,
-		MinTokens:     result.MinTokens,
-		MaxTokens:     result.MaxTokens,
-		Oversized:     result.Oversized,
+	ps.heur.SetChunkStats(&manifest.ChunksSection{
+		Total:         ps.result.TotalChunks,
+		Objects:       ps.result.ObjectChunks,
+		Specs:         ps.result.SpecChunks,
+		System:        ps.result.SystemChunks,
+		TotalTokens:   ps.result.TotalTokens,
+		AverageTokens: ps.result.AvgTokens,
+		MinTokens:     ps.result.MinTokens,
+		MaxTokens:     ps.result.MaxTokens,
+		Oversized:     ps.result.Oversized,
 	})
-	heur.SetBM25Stats(idx)
+	ps.heur.SetBM25Stats(ps.idx)
 
-	result.ManifestSeconds = time.Since(manifestStart).Seconds()
+	ps.result.ManifestSeconds = time.Since(manifestStart).Seconds()
 
-	// --- Stage: Assemble session context ---
-	if cfg.Session != nil && len(cfg.Session.AlwaysLoaded) > 0 {
-		progress(StageContext, "Assembling session context")
+	return writeManifests(ps.cfg.CompiledDir, mfst, meta, hashes, ps.heur)
+}
 
-		contextStart := time.Now()
-
-		packagesDir := project.PackagesPath(cfg.RootDir)
-		resolved, resolveErr := codectx.Resolve(cfg.RootDir, packagesDir, cfg.Session.AlwaysLoaded)
-		if resolveErr != nil {
-			return nil, fmt.Errorf("resolving session context: %w", resolveErr)
-		}
-
-		budget := cfg.Session.EffectiveBudget()
-
-		assembly, assembleErr := codectx.Assemble(resolved, cfg.Encoding, budget)
-		if assembleErr != nil {
-			return nil, fmt.Errorf("assembling session context: %w", assembleErr)
-		}
-
-		if err := codectx.WriteContextMD(cfg.CompiledDir, assembly); err != nil {
-			return nil, fmt.Errorf("writing context.md: %w", err)
-		}
-
-		result.SessionTokens = assembly.TotalTokens
-		result.SessionBudget = assembly.Budget
-		result.Warnings = append(result.Warnings, assembly.Warnings...)
-
-		for _, entry := range assembly.Entries {
-			result.SessionEntries = append(result.SessionEntries, SessionEntryResult{
-				Reference: entry.Reference,
-				Title:     entry.Title,
-				Tokens:    entry.Tokens,
-			})
-		}
-
-		// Populate heuristics session section.
-		heurEntries := make([]manifest.SessionEntry, len(assembly.Entries))
-		for i, e := range assembly.Entries {
-			heurEntries[i] = manifest.SessionEntry{
-				Path:   e.Reference,
-				Tokens: e.Tokens,
-			}
-		}
-		utilization := fmt.Sprintf("%.1f%%", assembly.Utilization)
-		heur.SetSession(assembly.TotalTokens, assembly.Budget, utilization, heurEntries)
-
-		result.ContextSeconds = time.Since(contextStart).Seconds()
+// stageContext assembles always-loaded session context.
+func (ps *pipelineState) stageContext() error {
+	if ps.cfg.Session == nil || len(ps.cfg.Session.AlwaysLoaded) == 0 {
+		return nil
 	}
 
-	// --- Stage: Update linked entry points ---
-	if cfg.ProjectDir != "" {
-		contextRelPath := contextRelativePath(cfg)
-		needsUpdate := link.NeedsUpdate(cfg.ProjectDir, contextRelPath)
+	ps.progress(StageContext, "Assembling session context")
 
-		if len(needsUpdate) > 0 {
-			progress(StageLink, fmt.Sprintf("Updating %d entry point(s)", len(needsUpdate)))
+	contextStart := time.Now()
 
-			linkStart := time.Now()
-
-			if _, linkErr := link.Write(cfg.ProjectDir, contextRelPath, needsUpdate); linkErr != nil {
-				// Non-fatal: warn but don't fail compilation.
-				result.Warnings = append(result.Warnings,
-					fmt.Sprintf("failed to update entry points: %v", linkErr))
-			}
-
-			result.LinkSeconds = time.Since(linkStart).Seconds()
-		}
+	packagesDir := project.PackagesPath(ps.cfg.RootDir)
+	resolved, resolveErr := codectx.Resolve(ps.cfg.RootDir, packagesDir, ps.cfg.Session.AlwaysLoaded)
+	if resolveErr != nil {
+		return fmt.Errorf("resolving session context: %w", resolveErr)
 	}
 
+	budget := ps.cfg.Session.EffectiveBudget()
+
+	assembly, assembleErr := codectx.Assemble(resolved, ps.cfg.Encoding, budget)
+	if assembleErr != nil {
+		return fmt.Errorf("assembling session context: %w", assembleErr)
+	}
+
+	if err := codectx.WriteContextMD(ps.cfg.CompiledDir, assembly); err != nil {
+		return fmt.Errorf("writing context.md: %w", err)
+	}
+
+	ps.result.SessionTokens = assembly.TotalTokens
+	ps.result.SessionBudget = assembly.Budget
+	ps.result.Warnings = append(ps.result.Warnings, assembly.Warnings...)
+
+	for _, entry := range assembly.Entries {
+		ps.result.SessionEntries = append(ps.result.SessionEntries, SessionEntryResult{
+			Reference: entry.Reference,
+			Title:     entry.Title,
+			Tokens:    entry.Tokens,
+		})
+	}
+
+	// Populate heuristics session section.
+	heurEntries := make([]manifest.SessionEntry, len(assembly.Entries))
+	for i, e := range assembly.Entries {
+		heurEntries[i] = manifest.SessionEntry{
+			Path:   e.Reference,
+			Tokens: e.Tokens,
+		}
+	}
+	utilization := fmt.Sprintf("%.1f%%", assembly.Utilization)
+	ps.heur.SetSession(assembly.TotalTokens, assembly.Budget, utilization, heurEntries)
+
+	ps.result.ContextSeconds = time.Since(contextStart).Seconds()
+	return nil
+}
+
+// stageLink updates existing AI tool entry point files if their context
+// path is stale. Non-fatal: failures are recorded as warnings.
+func (ps *pipelineState) stageLink() {
+	if ps.cfg.ProjectDir == "" {
+		return
+	}
+
+	contextRelPath := contextRelativePath(ps.cfg)
+	needsUpdate := link.NeedsUpdate(ps.cfg.ProjectDir, contextRelPath)
+
+	if len(needsUpdate) == 0 {
+		return
+	}
+
+	ps.progress(StageLink, fmt.Sprintf("Updating %d entry point(s)", len(needsUpdate)))
+
+	linkStart := time.Now()
+
+	if _, linkErr := link.Write(ps.cfg.ProjectDir, contextRelPath, needsUpdate); linkErr != nil {
+		// Non-fatal: warn but don't fail compilation.
+		ps.result.Warnings = append(ps.result.Warnings,
+			fmt.Sprintf("failed to update entry points: %v", linkErr))
+	}
+
+	ps.result.LinkSeconds = time.Since(linkStart).Seconds()
+}
+
+// stageFinalize populates final heuristics (taxonomy, timing, incremental)
+// and writes all manifest files. This must be called after all other stages.
+func (ps *pipelineState) stageFinalize(totalStart time.Time) error {
 	// Populate taxonomy heuristics.
 	var avgAliases float64
-	if taxResult.Stats.CanonicalTerms > 0 {
-		avgAliases = float64(result.LLMAliasCount) / float64(taxResult.Stats.CanonicalTerms)
+	if ps.taxResult.Stats.CanonicalTerms > 0 {
+		avgAliases = float64(ps.result.LLMAliasCount) / float64(ps.taxResult.Stats.CanonicalTerms)
 	}
-	heur.SetTaxonomyStats(&manifest.TaxonomySection{
-		CanonicalTerms:               taxResult.Stats.CanonicalTerms,
-		TotalAliases:                 result.LLMAliasCount,
+	ps.heur.SetTaxonomyStats(&manifest.TaxonomySection{
+		CanonicalTerms:               ps.taxResult.Stats.CanonicalTerms,
+		TotalAliases:                 ps.result.LLMAliasCount,
 		AverageAliasesPerTerm:        avgAliases,
-		TermsFromHeadings:            taxResult.Stats.TermsFromHeadings,
-		TermsFromCodeIdents:          taxResult.Stats.TermsFromCodeIdents,
-		TermsFromBoldTerms:           taxResult.Stats.TermsFromBoldTerms,
-		TermsFromStructuredPositions: taxResult.Stats.TermsFromStructured,
-		TermsFromPOSExtraction:       taxResult.Stats.TermsFromPOS,
-		AliasesFromLLM:               result.LLMAliasCount,
+		TermsFromHeadings:            ps.taxResult.Stats.TermsFromHeadings,
+		TermsFromCodeIdents:          ps.taxResult.Stats.TermsFromCodeIdents,
+		TermsFromBoldTerms:           ps.taxResult.Stats.TermsFromBoldTerms,
+		TermsFromStructuredPositions: ps.taxResult.Stats.TermsFromStructured,
+		TermsFromPOSExtraction:       ps.taxResult.Stats.TermsFromPOS,
+		AliasesFromLLM:               ps.result.LLMAliasCount,
 	})
 
 	timing := &manifest.TimingSection{
 		TotalSeconds:       time.Since(totalStart).Seconds(),
-		ParseValidate:      result.ParseSeconds,
+		ParseValidate:      ps.result.ParseSeconds,
 		StripNormalize:     0, // combined with parse in this implementation
-		Chunking:           result.ChunkSeconds,
-		BM25Indexing:       result.IndexSeconds,
-		TaxonomyExtraction: result.TaxonomySeconds,
-		LLMAugmentation:    result.LLMSeconds,
-		ManifestGeneration: result.ManifestSeconds,
-		ContextAssembly:    result.ContextSeconds,
-		SyncEntryPoints:    result.LinkSeconds,
+		Chunking:           ps.result.ChunkSeconds,
+		BM25Indexing:       ps.result.IndexSeconds,
+		TaxonomyExtraction: ps.result.TaxonomySeconds,
+		LLMAugmentation:    ps.result.LLMSeconds,
+		ManifestGeneration: ps.result.ManifestSeconds,
+		ContextAssembly:    ps.result.ContextSeconds,
+		SyncEntryPoints:    ps.result.LinkSeconds,
 	}
-	heur.SetTiming(timing)
-	heur.SetIncremental(&manifest.IncrementalSection{
-		FullRecompile: true,
-	})
+	ps.heur.SetTiming(timing)
 
-	if err := writeManifests(cfg.CompiledDir, mfst, meta, hashes, heur); err != nil {
-		return nil, err
+	// Populate incremental heuristics.
+	if ps.incremental {
+		instrChanges := DetectInstructionChanges(ps.systemHashes, ps.prevSystemHashes)
+
+		ps.heur.SetIncremental(&manifest.IncrementalSection{
+			FullRecompile: false,
+			StagesSkipped: []string{},
+			StagesRerun: []string{
+				"parse_validate", "chunking", "bm25_indexing",
+				"taxonomy_extraction", "manifest_generation",
+			},
+			SystemInstructionsChanged: &manifest.SystemInstructionsChanged{
+				TaxonomyGeneration: instrChanges.TaxonomyGeneration,
+				BridgeSummaries:    instrChanges.BridgeSummaries,
+				ContextAssembly:    instrChanges.ContextAssembly,
+			},
+		})
+	} else {
+		ps.heur.SetIncremental(&manifest.IncrementalSection{
+			FullRecompile: true,
+		})
 	}
 
-	result.TotalSeconds = time.Since(totalStart).Seconds()
-
-	return result, nil
+	return ps.heur.WriteTo(manifest.HeuristicsPath(ps.cfg.CompiledDir))
 }
 
 // contextRelativePath computes the path to context.md relative to the project root.
@@ -595,7 +920,7 @@ func writeEmptyManifests(cfg Config) error {
 	return writeManifests(cfg.CompiledDir, mfst, meta, hashes, heur)
 }
 
-// writeManifests writes all four compiled manifest files to the compiled directory.
+// writeManifests writes manifest, metadata, and hashes files to the compiled directory.
 func writeManifests(compiledDir string, mfst *manifest.Manifest, meta *manifest.Metadata, hashes *manifest.Hashes, heur *manifest.Heuristics) error {
 	if err := mfst.WriteTo(manifest.EntryPath(compiledDir)); err != nil {
 		return fmt.Errorf("writing manifest: %w", err)

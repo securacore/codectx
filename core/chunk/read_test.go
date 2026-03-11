@@ -122,6 +122,84 @@ func TestReadChunkContent_FileNotFound(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// LoadChunkFromDisk
+// ---------------------------------------------------------------------------
+
+func TestLoadChunkFromDisk_ReconstructsChunk(t *testing.T) {
+	dir := t.TempDir()
+	objDir := filepath.Join(dir, "objects")
+	if err := os.MkdirAll(objDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	fileContent := "<!-- codectx:meta\nid: obj:abc123.1\ntype: object\nsource: topics/auth.md\n-->\n\nThis is the content.\n"
+	if err := os.WriteFile(filepath.Join(objDir, "abc123.1.md"), []byte(fileContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	lc := chunk.LoadedChunk{
+		ID:          "obj:abc123.1",
+		Type:        chunk.ChunkObject,
+		Source:      "topics/auth.md",
+		Heading:     "Auth",
+		Sequence:    1,
+		TotalInFile: 2,
+		Tokens:      150,
+	}
+
+	c, err := chunk.LoadChunkFromDisk(dir, lc)
+	if err != nil {
+		t.Fatalf("LoadChunkFromDisk: %v", err)
+	}
+
+	if c.ID != "obj:abc123.1" {
+		t.Errorf("ID = %q, want obj:abc123.1", c.ID)
+	}
+	if c.Type != chunk.ChunkObject {
+		t.Errorf("Type = %q, want object", c.Type)
+	}
+	if c.Source != "topics/auth.md" {
+		t.Errorf("Source = %q, want topics/auth.md", c.Source)
+	}
+	if c.Heading != "Auth" {
+		t.Errorf("Heading = %q, want Auth", c.Heading)
+	}
+	if c.Sequence != 1 {
+		t.Errorf("Sequence = %d, want 1", c.Sequence)
+	}
+	if c.TotalInFile != 2 {
+		t.Errorf("TotalInFile = %d, want 2", c.TotalInFile)
+	}
+	if c.Tokens != 150 {
+		t.Errorf("Tokens = %d, want 150", c.Tokens)
+	}
+	if !strings.Contains(c.Content, "This is the content.") {
+		t.Errorf("Content should contain body text, got %q", c.Content)
+	}
+	if len(c.Blocks) == 0 {
+		t.Error("Blocks should be populated from re-parsed content")
+	}
+}
+
+func TestLoadChunkFromDisk_MissingFile(t *testing.T) {
+	dir := t.TempDir()
+	objDir := filepath.Join(dir, "objects")
+	if err := os.MkdirAll(objDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	lc := chunk.LoadedChunk{
+		ID:   "obj:nonexistent.1",
+		Type: chunk.ChunkObject,
+	}
+
+	_, err := chunk.LoadChunkFromDisk(dir, lc)
+	if err == nil {
+		t.Error("expected error for missing chunk file")
+	}
+}
+
+// ---------------------------------------------------------------------------
 // CompiledOutputDirs
 // ---------------------------------------------------------------------------
 

@@ -329,3 +329,48 @@ func TestFormatDuration_Minutes(t *testing.T) {
 		}
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Edge cases
+// ---------------------------------------------------------------------------
+
+func TestFormatNumber_Negative(t *testing.T) {
+	tests := []struct {
+		n    int
+		want string
+	}{
+		{-1, "-1"},
+		{-42, "-42"},
+		{-999, "-999"},
+		{-1000, "-1,000"},
+		{-1234567, "-1,234,567"},
+	}
+	for _, tt := range tests {
+		got := tui.FormatNumber(tt.n)
+		if got != tt.want {
+			t.Errorf("FormatNumber(%d) = %q, want %q", tt.n, got, tt.want)
+		}
+	}
+}
+
+func TestFormatDuration_Zero(t *testing.T) {
+	got := tui.FormatDuration(0)
+	if got != "0ms" {
+		t.Errorf("FormatDuration(0) = %q, want %q", got, "0ms")
+	}
+}
+
+func TestFormatDuration_ExactlyOneSecond(t *testing.T) {
+	got := tui.FormatDuration(1.0)
+	if got != "1.0s" {
+		t.Errorf("FormatDuration(1.0) = %q, want %q", got, "1.0s")
+	}
+}
+
+func TestFormatBudget_NegativeTotal(t *testing.T) {
+	// Negative total should be treated the same as zero (no percentage).
+	got := tui.FormatBudget(5000, -1)
+	if !strings.Contains(got, "5,000 tokens") {
+		t.Errorf("FormatBudget with negative total: %q", got)
+	}
+}

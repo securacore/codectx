@@ -180,3 +180,109 @@ func TestWriteChunkFiles_EmptySlice(t *testing.T) {
 		t.Errorf("expected 0 files written, got %d", written)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// EnsureOutputDirs
+// ---------------------------------------------------------------------------
+
+func TestEnsureOutputDirs_CreatesDirectories(t *testing.T) {
+	compiledDir := filepath.Join(t.TempDir(), project.CompiledDir)
+	if err := os.MkdirAll(compiledDir, project.DirPerm); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := compile.EnsureOutputDirs(compiledDir); err != nil {
+		t.Fatalf("EnsureOutputDirs: %v", err)
+	}
+
+	for _, ct := range []chunk.ChunkType{chunk.ChunkObject, chunk.ChunkSpec, chunk.ChunkSystem} {
+		dir := filepath.Join(compiledDir, chunk.OutputDir(ct))
+		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+			t.Errorf("expected directory %s to exist", dir)
+		}
+	}
+}
+
+func TestEnsureOutputDirs_PreservesExistingFiles(t *testing.T) {
+	compiledDir := filepath.Join(t.TempDir(), project.CompiledDir)
+	objDir := filepath.Join(compiledDir, chunk.OutputDir(chunk.ChunkObject))
+
+	// Create directory and add a file.
+	if err := os.MkdirAll(objDir, project.DirPerm); err != nil {
+		t.Fatal(err)
+	}
+	existingFile := filepath.Join(objDir, "existing-chunk.md")
+	if err := os.WriteFile(existingFile, []byte("keep me"), project.FilePerm); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := compile.EnsureOutputDirs(compiledDir); err != nil {
+		t.Fatalf("EnsureOutputDirs: %v", err)
+	}
+
+	// File should still be there.
+	data, err := os.ReadFile(existingFile)
+	if err != nil {
+		t.Fatalf("existing file removed: %v", err)
+	}
+	if string(data) != "keep me" {
+		t.Error("existing file content changed")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// RemoveChunkFiles
+// ---------------------------------------------------------------------------
+
+func TestRemoveChunkFiles_RemovesExisting(t *testing.T) {
+	compiledDir := filepath.Join(t.TempDir(), project.CompiledDir)
+	if err := os.MkdirAll(compiledDir, project.DirPerm); err != nil {
+		t.Fatal(err)
+	}
+	if err := compile.PrepareOutputDirs(compiledDir); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write a chunk.
+	c := makeTestChunk("obj:abcdef0123456789.1", chunk.ChunkObject, "Remove me", 1)
+	if err := compile.WriteChunkFile(compiledDir, &c); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify it exists.
+	outPath := filepath.Join(compiledDir, chunk.OutputDir(chunk.ChunkObject), chunk.OutputFilename(&c))
+	if _, err := os.Stat(outPath); err != nil {
+		t.Fatalf("chunk file should exist: %v", err)
+	}
+
+	// Remove it.
+	if err := compile.RemoveChunkFiles(compiledDir, []string{"obj:abcdef0123456789.1"}); err != nil {
+		t.Fatalf("RemoveChunkFiles: %v", err)
+	}
+
+	// Should be gone.
+	if _, err := os.Stat(outPath); err == nil {
+		t.Error("chunk file should have been removed")
+	}
+}
+
+func TestRemoveChunkFiles_IgnoresMissing(t *testing.T) {
+	compiledDir := filepath.Join(t.TempDir(), project.CompiledDir)
+	if err := os.MkdirAll(compiledDir, project.DirPerm); err != nil {
+		t.Fatal(err)
+	}
+	if err := compile.PrepareOutputDirs(compiledDir); err != nil {
+		t.Fatal(err)
+	}
+
+	// Removing nonexistent chunk should not error.
+	if err := compile.RemoveChunkFiles(compiledDir, []string{"obj:nonexistent0000.1"}); err != nil {
+		t.Fatalf("RemoveChunkFiles: %v", err)
+	}
+}
+
+func TestRemoveChunkFiles_EmptyList(t *testing.T) {
+	if err := compile.RemoveChunkFiles(t.TempDir(), nil); err != nil {
+		t.Fatalf("RemoveChunkFiles with empty list: %v", err)
+	}
+}

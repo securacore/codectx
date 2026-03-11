@@ -35,10 +35,17 @@ var Command = &cli.Command{
 	Usage: "Compile documentation into searchable chunks",
 	Description: `Runs the full compilation pipeline: parse, strip, chunk, index,
 and generate manifest files. Produces compiled output in .codectx/compiled/.`,
+	Flags: []cli.Flag{
+		&cli.BoolFlag{
+			Name:  "incremental",
+			Usage: "Only reprocess changed files (default: true)",
+			Value: true,
+		},
+	},
 	Action: run,
 }
 
-func run(_ context.Context, _ *cli.Command) error {
+func run(_ context.Context, cmd *cli.Command) error {
 	interactive := term.IsTerminal(os.Stdin.Fd())
 
 	// --- Step 1: Discover and load the project ---
@@ -63,6 +70,7 @@ func run(_ context.Context, _ *cli.Command) error {
 	}
 
 	compileCfg := buildCompileConfig(projectDir, rootDir, cfg, aiCfg, prefsCfg)
+	compileCfg.Incremental = cmd.Bool("incremental")
 
 	// --- Step 3: Run compilation pipeline ---
 	var result *compile.Result
@@ -241,6 +249,15 @@ func renderSummary(result *compile.Result, projectName, model, compiledDir, proj
 			tui.KeyValue("LLM", fmt.Sprintf("%d aliases, %d bridges (%s)",
 				result.LLMAliasCount, result.LLMBridgeCount,
 				tui.FormatDuration(result.LLMSeconds),
+			)),
+		)
+	}
+
+	// Changes line (incremental mode).
+	if result.IncrementalMode {
+		fmt.Fprintf(&b, "%s%s\n", tui.Indent(1),
+			tui.KeyValue("Changes", fmt.Sprintf("%d new, %d modified, %d unchanged",
+				result.NewFiles, result.ModifiedFiles, result.UnchangedFiles,
 			)),
 		)
 	}

@@ -18,6 +18,24 @@ import (
 	"github.com/securacore/codectx/core/project"
 )
 
+// sourceFilesFromWalked converts generic WalkedFile results into SourceFile
+// structs with paths relative to rootDir.
+func sourceFilesFromWalked(walked []markdown.WalkedFile, rootDir string) ([]SourceFile, error) {
+	sources := make([]SourceFile, 0, len(walked))
+	for _, wf := range walked {
+		rel, err := filepath.Rel(rootDir, wf.AbsPath)
+		if err != nil {
+			return nil, err
+		}
+		sources = append(sources, SourceFile{
+			Path:    filepath.ToSlash(rel),
+			AbsPath: wf.AbsPath,
+			IsSpec:  strings.HasSuffix(wf.RelPath, ".spec.md"),
+		})
+	}
+	return sources, nil
+}
+
 // SourceFile represents a discovered markdown file to be compiled.
 type SourceFile struct {
 	// Path is the file path relative to the documentation root.
@@ -41,43 +59,19 @@ type SourceFile struct {
 // Active dependencies are resolved from the config's Dependencies map —
 // only packages marked as active are included.
 func DiscoverSources(rootDir string, activeDeps map[string]bool) ([]SourceFile, error) {
-	var sources []SourceFile
-
 	// Walk the documentation root for local docs and system docs.
-	err := filepath.WalkDir(rootDir, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-
-		// Skip hidden directories (except .codectx which we handle separately for packages).
-		if d.IsDir() {
-			name := d.Name()
-			if strings.HasPrefix(name, ".") {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-
-		// Only process markdown files.
-		if !markdown.IsMarkdown(d.Name()) {
-			return nil
-		}
-
-		rel, err := filepath.Rel(rootDir, path)
-		if err != nil {
-			return err
-		}
-
-		sources = append(sources, SourceFile{
-			Path:    filepath.ToSlash(rel),
-			AbsPath: path,
-			IsSpec:  strings.HasSuffix(d.Name(), ".spec.md"),
-		})
-
-		return nil
-	})
+	walked, err := markdown.WalkFiles(rootDir)
 	if err != nil {
 		return nil, err
+	}
+
+	sources := make([]SourceFile, 0, len(walked))
+	for _, wf := range walked {
+		sources = append(sources, SourceFile{
+			Path:    wf.RelPath,
+			AbsPath: wf.AbsPath,
+			IsSpec:  strings.HasSuffix(wf.RelPath, ".spec.md"),
+		})
 	}
 
 	// Walk active packages from .codectx/packages/.
@@ -122,39 +116,15 @@ func discoverPackages(rootDir, packagesDir string, activeDeps map[string]bool) (
 		}
 
 		pkgDir := filepath.Join(packagesDir, pkgName)
-		err := filepath.WalkDir(pkgDir, func(path string, d os.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-
-			if d.IsDir() {
-				// Skip hidden subdirectories within packages.
-				if strings.HasPrefix(d.Name(), ".") {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-
-			if !markdown.IsMarkdown(d.Name()) {
-				return nil
-			}
-
-			rel, err := filepath.Rel(rootDir, path)
-			if err != nil {
-				return err
-			}
-
-			sources = append(sources, SourceFile{
-				Path:    filepath.ToSlash(rel),
-				AbsPath: path,
-				IsSpec:  strings.HasSuffix(d.Name(), ".spec.md"),
-			})
-
-			return nil
-		})
+		walked, err := markdown.WalkFiles(pkgDir)
 		if err != nil {
 			return nil, err
 		}
+		pkgSources, err := sourceFilesFromWalked(walked, rootDir)
+		if err != nil {
+			return nil, err
+		}
+		sources = append(sources, pkgSources...)
 	}
 
 	return sources, nil

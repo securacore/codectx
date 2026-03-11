@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/securacore/codectx/core/markdown"
@@ -176,7 +175,7 @@ func resolveOne(rootDir, packagesDir, ref string) (ResolvedEntry, error) {
 }
 
 // walkMarkdown walks a directory and collects all .md files, sorted alphabetically.
-// If walkRoot is a file (not a directory), it is returned as the sole entry.
+// If walkRoot is a single file, it is returned as the sole entry.
 func walkMarkdown(walkRoot string) ([]ResolvedFile, error) {
 	info, err := os.Stat(walkRoot)
 	if err != nil {
@@ -194,46 +193,19 @@ func walkMarkdown(walkRoot string) ([]ResolvedFile, error) {
 		return nil, nil
 	}
 
-	var files []ResolvedFile
-
-	err = filepath.WalkDir(walkRoot, func(path string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-
-		// Skip hidden directories.
-		if d.IsDir() && strings.HasPrefix(d.Name(), ".") {
-			return filepath.SkipDir
-		}
-
-		if d.IsDir() {
-			return nil
-		}
-
-		if !markdown.IsMarkdown(d.Name()) {
-			return nil
-		}
-
-		rel, relErr := filepath.Rel(walkRoot, path)
-		if relErr != nil {
-			return relErr
-		}
-
-		files = append(files, ResolvedFile{
-			AbsPath: path,
-			RelPath: filepath.ToSlash(rel),
-		})
-
-		return nil
-	})
-	if err != nil {
-		return nil, err
+	// Use the shared markdown file walker.
+	walked, walkErr := markdown.WalkFiles(walkRoot)
+	if walkErr != nil {
+		return nil, walkErr
 	}
 
-	// Sort for deterministic output.
-	sort.Slice(files, func(i, j int) bool {
-		return files[i].RelPath < files[j].RelPath
-	})
+	files := make([]ResolvedFile, len(walked))
+	for i, wf := range walked {
+		files[i] = ResolvedFile{
+			AbsPath: wf.AbsPath,
+			RelPath: wf.RelPath,
+		}
+	}
 
 	return files, nil
 }

@@ -34,6 +34,35 @@ func PrepareOutputDirs(compiledDir string) error {
 	return nil
 }
 
+// EnsureOutputDirs creates the compiled output directories if they don't exist,
+// without deleting any existing content. Used in incremental mode to preserve
+// chunk files from unchanged source files.
+func EnsureOutputDirs(compiledDir string) error {
+	for _, sub := range chunk.CompiledOutputDirs() {
+		dir := filepath.Join(compiledDir, sub)
+		if err := os.MkdirAll(dir, project.DirPerm); err != nil {
+			return fmt.Errorf("creating %s: %w", dir, err)
+		}
+	}
+	return nil
+}
+
+// RemoveChunkFiles deletes specific chunk files from the compiled directory.
+// The chunkIDs parameter lists the IDs of chunks to remove (e.g. "obj:a1b2c3.1").
+// Files that don't exist are silently ignored.
+func RemoveChunkFiles(compiledDir string, chunkIDs []string) error {
+	for _, id := range chunkIDs {
+		path, err := chunk.ChunkFilePath(compiledDir, id)
+		if err != nil {
+			continue // skip unparseable IDs
+		}
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("removing chunk file %s: %w", id, err)
+		}
+	}
+	return nil
+}
+
 // WriteChunkFile writes a single chunk's rendered content to its output path
 // under the compiled directory.
 func WriteChunkFile(compiledDir string, c *chunk.Chunk) error {

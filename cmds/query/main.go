@@ -70,16 +70,7 @@ func run(_ context.Context, cmd *cli.Command) error {
 	compiledDir := corequery.CompiledDir(projectDir, cfg)
 
 	// --- Step 3: Determine topN ---
-	topN := int(cmd.Int("top"))
-	if topN <= 0 {
-		// Load AI config for default results_count.
-		aiCfg, aiErr := project.LoadAIConfigForProject(projectDir, cfg)
-		if aiErr == nil && aiCfg.Consumption.ResultsCount > 0 {
-			topN = aiCfg.Consumption.ResultsCount
-		} else {
-			topN = project.DefaultResultsCount
-		}
-	}
+	topN := resolveTopN(int(cmd.Int("top")), projectDir, cfg)
 
 	// --- Step 4: Run the query ---
 	result, err := corequery.RunQuery(compiledDir, queryStr, topN)
@@ -100,4 +91,22 @@ func run(_ context.Context, cmd *cli.Command) error {
 	fmt.Print(corequery.FormatQueryResults(result))
 
 	return nil
+}
+
+// resolveTopN determines the number of results per index type.
+// If flagValue is positive, it's used directly. Otherwise, the default
+// is loaded from the AI config or falls back to project.DefaultResultsCount.
+func resolveTopN(flagValue int, projectDir string, cfg *project.Config) int {
+	if flagValue > 0 {
+		return flagValue
+	}
+
+	if cfg != nil {
+		aiCfg, aiErr := project.LoadAIConfigForProject(projectDir, cfg)
+		if aiErr == nil && aiCfg.Consumption.ResultsCount > 0 {
+			return aiCfg.Consumption.ResultsCount
+		}
+	}
+
+	return project.DefaultResultsCount
 }

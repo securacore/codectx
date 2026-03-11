@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/securacore/codectx/core/project"
+	"github.com/securacore/codectx/core/testutil"
 )
 
 // ---------------------------------------------------------------------------
@@ -304,7 +305,5 @@ func mustMkdir(t *testing.T, path string) {
 
 func mustWriteFile(t *testing.T, path, content string) {
 	t.Helper()
-	if err := os.WriteFile(path, []byte(content), project.FilePerm); err != nil {
-		t.Fatal(err)
-	}
+	testutil.MustWriteFile(t, path, content)
 }

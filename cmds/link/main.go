@@ -57,14 +57,12 @@ func run(_ context.Context, cmd *cli.Command) error {
 
 	contextRelPath := project.ContextRelPath(cfg.Root)
 
-	// --- Step 3: Detect and select integrations ---
+	// --- Step 2: Detect and select integrations ---
 	var selected []corelink.Integration
 
 	switch {
 	case cmd.Bool("all"):
-		for _, info := range corelink.AllIntegrations() {
-			selected = append(selected, info.Type)
-		}
+		selected = selectAll()
 	case interactive:
 		var err error
 		selected, err = corelink.PromptIntegrations(projectDir, "Which AI tool integrations would you like to set up?")
@@ -76,23 +74,11 @@ func run(_ context.Context, cmd *cli.Command) error {
 			return nil
 		}
 	default:
-		// Non-interactive: use detected integrations.
-		selected = corelink.Detect(projectDir)
-		if len(selected) == 0 {
-			// Default to Claude if nothing detected.
-			selected = []corelink.Integration{corelink.Claude}
-		}
+		selected = selectNonInteractive(projectDir)
 	}
 
-	// --- Step 4: Show backup warning ---
-	hasExisting := false
-	for _, integration := range selected {
-		info := corelink.InfoByType(integration)
-		if _, statErr := os.Stat(filepath.Join(projectDir, info.FilePath)); statErr == nil {
-			hasExisting = true
-			break
-		}
-	}
+	// --- Step 3: Show backup warning ---
+	hasExisting := hasExistingFiles(projectDir, selected)
 
 	if hasExisting && interactive {
 		fmt.Print(tui.WarnMsg{
@@ -104,14 +90,46 @@ func run(_ context.Context, cmd *cli.Command) error {
 		}.Render())
 	}
 
-	// --- Step 5: Write entry point files ---
+	// --- Step 4: Write entry point files ---
 	results, err := corelink.Write(projectDir, contextRelPath, selected)
 	if err != nil {
 		return fmt.Errorf("writing entry points: %w", err)
 	}
 
-	// --- Step 6: Display summary ---
+	// --- Step 5: Display summary ---
 	fmt.Print(corelink.RenderLinkResults(results))
 
 	return nil
+}
+
+// selectAll returns all supported integrations (--all flag).
+func selectAll() []corelink.Integration {
+	all := corelink.AllIntegrations()
+	selected := make([]corelink.Integration, len(all))
+	for i, info := range all {
+		selected[i] = info.Type
+	}
+	return selected
+}
+
+// selectNonInteractive returns integrations based on auto-detection,
+// defaulting to Claude if nothing is detected.
+func selectNonInteractive(projectDir string) []corelink.Integration {
+	detected := corelink.Detect(projectDir)
+	if len(detected) == 0 {
+		return []corelink.Integration{corelink.Claude}
+	}
+	return detected
+}
+
+// hasExistingFiles checks whether any of the selected integrations already
+// have files on disk in the project directory.
+func hasExistingFiles(projectDir string, integrations []corelink.Integration) bool {
+	for _, integration := range integrations {
+		info := corelink.InfoByType(integration)
+		if _, err := os.Stat(filepath.Join(projectDir, info.FilePath)); err == nil {
+			return true
+		}
+	}
+	return false
 }

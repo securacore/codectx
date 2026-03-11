@@ -522,6 +522,58 @@ func TestRenderSummary_LLMWithResults(t *testing.T) {
 	}
 }
 
+func TestRenderSummary_IncrementalMode(t *testing.T) {
+	result := &corecompile.Result{
+		TotalFiles:      10,
+		TotalChunks:     25,
+		ObjectChunks:    25,
+		TotalTokens:     12500,
+		AvgTokens:       500,
+		MinTokens:       200,
+		MaxTokens:       800,
+		IncrementalMode: true,
+		NewFiles:        2,
+		ModifiedFiles:   3,
+		UnchangedFiles:  5,
+		TotalSeconds:    1.0,
+	}
+
+	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp")
+
+	if !strings.Contains(got, "Changes") {
+		t.Error("expected Changes line in incremental summary")
+	}
+	if !strings.Contains(got, "2 new") {
+		t.Error("expected new file count")
+	}
+	if !strings.Contains(got, "3 modified") {
+		t.Error("expected modified file count")
+	}
+	if !strings.Contains(got, "5 unchanged") {
+		t.Error("expected unchanged file count")
+	}
+}
+
+func TestRenderSummary_NonIncrementalNoChangesLine(t *testing.T) {
+	result := &corecompile.Result{
+		TotalFiles:      10,
+		TotalChunks:     25,
+		ObjectChunks:    25,
+		TotalTokens:     12500,
+		AvgTokens:       500,
+		MinTokens:       200,
+		MaxTokens:       800,
+		IncrementalMode: false,
+		TotalSeconds:    1.0,
+	}
+
+	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp")
+
+	if strings.Contains(got, "Changes") {
+		t.Error("should not show Changes line in non-incremental mode")
+	}
+}
+
 func TestRenderSummary_LLMNoResults(t *testing.T) {
 	result := &corecompile.Result{
 		TotalFiles:   5,

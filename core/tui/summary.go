@@ -107,8 +107,11 @@ func FormatBudget(used, total int) string {
 }
 
 // FormatNumber adds comma separators to large numbers for display.
-// E.g., 1438 -> "1,438", 42 -> "42".
+// E.g., 1438 -> "1,438", 42 -> "42", -1000 -> "-1,000".
 func FormatNumber(n int) string {
+	if n < 0 {
+		return "-" + FormatNumber(-n)
+	}
 	if n < 1000 {
 		return fmt.Sprintf("%d", n)
 	}

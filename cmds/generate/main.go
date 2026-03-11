@@ -22,6 +22,20 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
+// parseChunkIDs splits a comma-separated string of chunk IDs, trims
+// whitespace from each, and filters out empty entries.
+func parseChunkIDs(raw string) []string {
+	parts := strings.Split(raw, ",")
+	ids := make([]string, 0, len(parts))
+	for _, part := range parts {
+		id := strings.TrimSpace(part)
+		if id != "" {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
 // Command is the CLI definition for `codectx generate`.
 var Command = &cli.Command{
 	Name:      "generate",
@@ -55,15 +69,7 @@ func run(_ context.Context, cmd *cli.Command) error {
 	}
 
 	// Parse comma-separated chunk IDs, trimming whitespace.
-	raw := cmd.Args().First()
-	parts := strings.Split(raw, ",")
-	chunkIDs := make([]string, 0, len(parts))
-	for _, part := range parts {
-		id := strings.TrimSpace(part)
-		if id != "" {
-			chunkIDs = append(chunkIDs, id)
-		}
-	}
+	chunkIDs := parseChunkIDs(cmd.Args().First())
 
 	if len(chunkIDs) == 0 {
 		fmt.Print(tui.ErrorMsg{

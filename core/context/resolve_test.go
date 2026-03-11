@@ -7,16 +7,13 @@ import (
 
 	"github.com/securacore/codectx/core/context"
 	"github.com/securacore/codectx/core/project"
+	"github.com/securacore/codectx/core/testutil"
 )
 
+// mustWriteFile delegates to the shared test helper.
 func mustWriteFile(t *testing.T, path, content string) {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), project.DirPerm); err != nil {
-		t.Fatalf("creating directory for %s: %v", path, err)
-	}
-	if err := os.WriteFile(path, []byte(content), project.FilePerm); err != nil {
-		t.Fatalf("writing %s: %v", path, err)
-	}
+	testutil.MustWriteFile(t, path, content)
 }
 
 // ---------------------------------------------------------------------------
