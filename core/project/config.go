@@ -243,6 +243,15 @@ func LoadAIConfig(path string) (*AIConfig, error) {
 	return loadYAMLFile[AIConfig](path)
 }
 
+// LoadAIConfigForProject loads the AI configuration for a project, given the
+// project directory and config. This is a convenience wrapper that constructs
+// the full path to ai.yml from RootDir / .codectx / ai.yml.
+func LoadAIConfigForProject(projectDir string, cfg *Config) (*AIConfig, error) {
+	rootDir := RootDir(projectDir, cfg)
+	codectxDir := filepath.Join(rootDir, CodectxDir)
+	return LoadAIConfig(filepath.Join(codectxDir, AIConfigFile))
+}
+
 // PreferencesConfig represents the .codectx/preferences.yml file.
 // Compiler and pipeline configuration. Checked into version control.
 type PreferencesConfig struct {

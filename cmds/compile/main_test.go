@@ -8,61 +8,6 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// stageTitle
-// ---------------------------------------------------------------------------
-
-func TestStageTitle_KnownStages(t *testing.T) {
-	tests := []struct {
-		stage    string
-		detail   string
-		contains string
-	}{
-		{corecompile.StagePrepare, "", "Preparing output directories..."},
-		{corecompile.StageDiscover, "", "Discovering source files..."},
-		{corecompile.StageParse, "", "Parsing and validating..."},
-		{corecompile.StageChunk, "", "Chunking documents..."},
-		{corecompile.StageWrite, "", "Writing chunk files..."},
-		{corecompile.StageIndex, "", "Building search index..."},
-		{corecompile.StageManifest, "", "Generating manifests..."},
-		{corecompile.StageContext, "", "Assembling session context..."},
-		{corecompile.StageLink, "", "Updating entry points..."},
-		{corecompile.StageHeuristic, "", "Computing heuristics..."},
-	}
-
-	for _, tt := range tests {
-		got := stageTitle(tt.stage, tt.detail)
-		if got != tt.contains {
-			t.Errorf("stageTitle(%q, %q) = %q, want %q", tt.stage, tt.detail, got, tt.contains)
-		}
-	}
-}
-
-func TestStageTitle_WithDetail(t *testing.T) {
-	got := stageTitle(corecompile.StageParse, "12 files")
-	if !strings.Contains(got, "Parsing and validating...") {
-		t.Errorf("expected title text, got %q", got)
-	}
-	if !strings.Contains(got, "(12 files)") {
-		t.Errorf("expected detail in parentheses, got %q", got)
-	}
-}
-
-func TestStageTitle_UnknownStage(t *testing.T) {
-	got := stageTitle("unknown-stage", "")
-	if got != "unknown-stage" {
-		t.Errorf("expected raw stage name for unknown stage, got %q", got)
-	}
-}
-
-func TestStageTitle_UnknownStageWithDetail(t *testing.T) {
-	got := stageTitle("custom", "detail")
-	want := "custom (detail)"
-	if got != want {
-		t.Errorf("stageTitle(%q, %q) = %q, want %q", "custom", "detail", got, want)
-	}
-}
-
-// ---------------------------------------------------------------------------
 // countNonZero
 // ---------------------------------------------------------------------------
 

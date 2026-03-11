@@ -73,8 +73,8 @@ type providerSpec struct {
 // Order reflects detection priority — first found with a matching
 // provider gets to set the recommended model.
 var knownTools = []toolSpec{
-	{name: "Claude Code", binary: BinaryClaude, versionCmd: []string{BinaryClaude, "--version"}},
-	{name: "Codex", binary: BinaryCodex, versionCmd: []string{BinaryCodex, "--version"}},
+	{name: "Claude Code", binary: binaryClaude, versionCmd: []string{binaryClaude, "--version"}},
+	{name: "Codex", binary: binaryCodex, versionCmd: []string{binaryCodex, "--version"}},
 	{name: "Amp", binary: "amp", versionCmd: []string{"amp", "--version"}},
 	{name: "Aider", binary: "aider", versionCmd: []string{"aider", "--version"}},
 	{name: "OpenCode", binary: "opencode", versionCmd: []string{"opencode", "--version"}},
@@ -86,8 +86,8 @@ var knownTools = []toolSpec{
 // knownProviders is the ordered list of API providers to check.
 // Order reflects recommendation priority.
 var knownProviders = []providerSpec{
-	{name: ProviderAnthropic, envVar: "ANTHROPIC_API_KEY", defaultModel: DefaultModel},
-	{name: ProviderOpenAI, envVar: "OPENAI_API_KEY", defaultModel: ModelGPT4o},
+	{name: providerAnthropic, envVar: "ANTHROPIC_API_KEY", defaultModel: project.DefaultModel},
+	{name: providerOpenAI, envVar: "OPENAI_API_KEY", defaultModel: modelGPT4o},
 	{name: "Google", envVar: "GEMINI_API_KEY", defaultModel: "gemini-2.0-flash"},
 	{name: "Google", envVar: "GOOGLE_API_KEY", defaultModel: "gemini-2.0-flash"},
 	{name: "Groq", envVar: "GROQ_API_KEY", defaultModel: "llama-3.3-70b-versatile"},
@@ -98,28 +98,20 @@ var knownProviders = []providerSpec{
 }
 
 const (
-	// DefaultModel is an alias for project.DefaultModel. Retained for backward
-	// compatibility — callers should prefer project.DefaultModel directly.
-	DefaultModel = project.DefaultModel
+	// modelGPT4o is the OpenAI GPT-4o model identifier.
+	modelGPT4o = "gpt-4o"
 
-	// DefaultEncoding is an alias for project.DefaultEncoding. Retained for backward
-	// compatibility — callers should prefer project.DefaultEncoding directly.
-	DefaultEncoding = project.DefaultEncoding
+	// providerAnthropic is the Anthropic provider name.
+	providerAnthropic = "Anthropic"
 
-	// ModelGPT4o is the OpenAI GPT-4o model identifier.
-	ModelGPT4o = "gpt-4o"
+	// providerOpenAI is the OpenAI provider name.
+	providerOpenAI = "OpenAI"
 
-	// ProviderAnthropic is the Anthropic provider name.
-	ProviderAnthropic = "Anthropic"
+	// binaryClaude is the Claude Code CLI binary name.
+	binaryClaude = "claude"
 
-	// ProviderOpenAI is the OpenAI provider name.
-	ProviderOpenAI = "OpenAI"
-
-	// BinaryClaude is the Claude Code CLI binary name.
-	BinaryClaude = "claude"
-
-	// BinaryCodex is the Codex CLI binary name.
-	BinaryCodex = "codex"
+	// binaryCodex is the Codex CLI binary name.
+	binaryCodex = "codex"
 )
 
 // LookPathFunc is the function used to locate binaries. Defaults to exec.LookPath.
@@ -139,8 +131,8 @@ var RunCommandFunc = runCommand
 // what was found.
 func Scan() Result {
 	result := Result{
-		RecommendedModel:    DefaultModel,
-		RecommendedEncoding: DefaultEncoding,
+		RecommendedModel:    project.DefaultModel,
+		RecommendedEncoding: project.DefaultEncoding,
 	}
 
 	// Scan for installed tools.
@@ -187,29 +179,29 @@ func Scan() Result {
 func recommendModel(r Result) (string, string) {
 	// Priority 1: If Anthropic API key is set, use Claude.
 	for _, p := range r.Providers {
-		if p.Name == ProviderAnthropic {
-			return DefaultModel, EncodingForModel(DefaultModel)
+		if p.Name == providerAnthropic {
+			return project.DefaultModel, EncodingForModel(project.DefaultModel)
 		}
 	}
 
 	// Priority 2: If Claude Code is installed (implies Anthropic access).
 	for _, t := range r.Tools {
-		if t.Binary == BinaryClaude {
-			return DefaultModel, EncodingForModel(DefaultModel)
+		if t.Binary == binaryClaude {
+			return project.DefaultModel, EncodingForModel(project.DefaultModel)
 		}
 	}
 
 	// Priority 3: If OpenAI API key is set, use GPT-4o.
 	for _, p := range r.Providers {
-		if p.Name == ProviderOpenAI {
-			return ModelGPT4o, EncodingForModel(ModelGPT4o)
+		if p.Name == providerOpenAI {
+			return modelGPT4o, EncodingForModel(modelGPT4o)
 		}
 	}
 
 	// Priority 4: If Codex is installed (implies OpenAI access).
 	for _, t := range r.Tools {
-		if t.Binary == BinaryCodex {
-			return ModelGPT4o, EncodingForModel(ModelGPT4o)
+		if t.Binary == binaryCodex {
+			return modelGPT4o, EncodingForModel(modelGPT4o)
 		}
 	}
 
@@ -219,7 +211,7 @@ func recommendModel(r Result) (string, string) {
 	}
 
 	// Fallback.
-	return DefaultModel, DefaultEncoding
+	return project.DefaultModel, project.DefaultEncoding
 }
 
 // runCommand executes a command and returns its stdout output.
@@ -272,10 +264,10 @@ func cleanVersion(raw string) string {
 // OpenAI models (gpt-4o, o1, o3-mini) use o200k_base; all others default to cl100k_base.
 func EncodingForModel(model string) string {
 	switch model {
-	case ModelGPT4o, "o1", "o3-mini":
+	case modelGPT4o, "o1", "o3-mini":
 		return "o200k_base"
 	default:
-		return DefaultEncoding
+		return project.DefaultEncoding
 	}
 }
 

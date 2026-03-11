@@ -141,32 +141,6 @@ func run(_ context.Context, _ *cli.Command) error {
 	return nil
 }
 
-// stageTitle returns a human-readable title for a pipeline stage.
-func stageTitle(stage, detail string) string {
-	titles := map[string]string{
-		compile.StagePrepare:   "Preparing output directories...",
-		compile.StageDiscover:  "Discovering source files...",
-		compile.StageParse:     "Parsing and validating...",
-		compile.StageChunk:     "Chunking documents...",
-		compile.StageWrite:     "Writing chunk files...",
-		compile.StageIndex:     "Building search index...",
-		compile.StageManifest:  "Generating manifests...",
-		compile.StageContext:   "Assembling session context...",
-		compile.StageLink:      "Updating entry points...",
-		compile.StageHeuristic: "Computing heuristics...",
-	}
-
-	title, ok := titles[stage]
-	if !ok {
-		title = stage
-	}
-
-	if detail != "" {
-		return fmt.Sprintf("%s (%s)", title, detail)
-	}
-	return title
-}
-
 // renderCompileError formats a compilation error for terminal display.
 func renderCompileError(err error) error {
 	fmt.Print(tui.ErrorMsg{

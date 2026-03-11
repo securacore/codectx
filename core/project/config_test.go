@@ -261,6 +261,41 @@ func TestLoadAIConfig_InvalidYAML(t *testing.T) {
 	}
 }
 
+func TestLoadAIConfigForProject(t *testing.T) {
+	dir := t.TempDir()
+
+	// Set up project structure: dir/docs/.codectx/ai.yml
+	cfg := project.DefaultConfig("test", "docs")
+	codectxDir := filepath.Join(dir, "docs", project.CodectxDir)
+	if err := os.MkdirAll(codectxDir, project.DirPerm); err != nil {
+		t.Fatal(err)
+	}
+
+	aiCfg := project.DefaultAIConfig()
+	aiCfg.Compilation.Model = "custom-model"
+	if err := aiCfg.WriteToFile(filepath.Join(codectxDir, project.AIConfigFile)); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := project.LoadAIConfigForProject(dir, &cfg)
+	if err != nil {
+		t.Fatalf("LoadAIConfigForProject: %v", err)
+	}
+	if loaded.Compilation.Model != "custom-model" {
+		t.Errorf("model = %q, want %q", loaded.Compilation.Model, "custom-model")
+	}
+}
+
+func TestLoadAIConfigForProject_MissingFile(t *testing.T) {
+	dir := t.TempDir()
+	cfg := project.DefaultConfig("test", "docs")
+
+	_, err := project.LoadAIConfigForProject(dir, &cfg)
+	if err == nil {
+		t.Error("expected error for missing AI config file")
+	}
+}
+
 func TestPreferencesConfig_WriteAndLoad_Roundtrip(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "preferences.yml")
