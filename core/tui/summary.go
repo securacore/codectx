@@ -3,8 +3,6 @@ package tui
 import (
 	"fmt"
 	"strings"
-
-	"github.com/securacore/codectx/core/markdown"
 )
 
 // TreeNode represents a node in a directory tree for display purposes.
@@ -68,7 +66,7 @@ func InitSummary(projectName string, tree []TreeNode, nextSteps []string) string
 	// Directory tree.
 	fmt.Fprintf(&b, "%s%s\n\n", Indent(1), StyleMuted.Render("Created:"))
 	treeStr := RenderTree(tree)
-	for _, line := range markdown.SplitLines(treeStr) {
+	for _, line := range strings.Split(strings.TrimRight(treeStr, "\n"), "\n") {
 		fmt.Fprintf(&b, "%s%s\n", Indent(1), line)
 	}
 
@@ -96,4 +94,36 @@ func DetectedTool(name, version string) string {
 // KeyValue formats a key-value pair with the key in muted and value in default color.
 func KeyValue(key, value string) string {
 	return fmt.Sprintf("%s %s", StyleMuted.Render(key+":"), value)
+}
+
+// FormatNumber adds comma separators to large numbers for display.
+// E.g., 1438 -> "1,438", 42 -> "42".
+func FormatNumber(n int) string {
+	if n < 1000 {
+		return fmt.Sprintf("%d", n)
+	}
+
+	s := fmt.Sprintf("%d", n)
+	var result strings.Builder
+	for i, c := range s {
+		if i > 0 && (len(s)-i)%3 == 0 {
+			result.WriteRune(',')
+		}
+		result.WriteRune(c)
+	}
+	return result.String()
+}
+
+// FormatDuration formats seconds into a human-readable duration string.
+// E.g., 0.099 -> "99ms", 2.3 -> "2.3s", 75.2 -> "1m15.2s".
+func FormatDuration(seconds float64) string {
+	if seconds < 1.0 {
+		return fmt.Sprintf("%.0fms", seconds*1000)
+	}
+	if seconds < 60 {
+		return fmt.Sprintf("%.1fs", seconds)
+	}
+	mins := int(seconds) / 60
+	secs := seconds - float64(mins*60)
+	return fmt.Sprintf("%dm%.1fs", mins, secs)
 }

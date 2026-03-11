@@ -180,7 +180,7 @@ func Init(opts Options) (*Result, error) {
 	}
 
 	docsRoot := filepath.Join(opts.ProjectDir, root)
-	codectxDir := filepath.Join(docsRoot, ".codectx")
+	codectxDir := filepath.Join(docsRoot, project.CodectxDir)
 
 	result := &Result{
 		ProjectDir: opts.ProjectDir,
@@ -238,7 +238,7 @@ func gitInit(dir string) error {
 
 // directories returns the full list of directories to create.
 func directories(docsRoot, codectxDir string) []string {
-	return []string{
+	dirs := []string{
 		// Documentation root content directories.
 		filepath.Join(docsRoot, "foundation"),
 		filepath.Join(docsRoot, "topics"),
@@ -246,22 +246,23 @@ func directories(docsRoot, codectxDir string) []string {
 		filepath.Join(docsRoot, "prompts"),
 
 		// System documentation (compiler instructions).
-		filepath.Join(docsRoot, "system", "foundation", "compiler-philosophy"),
-		filepath.Join(docsRoot, "system", "topics", "taxonomy-generation"),
-		filepath.Join(docsRoot, "system", "topics", "bridge-summaries"),
-		filepath.Join(docsRoot, "system", "topics", "context-assembly"),
-		filepath.Join(docsRoot, "system", "plans"),
-		filepath.Join(docsRoot, "system", "prompts"),
+		filepath.Join(docsRoot, project.SystemDir, "foundation", "compiler-philosophy"),
+		filepath.Join(docsRoot, project.SystemDir, "topics", "taxonomy-generation"),
+		filepath.Join(docsRoot, project.SystemDir, "topics", "bridge-summaries"),
+		filepath.Join(docsRoot, project.SystemDir, "topics", "context-assembly"),
+		filepath.Join(docsRoot, project.SystemDir, "plans"),
+		filepath.Join(docsRoot, project.SystemDir, "prompts"),
 
 		// Tooling state directory.
-		filepath.Join(codectxDir, project.CompiledDir, chunk.OutputDir(chunk.ChunkObject)),
-		filepath.Join(codectxDir, project.CompiledDir, chunk.OutputDir(chunk.ChunkSpec)),
-		filepath.Join(codectxDir, project.CompiledDir, chunk.OutputDir(chunk.ChunkSystem)),
-		filepath.Join(codectxDir, project.CompiledDir, project.BM25Dir, chunk.OutputDir(chunk.ChunkObject)),
-		filepath.Join(codectxDir, project.CompiledDir, project.BM25Dir, chunk.OutputDir(chunk.ChunkSpec)),
-		filepath.Join(codectxDir, project.CompiledDir, project.BM25Dir, chunk.OutputDir(chunk.ChunkSystem)),
-		filepath.Join(codectxDir, "packages"),
+		filepath.Join(codectxDir, project.PackagesDir),
 	}
+
+	// Compiled output directories (chunk + BM25 subdirs).
+	for _, sub := range chunk.CompiledOutputDirs() {
+		dirs = append(dirs, filepath.Join(codectxDir, project.CompiledDir, sub))
+	}
+
+	return dirs
 }
 
 // writeConfigs creates the three configuration files.
@@ -282,16 +283,16 @@ func writeConfigs(projectDir, codectxDir, name, root, model, encoding string) er
 	if encoding != "" {
 		aiCfg.Compilation.Encoding = encoding
 	}
-	aiPath := filepath.Join(codectxDir, "ai.yml")
+	aiPath := filepath.Join(codectxDir, project.AIConfigFile)
 	if err := aiCfg.WriteToFile(aiPath); err != nil {
-		return fmt.Errorf("writing ai.yml: %w", err)
+		return fmt.Errorf("writing %s: %w", project.AIConfigFile, err)
 	}
 
 	// preferences.yml in .codectx/.
 	prefsCfg := project.DefaultPreferencesConfig()
-	prefsPath := filepath.Join(codectxDir, "preferences.yml")
+	prefsPath := filepath.Join(codectxDir, project.PreferencesFile)
 	if err := prefsCfg.WriteToFile(prefsPath); err != nil {
-		return fmt.Errorf("writing preferences.yml: %w", err)
+		return fmt.Errorf("writing %s: %w", project.PreferencesFile, err)
 	}
 
 	return nil

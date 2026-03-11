@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/securacore/codectx/core/detect"
 	"gopkg.in/yaml.v3"
 )
 
@@ -31,17 +30,40 @@ const DefaultContextWindow = 200000
 // DefaultResultsCount is the default number of results returned by codectx query.
 const DefaultResultsCount = 10
 
+// DefaultModel is the fallback AI model when nothing is detected.
+const DefaultModel = "claude-sonnet-4-20250514"
+
+// DefaultEncoding is the fallback tokenizer encoding.
+const DefaultEncoding = "cl100k_base"
+
 // DirPerm is the standard directory permission mode used throughout the project.
 const DirPerm = 0755
 
 // FilePerm is the standard file permission mode used throughout the project.
 const FilePerm = 0644
 
+// CodectxDir is the hidden directory name under the documentation root
+// that holds all tooling state (.codectx/).
+const CodectxDir = ".codectx"
+
 // CompiledDir is the directory name under .codectx/ for compiled output.
 const CompiledDir = "compiled"
 
 // BM25Dir is the directory name under compiled/ for BM25 index files.
 const BM25Dir = "bm25"
+
+// SystemDir is the directory name for system/compiler documentation
+// under the documentation root.
+const SystemDir = "system"
+
+// PackagesDir is the directory name under .codectx/ for installed packages.
+const PackagesDir = "packages"
+
+// AIConfigFile is the filename for the AI configuration file in .codectx/.
+const AIConfigFile = "ai.yml"
+
+// PreferencesFile is the filename for the preferences configuration file in .codectx/.
+const PreferencesFile = "preferences.yml"
 
 // ResolveRoot returns root if non-empty, otherwise DefaultRoot.
 // This is the single place for the "if root == "" { root = DefaultRoot }" pattern.
@@ -126,17 +148,7 @@ func (c *Config) WriteToFile(path string) error {
 
 // LoadConfig reads and parses a codectx.yml file from the given path.
 func LoadConfig(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("reading config %s: %w", path, err)
-	}
-
-	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("parsing config %s: %w", path, err)
-	}
-
-	return &cfg, nil
+	return loadYAMLFile[Config](path)
 }
 
 // AIConfig represents the .codectx/ai.yml file.
@@ -182,11 +194,11 @@ type AIConsumptionConfig struct {
 func DefaultAIConfig() AIConfig {
 	return AIConfig{
 		Compilation: AICompilationConfig{
-			Model:    detect.DefaultModel,
-			Encoding: detect.DefaultEncoding,
+			Model:    DefaultModel,
+			Encoding: DefaultEncoding,
 		},
 		Consumption: AIConsumptionConfig{
-			Model:         detect.DefaultModel,
+			Model:         DefaultModel,
 			ContextWindow: DefaultContextWindow,
 			ResultsCount:  DefaultResultsCount,
 		},
@@ -197,6 +209,11 @@ func DefaultAIConfig() AIConfig {
 // WriteToFile marshals the AI config to YAML and writes it to the given path.
 func (c *AIConfig) WriteToFile(path string) error {
 	return WriteYAMLFile(path, "# codectx AI configuration\n# Model and behavior settings for compilation and consumption.\n# Checked into version control (no secrets).\n\n", c)
+}
+
+// LoadAIConfig reads and parses an ai.yml file from the given path.
+func LoadAIConfig(path string) (*AIConfig, error) {
+	return loadYAMLFile[AIConfig](path)
 }
 
 // PreferencesConfig represents the .codectx/preferences.yml file.
@@ -335,10 +352,31 @@ func (c *PreferencesConfig) WriteToFile(path string) error {
 	return WriteYAMLFile(path, "# codectx compiler preferences\n# Compiler and pipeline configuration.\n# Checked into version control.\n\n", c)
 }
 
+// LoadPreferencesConfig reads and parses a preferences.yml file from the given path.
+func LoadPreferencesConfig(path string) (*PreferencesConfig, error) {
+	return loadYAMLFile[PreferencesConfig](path)
+}
+
+// loadYAMLFile reads a YAML file from disk and unmarshals it into a new
+// instance of type T. Used by all LoadXConfig functions.
+func loadYAMLFile[T any](path string) (*T, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("reading %s: %w", path, err)
+	}
+
+	var cfg T
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("parsing %s: %w", path, err)
+	}
+
+	return &cfg, nil
+}
+
 // WriteYAMLFile marshals a value to YAML with 2-space indentation, prepends a
 // header comment, ensures the parent directory exists, and writes the file.
 // Used by all config WriteToFile methods and the manifest package.
-func WriteYAMLFile(path string, header string, v interface{}) error {
+func WriteYAMLFile(path string, header string, v any) error {
 	var buf bytes.Buffer
 	enc := yaml.NewEncoder(&buf)
 	enc.SetIndent(2)

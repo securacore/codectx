@@ -191,3 +191,100 @@ func TestKeyValue_Format(t *testing.T) {
 		t.Error("expected value")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// FormatNumber
+// ---------------------------------------------------------------------------
+
+func TestFormatNumber_Small(t *testing.T) {
+	tests := []struct {
+		n    int
+		want string
+	}{
+		{0, "0"},
+		{1, "1"},
+		{42, "42"},
+		{999, "999"},
+	}
+	for _, tt := range tests {
+		if got := tui.FormatNumber(tt.n); got != tt.want {
+			t.Errorf("FormatNumber(%d) = %q, want %q", tt.n, got, tt.want)
+		}
+	}
+}
+
+func TestFormatNumber_Thousands(t *testing.T) {
+	tests := []struct {
+		n    int
+		want string
+	}{
+		{1000, "1,000"},
+		{1438, "1,438"},
+		{9999, "9,999"},
+		{10000, "10,000"},
+		{100000, "100,000"},
+		{1000000, "1,000,000"},
+		{12500, "12,500"},
+		{1234567, "1,234,567"},
+	}
+	for _, tt := range tests {
+		if got := tui.FormatNumber(tt.n); got != tt.want {
+			t.Errorf("FormatNumber(%d) = %q, want %q", tt.n, got, tt.want)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// FormatDuration
+// ---------------------------------------------------------------------------
+
+func TestFormatDuration_Milliseconds(t *testing.T) {
+	tests := []struct {
+		seconds float64
+		want    string
+	}{
+		{0.001, "1ms"},
+		{0.05, "50ms"},
+		{0.099, "99ms"},
+		{0.5, "500ms"},
+		{0.999, "999ms"},
+	}
+	for _, tt := range tests {
+		if got := tui.FormatDuration(tt.seconds); got != tt.want {
+			t.Errorf("FormatDuration(%f) = %q, want %q", tt.seconds, got, tt.want)
+		}
+	}
+}
+
+func TestFormatDuration_Seconds(t *testing.T) {
+	tests := []struct {
+		seconds float64
+		want    string
+	}{
+		{1.0, "1.0s"},
+		{2.3, "2.3s"},
+		{59.9, "59.9s"},
+	}
+	for _, tt := range tests {
+		if got := tui.FormatDuration(tt.seconds); got != tt.want {
+			t.Errorf("FormatDuration(%f) = %q, want %q", tt.seconds, got, tt.want)
+		}
+	}
+}
+
+func TestFormatDuration_Minutes(t *testing.T) {
+	tests := []struct {
+		seconds float64
+		want    string
+	}{
+		{60.0, "1m0.0s"},
+		{75.2, "1m15.2s"},
+		{120.0, "2m0.0s"},
+		{185.5, "3m5.5s"},
+	}
+	for _, tt := range tests {
+		if got := tui.FormatDuration(tt.seconds); got != tt.want {
+			t.Errorf("FormatDuration(%f) = %q, want %q", tt.seconds, got, tt.want)
+		}
+	}
+}

@@ -40,6 +40,19 @@ func OutputPath(c *Chunk) string {
 	return filepath.Join(project.CompiledDir, OutputDir(c.Type), OutputFilename(c))
 }
 
+// CompiledOutputDirs returns the list of all compiled output subdirectory
+// paths (chunk dirs + BM25 dirs) relative to the compiled directory.
+// Used by both scaffold (to create dirs) and compile (to clean/recreate).
+func CompiledOutputDirs() []string {
+	types := []ChunkType{ChunkObject, ChunkSpec, ChunkSystem}
+	dirs := make([]string, 0, len(types)*2)
+	for _, ct := range types {
+		dirs = append(dirs, OutputDir(ct))
+		dirs = append(dirs, filepath.Join(project.BM25Dir, OutputDir(ct)))
+	}
+	return dirs
+}
+
 // ClassifySource determines the ChunkType from a source file path.
 //
 // Rules (in priority order):

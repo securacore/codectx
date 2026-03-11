@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/securacore/codectx/core/project"
 )
 
 // Tool represents a detected AI CLI tool with its binary path and version.
@@ -96,11 +98,13 @@ var knownProviders = []providerSpec{
 }
 
 const (
-	// DefaultModel is the fallback model when nothing is detected.
-	DefaultModel = "claude-sonnet-4-20250514"
+	// DefaultModel is an alias for project.DefaultModel. Retained for backward
+	// compatibility — callers should prefer project.DefaultModel directly.
+	DefaultModel = project.DefaultModel
 
-	// DefaultEncoding is the fallback tokenizer encoding.
-	DefaultEncoding = "cl100k_base"
+	// DefaultEncoding is an alias for project.DefaultEncoding. Retained for backward
+	// compatibility — callers should prefer project.DefaultEncoding directly.
+	DefaultEncoding = project.DefaultEncoding
 
 	// ModelGPT4o is the OpenAI GPT-4o model identifier.
 	ModelGPT4o = "gpt-4o"

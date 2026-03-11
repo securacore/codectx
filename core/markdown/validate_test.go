@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/securacore/codectx/core/project"
 )
 
 // ---------------------------------------------------------------------------
@@ -295,14 +297,14 @@ func TestValidateDir_NonexistentDir(t *testing.T) {
 
 func mustMkdir(t *testing.T, path string) {
 	t.Helper()
-	if err := os.MkdirAll(path, 0755); err != nil {
+	if err := os.MkdirAll(path, project.DirPerm); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func mustWriteFile(t *testing.T, path, content string) {
 	t.Helper()
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(content), project.FilePerm); err != nil {
 		t.Fatal(err)
 	}
 }

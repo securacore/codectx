@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/securacore/codectx/core/project"
-	"gopkg.in/yaml.v3"
 )
 
 func TestDefaultConfig_HasSensibleDefaults(t *testing.T) {
@@ -149,7 +148,7 @@ func TestLoadConfig_InvalidYAML(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, project.ConfigFileName)
 
-	if err := os.WriteFile(path, []byte("{{invalid yaml"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("{{invalid yaml"), project.FilePerm); err != nil {
 		t.Fatal(err)
 	}
 
@@ -216,16 +215,9 @@ func TestAIConfig_WriteAndLoad_Roundtrip(t *testing.T) {
 		t.Fatalf("writing ai config: %v", err)
 	}
 
-	// Read back and parse manually (no LoadAIConfig exists).
-	data, err := os.ReadFile(path)
+	loaded, err := project.LoadAIConfig(path)
 	if err != nil {
-		t.Fatalf("reading ai config: %v", err)
-	}
-
-	var loaded project.AIConfig
-	// Skip the header comment lines — yaml.Unmarshal handles comments fine.
-	if err := yaml.Unmarshal(data, &loaded); err != nil {
-		t.Fatalf("unmarshaling ai config: %v", err)
+		t.Fatalf("loading ai config: %v", err)
 	}
 
 	if loaded.Compilation.Model != original.Compilation.Model {
@@ -248,6 +240,27 @@ func TestAIConfig_WriteAndLoad_Roundtrip(t *testing.T) {
 	}
 }
 
+func TestLoadAIConfig_InvalidPath(t *testing.T) {
+	_, err := project.LoadAIConfig("/nonexistent/path/ai.yml")
+	if err == nil {
+		t.Error("expected error for nonexistent path")
+	}
+}
+
+func TestLoadAIConfig_InvalidYAML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ai.yml")
+
+	if err := os.WriteFile(path, []byte("{{invalid yaml"), project.FilePerm); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := project.LoadAIConfig(path)
+	if err == nil {
+		t.Error("expected error for invalid YAML")
+	}
+}
+
 func TestPreferencesConfig_WriteAndLoad_Roundtrip(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "preferences.yml")
@@ -262,14 +275,9 @@ func TestPreferencesConfig_WriteAndLoad_Roundtrip(t *testing.T) {
 		t.Fatalf("writing preferences config: %v", err)
 	}
 
-	data, err := os.ReadFile(path)
+	loaded, err := project.LoadPreferencesConfig(path)
 	if err != nil {
-		t.Fatalf("reading preferences config: %v", err)
-	}
-
-	var loaded project.PreferencesConfig
-	if err := yaml.Unmarshal(data, &loaded); err != nil {
-		t.Fatalf("unmarshaling preferences config: %v", err)
+		t.Fatalf("loading preferences config: %v", err)
 	}
 
 	if loaded.Chunking.TargetTokens != original.Chunking.TargetTokens {
@@ -298,6 +306,27 @@ func TestPreferencesConfig_WriteAndLoad_Roundtrip(t *testing.T) {
 	}
 }
 
+func TestLoadPreferencesConfig_InvalidPath(t *testing.T) {
+	_, err := project.LoadPreferencesConfig("/nonexistent/path/preferences.yml")
+	if err == nil {
+		t.Error("expected error for nonexistent path")
+	}
+}
+
+func TestLoadPreferencesConfig_InvalidYAML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "preferences.yml")
+
+	if err := os.WriteFile(path, []byte("{{invalid yaml"), project.FilePerm); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := project.LoadPreferencesConfig(path)
+	if err == nil {
+		t.Error("expected error for invalid YAML")
+	}
+}
+
 func TestPreferencesConfig_WriteAndLoad_HashLength(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "preferences.yml")
@@ -309,14 +338,9 @@ func TestPreferencesConfig_WriteAndLoad_HashLength(t *testing.T) {
 		t.Fatalf("writing preferences config: %v", err)
 	}
 
-	data, err := os.ReadFile(path)
+	loaded, err := project.LoadPreferencesConfig(path)
 	if err != nil {
-		t.Fatalf("reading preferences config: %v", err)
-	}
-
-	var loaded project.PreferencesConfig
-	if err := yaml.Unmarshal(data, &loaded); err != nil {
-		t.Fatalf("unmarshaling preferences config: %v", err)
+		t.Fatalf("loading preferences config: %v", err)
 	}
 
 	if loaded.Chunking.HashLength != 32 {
