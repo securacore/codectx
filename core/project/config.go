@@ -121,7 +121,7 @@ func DefaultConfig(name string, root string) Config {
 
 // WriteToFile marshals the config to YAML and writes it to the given path.
 func (c *Config) WriteToFile(path string) error {
-	return writeYAMLFile(path, "# codectx project configuration\n# See: https://github.com/securacore/codectx\n\n", c)
+	return WriteYAMLFile(path, "# codectx project configuration\n# See: https://github.com/securacore/codectx\n\n", c)
 }
 
 // LoadConfig reads and parses a codectx.yml file from the given path.
@@ -196,7 +196,7 @@ func DefaultAIConfig() AIConfig {
 
 // WriteToFile marshals the AI config to YAML and writes it to the given path.
 func (c *AIConfig) WriteToFile(path string) error {
-	return writeYAMLFile(path, "# codectx AI configuration\n# Model and behavior settings for compilation and consumption.\n# Checked into version control (no secrets).\n\n", c)
+	return WriteYAMLFile(path, "# codectx AI configuration\n# Model and behavior settings for compilation and consumption.\n# Checked into version control (no secrets).\n\n", c)
 }
 
 // PreferencesConfig represents the .codectx/preferences.yml file.
@@ -332,13 +332,13 @@ func DefaultPreferencesConfig() PreferencesConfig {
 
 // WriteToFile marshals the preferences config to YAML and writes it to the given path.
 func (c *PreferencesConfig) WriteToFile(path string) error {
-	return writeYAMLFile(path, "# codectx compiler preferences\n# Compiler and pipeline configuration.\n# Checked into version control.\n\n", c)
+	return WriteYAMLFile(path, "# codectx compiler preferences\n# Compiler and pipeline configuration.\n# Checked into version control.\n\n", c)
 }
 
-// writeYAMLFile marshals a value to YAML with 2-space indentation, prepends a
+// WriteYAMLFile marshals a value to YAML with 2-space indentation, prepends a
 // header comment, ensures the parent directory exists, and writes the file.
-// This is the shared implementation behind all config WriteToFile methods.
-func writeYAMLFile(path string, header string, v interface{}) error {
+// Used by all config WriteToFile methods and the manifest package.
+func WriteYAMLFile(path string, header string, v interface{}) error {
 	var buf bytes.Buffer
 	enc := yaml.NewEncoder(&buf)
 	enc.SetIndent(2)

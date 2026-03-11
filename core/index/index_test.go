@@ -546,3 +546,98 @@ func TestNewFromConfig_DefaultParams(t *testing.T) {
 		}
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Load — corrupted gob file
+// ---------------------------------------------------------------------------
+
+func TestLoad_CorruptedGobFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	compiledDir := filepath.Join(tmpDir, "compiled")
+
+	// First create valid index files so the directory structure exists.
+	idx := New(1.2, 0.75)
+	idx.BuildFromChunks(nil)
+	if err := idx.Save(compiledDir); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	// Corrupt the objects index file.
+	corruptPath := filepath.Join(compiledDir, "bm25", "objects", indexFileName)
+	if err := os.WriteFile(corruptPath, []byte("this is not valid gob data"), 0644); err != nil {
+		t.Fatalf("writing corrupt file: %v", err)
+	}
+
+	_, err := Load(compiledDir)
+	if err == nil {
+		t.Error("expected error loading corrupted index file")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// SaveLoad round-trip — verify internal BM25 state fields
+// ---------------------------------------------------------------------------
+
+func TestSaveLoad_RoundTrip_InternalFields(t *testing.T) {
+	tmpDir := t.TempDir()
+	compiledDir := filepath.Join(tmpDir, "compiled")
+
+	original := New(1.2, 0.75)
+	original.BuildFromChunks(testChunks())
+
+	if err := original.Save(compiledDir); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	loaded, err := Load(compiledDir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	// Verify internal fields of the objects index (the one with most data).
+	origBM25 := original.Indexes[IndexObjects]
+	loadBM25 := loaded.Indexes[IndexObjects]
+
+	// TermDocFreq map should match.
+	if len(origBM25.TermDocFreq) != len(loadBM25.TermDocFreq) {
+		t.Errorf("TermDocFreq length: %d vs %d", len(origBM25.TermDocFreq), len(loadBM25.TermDocFreq))
+	}
+	for term, origCount := range origBM25.TermDocFreq {
+		if loadCount, ok := loadBM25.TermDocFreq[term]; !ok {
+			t.Errorf("TermDocFreq: missing term %q after load", term)
+		} else if origCount != loadCount {
+			t.Errorf("TermDocFreq[%q]: %d vs %d", term, origCount, loadCount)
+		}
+	}
+
+	// DocIDs should match.
+	if len(origBM25.DocIDs) != len(loadBM25.DocIDs) {
+		t.Fatalf("DocIDs length: %d vs %d", len(origBM25.DocIDs), len(loadBM25.DocIDs))
+	}
+	for i := range origBM25.DocIDs {
+		if origBM25.DocIDs[i] != loadBM25.DocIDs[i] {
+			t.Errorf("DocIDs[%d]: %q vs %q", i, origBM25.DocIDs[i], loadBM25.DocIDs[i])
+		}
+	}
+
+	// DocLengths should match.
+	if len(origBM25.DocLengths) != len(loadBM25.DocLengths) {
+		t.Fatalf("DocLengths length: %d vs %d", len(origBM25.DocLengths), len(loadBM25.DocLengths))
+	}
+	for i := range origBM25.DocLengths {
+		if origBM25.DocLengths[i] != loadBM25.DocLengths[i] {
+			t.Errorf("DocLengths[%d]: %d vs %d", i, origBM25.DocLengths[i], loadBM25.DocLengths[i])
+		}
+	}
+
+	// IDFCache should match.
+	if len(origBM25.IDFCache) != len(loadBM25.IDFCache) {
+		t.Errorf("IDFCache length: %d vs %d", len(origBM25.IDFCache), len(loadBM25.IDFCache))
+	}
+	for term, origIDF := range origBM25.IDFCache {
+		if loadIDF, ok := loadBM25.IDFCache[term]; !ok {
+			t.Errorf("IDFCache: missing term %q after load", term)
+		} else if origIDF != loadIDF {
+			t.Errorf("IDFCache[%q]: %f vs %f", term, origIDF, loadIDF)
+		}
+	}
+}

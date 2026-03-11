@@ -1315,3 +1315,116 @@ func TestOutputFilename_EmptyID(t *testing.T) {
 		t.Errorf("expected fallback filename for empty ID, got %q", got)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// CheckCollisions — empty/nil input
+// ---------------------------------------------------------------------------
+
+func TestCheckCollisions_NilSlice(t *testing.T) {
+	err := chunk.CheckCollisions(nil)
+	if err != nil {
+		t.Errorf("expected nil error for nil slice, got %v", err)
+	}
+}
+
+func TestCheckCollisions_EmptySlice(t *testing.T) {
+	err := chunk.CheckCollisions([]chunk.Chunk{})
+	if err != nil {
+		t.Errorf("expected nil error for empty slice, got %v", err)
+	}
+}
+
+func TestCheckCollisions_NoCollisions(t *testing.T) {
+	chunks := []chunk.Chunk{
+		{ID: "obj:abc.1", Content: "content A"},
+		{ID: "obj:def.2", Content: "content B"},
+	}
+	err := chunk.CheckCollisions(chunks)
+	if err != nil {
+		t.Errorf("expected nil error, got %v", err)
+	}
+}
+
+func TestCheckCollisions_DuplicateIDSameContent(t *testing.T) {
+	chunks := []chunk.Chunk{
+		{ID: "obj:abc.1", Content: "same content"},
+		{ID: "obj:abc.1", Content: "same content"},
+	}
+	err := chunk.CheckCollisions(chunks)
+	if err != nil {
+		t.Errorf("expected nil error for duplicate ID with same content, got %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Rebalance — heading-boundary preservation
+// ---------------------------------------------------------------------------
+
+func TestChunkDocument_RebalancePreservesHeadingBoundary(t *testing.T) {
+	// Create a document where the last chunk starts with a heading and is
+	// below min_tokens. The heading boundary should prevent merging.
+	doc := &markdown.Document{
+		Blocks: []markdown.Block{
+			paragraphBlock("First paragraph content here with enough tokens", 300, []string{"Section A"}),
+			headingBlock("Section B", 2, 5, []string{"Section B"}),
+			paragraphBlock("Tiny ending", 50, []string{"Section B"}),
+		},
+	}
+
+	opts := chunk.Options{
+		TargetTokens:      400,
+		MinTokens:         100, // The last chunk (55 tokens) is below this.
+		MaxTokens:         800,
+		FlexibilityWindow: 0.8,
+		HashLength:        16,
+	}
+
+	chunks, err := chunk.ChunkDocument(doc, "test.md", chunk.ChunkObject, opts)
+	if err != nil {
+		t.Fatalf("ChunkDocument: %v", err)
+	}
+
+	// Because the last chunk starts with a heading, it should NOT be merged
+	// with the previous chunk despite being below MinTokens.
+	if len(chunks) != 2 {
+		t.Errorf("expected 2 chunks (heading boundary preserved), got %d", len(chunks))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// FormatID — unknown ChunkType
+// ---------------------------------------------------------------------------
+
+func TestFormatID_UnknownChunkType(t *testing.T) {
+	got := chunk.FormatID(chunk.ChunkType("unknown"), "abc123", 1)
+	// Unknown types should fall back to "obj" prefix.
+	if !strings.HasPrefix(got, "obj:") {
+		t.Errorf("expected 'obj:' prefix for unknown type, got %q", got)
+	}
+	if got != "obj:abc123.1" {
+		t.Errorf("expected %q, got %q", "obj:abc123.1", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// HeadingSeparator constant
+// ---------------------------------------------------------------------------
+
+func TestHeadingSeparator_UsedInFormatHeading(t *testing.T) {
+	got := chunk.FormatHeading([]string{"A", "B", "C"})
+	if got != "A"+chunk.HeadingSeparator+"B"+chunk.HeadingSeparator+"C" {
+		t.Errorf("expected heading with separator %q, got %q", chunk.HeadingSeparator, got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// SpecFileSuffix constant
+// ---------------------------------------------------------------------------
+
+func TestSpecFileSuffix_ClassifySource(t *testing.T) {
+	// Verify the constant is used in ClassifySource.
+	got := chunk.ClassifySource("docs/topics/auth/jwt"+chunk.SpecFileSuffix, "system")
+	if got != chunk.ChunkSpec {
+		t.Errorf("expected ChunkSpec for spec file suffix, got %v", got)
+	}
+}

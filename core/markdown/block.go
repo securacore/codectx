@@ -12,6 +12,10 @@ import (
 // that require a valid document (chunking, token counting, etc.).
 var ErrNilDocument = errors.New("document is nil")
 
+// headingTrackerSize is the size of the heading hierarchy tracker array.
+// Index 0 is unused; indices 1-6 correspond to H1-H6 heading levels.
+const headingTrackerSize = 7
+
 // BlockType identifies the kind of semantic block extracted from markdown.
 type BlockType int
 
@@ -134,7 +138,7 @@ func Parse(source []byte) *Document {
 
 	extractor := &blockExtractor{
 		source:  source,
-		heading: make([]string, 7), // index 0 unused; 1-6 for heading levels
+		heading: make([]string, headingTrackerSize),
 	}
 
 	// Walk direct children of the document node.

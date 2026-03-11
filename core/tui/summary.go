@@ -3,6 +3,8 @@ package tui
 import (
 	"fmt"
 	"strings"
+
+	"github.com/securacore/codectx/core/markdown"
 )
 
 // TreeNode represents a node in a directory tree for display purposes.
@@ -66,7 +68,7 @@ func InitSummary(projectName string, tree []TreeNode, nextSteps []string) string
 	// Directory tree.
 	fmt.Fprintf(&b, "%s%s\n\n", Indent(1), StyleMuted.Render("Created:"))
 	treeStr := RenderTree(tree)
-	for _, line := range splitLines(treeStr) {
+	for _, line := range markdown.SplitLines(treeStr) {
 		fmt.Fprintf(&b, "%s%s\n", Indent(1), line)
 	}
 
@@ -89,12 +91,6 @@ func DetectedTool(name, version string) string {
 		StyleBold.Render(name),
 		StyleMuted.Render(version),
 	)
-}
-
-// splitLines splits text into lines, trimming a trailing newline first to avoid
-// producing an empty final element.
-func splitLines(s string) []string {
-	return strings.Split(strings.TrimRight(s, "\n"), "\n")
 }
 
 // KeyValue formats a key-value pair with the key in muted and value in default color.

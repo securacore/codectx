@@ -117,10 +117,10 @@ func renderCodeSpanText(b *strings.Builder, node *ast.CodeSpan, source []byte) {
 	}
 }
 
-// splitLines splits text into lines, trimming a trailing newline first to avoid
+// SplitLines splits text into lines, trimming a trailing newline first to avoid
 // producing an empty final element. This is a common pattern when rendering
 // multi-line block content.
-func splitLines(s string) []string {
+func SplitLines(s string) []string {
 	return strings.Split(strings.TrimRight(s, "\n"), "\n")
 }
 
@@ -214,7 +214,7 @@ func renderListItemContent(b *strings.Builder, item ast.Node, source []byte) {
 			}
 			b.WriteByte('\n')
 			lines := renderBlockLines(n, source)
-			for _, line := range splitLines(lines) {
+			for _, line := range SplitLines(lines) {
 				b.WriteString("  ")
 				b.WriteString(line)
 				b.WriteByte('\n')
@@ -223,7 +223,7 @@ func renderListItemContent(b *strings.Builder, item ast.Node, source []byte) {
 
 		case *ast.CodeBlock:
 			lines := renderBlockLines(n, source)
-			for _, line := range splitLines(lines) {
+			for _, line := range SplitLines(lines) {
 				b.WriteString("      ")
 				b.WriteString(line)
 				b.WriteByte('\n')
@@ -232,7 +232,7 @@ func renderListItemContent(b *strings.Builder, item ast.Node, source []byte) {
 		case *ast.List:
 			// Nested list.
 			nested := renderListText(n, source)
-			for _, line := range splitLines(nested) {
+			for _, line := range SplitLines(nested) {
 				b.WriteString("  ")
 				b.WriteString(line)
 				b.WriteByte('\n')
@@ -240,7 +240,7 @@ func renderListItemContent(b *strings.Builder, item ast.Node, source []byte) {
 
 		case *ast.Blockquote:
 			content := renderBlockquoteText(n, source)
-			for _, line := range splitLines(content) {
+			for _, line := range SplitLines(content) {
 				b.WriteString("  > ")
 				b.WriteString(line)
 				b.WriteByte('\n')

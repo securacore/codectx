@@ -54,7 +54,7 @@ func ClassifySource(sourcePath string, systemDir string) ChunkType {
 	normalized := filepath.ToSlash(sourcePath)
 
 	// Rule 1: spec files always produce spec chunks.
-	if strings.HasSuffix(normalized, ".spec.md") {
+	if strings.HasSuffix(normalized, SpecFileSuffix) {
 		return ChunkSpec
 	}
 

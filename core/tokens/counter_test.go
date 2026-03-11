@@ -3,6 +3,7 @@ package tokens_test
 import (
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/securacore/codectx/core/markdown"
@@ -552,5 +553,51 @@ func TestCountBlocks_NilDocument(t *testing.T) {
 	}
 	if !errors.Is(err, markdown.ErrNilDocument) {
 		t.Errorf("expected ErrNilDocument sentinel, got %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Concurrent safety
+// ---------------------------------------------------------------------------
+
+func TestCount_Concurrent(t *testing.T) {
+	c, err := tokens.New(tokens.Cl100kBase)
+	if err != nil {
+		t.Fatalf("creating counter: %v", err)
+	}
+
+	inputs := []string{
+		"Hello, world!",
+		"The quick brown fox jumps over the lazy dog.",
+		"func main() { fmt.Println(\"test\") }",
+		"Authentication tokens are validated using SHA-256.",
+		strings.Repeat("word ", 100),
+	}
+
+	var wg sync.WaitGroup
+	errs := make(chan error, len(inputs)*10)
+
+	for i := 0; i < 10; i++ {
+		for _, input := range inputs {
+			wg.Add(1)
+			go func(text string) {
+				defer wg.Done()
+				n, countErr := c.Count(text)
+				if countErr != nil {
+					errs <- countErr
+					return
+				}
+				if n <= 0 {
+					errs <- errors.New("expected positive token count")
+				}
+			}(input)
+		}
+	}
+
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		t.Errorf("concurrent Count error: %v", err)
 	}
 }

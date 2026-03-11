@@ -298,6 +298,32 @@ func TestPreferencesConfig_WriteAndLoad_Roundtrip(t *testing.T) {
 	}
 }
 
+func TestPreferencesConfig_WriteAndLoad_HashLength(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "preferences.yml")
+
+	original := project.DefaultPreferencesConfig()
+	original.Chunking.HashLength = 32 // Non-default value.
+
+	if err := original.WriteToFile(path); err != nil {
+		t.Fatalf("writing preferences config: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading preferences config: %v", err)
+	}
+
+	var loaded project.PreferencesConfig
+	if err := yaml.Unmarshal(data, &loaded); err != nil {
+		t.Fatalf("unmarshaling preferences config: %v", err)
+	}
+
+	if loaded.Chunking.HashLength != 32 {
+		t.Errorf("hash length: expected 32, got %d", loaded.Chunking.HashLength)
+	}
+}
+
 func TestDefaultPreferencesConfig_HasSensibleDefaults(t *testing.T) {
 	cfg := project.DefaultPreferencesConfig()
 

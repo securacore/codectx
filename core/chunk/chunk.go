@@ -33,6 +33,13 @@ const (
 	ChunkSystem ChunkType = "system"
 )
 
+// HeadingSeparator is the delimiter used in heading breadcrumb strings.
+// E.g. "Authentication > JWT Tokens > Refresh Flow".
+const HeadingSeparator = " > "
+
+// SpecFileSuffix is the file extension that identifies spec (reasoning) files.
+const SpecFileSuffix = ".spec.md"
+
 // chunkTypeMeta maps each ChunkType to its ID prefix and output directory.
 // This is the single source of truth — idPrefix() and OutputDir() both delegate here.
 type chunkTypeMeta struct {
@@ -123,7 +130,7 @@ func FormatHeading(hierarchy []string) string {
 	if len(hierarchy) == 0 {
 		return ""
 	}
-	return strings.Join(hierarchy, " > ")
+	return strings.Join(hierarchy, HeadingSeparator)
 }
 
 // JoinContent concatenates block content with double-newline separators.

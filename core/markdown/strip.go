@@ -38,7 +38,7 @@ func Strip(doc *Document) *Document {
 	}
 
 	// Heading hierarchy tracker for recomputing after normalization.
-	heading := make([]string, 7)
+	heading := make([]string, headingTrackerSize)
 	pos := 0
 
 	for _, block := range doc.Blocks {

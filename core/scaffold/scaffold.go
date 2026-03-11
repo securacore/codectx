@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/securacore/codectx/core/chunk"
 	"github.com/securacore/codectx/core/project"
 	"github.com/securacore/codectx/embed"
 )
@@ -253,12 +254,12 @@ func directories(docsRoot, codectxDir string) []string {
 		filepath.Join(docsRoot, "system", "prompts"),
 
 		// Tooling state directory.
-		filepath.Join(codectxDir, project.CompiledDir, "objects"),
-		filepath.Join(codectxDir, project.CompiledDir, "specs"),
-		filepath.Join(codectxDir, project.CompiledDir, "system"),
-		filepath.Join(codectxDir, project.CompiledDir, project.BM25Dir, "objects"),
-		filepath.Join(codectxDir, project.CompiledDir, project.BM25Dir, "specs"),
-		filepath.Join(codectxDir, project.CompiledDir, project.BM25Dir, "system"),
+		filepath.Join(codectxDir, project.CompiledDir, chunk.OutputDir(chunk.ChunkObject)),
+		filepath.Join(codectxDir, project.CompiledDir, chunk.OutputDir(chunk.ChunkSpec)),
+		filepath.Join(codectxDir, project.CompiledDir, chunk.OutputDir(chunk.ChunkSystem)),
+		filepath.Join(codectxDir, project.CompiledDir, project.BM25Dir, chunk.OutputDir(chunk.ChunkObject)),
+		filepath.Join(codectxDir, project.CompiledDir, project.BM25Dir, chunk.OutputDir(chunk.ChunkSpec)),
+		filepath.Join(codectxDir, project.CompiledDir, project.BM25Dir, chunk.OutputDir(chunk.ChunkSystem)),
 		filepath.Join(codectxDir, "packages"),
 	}
 }
