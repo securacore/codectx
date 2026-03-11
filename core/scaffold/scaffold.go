@@ -63,6 +63,10 @@ type Options struct {
 
 	// Encoding is the tokenizer encoding to write to ai.yml. Uses default if empty.
 	Encoding string
+
+	// Provider is the LLM provider for compilation tasks ("cli" or "api").
+	// Empty means auto-detect at compile time.
+	Provider string
 }
 
 // CheckResult holds the result of pre-scaffold capability checks.
@@ -206,7 +210,7 @@ func Init(opts Options) (*Result, error) {
 	}
 
 	// Write config files.
-	if err := writeConfigs(opts.ProjectDir, codectxDir, name, root, opts.Model, opts.Encoding); err != nil {
+	if err := writeConfigs(opts.ProjectDir, codectxDir, name, root, opts.Model, opts.Encoding, opts.Provider); err != nil {
 		return nil, err
 	}
 	result.FilesCreated += 3 // codectx.yml, ai.yml, preferences.yml
@@ -266,7 +270,7 @@ func directories(docsRoot, codectxDir string) []string {
 }
 
 // writeConfigs creates the three configuration files.
-func writeConfigs(projectDir, codectxDir, name, root, model, encoding string) error {
+func writeConfigs(projectDir, codectxDir, name, root, model, encoding, provider string) error {
 	// codectx.yml at project root.
 	cfg := project.DefaultConfig(name, root)
 	cfgPath := filepath.Join(projectDir, project.ConfigFileName)
@@ -282,6 +286,9 @@ func writeConfigs(projectDir, codectxDir, name, root, model, encoding string) er
 	}
 	if encoding != "" {
 		aiCfg.Compilation.Encoding = encoding
+	}
+	if provider != "" {
+		aiCfg.Compilation.Provider = provider
 	}
 	aiPath := filepath.Join(codectxDir, project.AIConfigFile)
 	if err := aiCfg.WriteToFile(aiPath); err != nil {

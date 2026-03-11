@@ -312,6 +312,24 @@ func run(_ context.Context, cmd *cli.Command) error {
 		}
 	}
 
+	// --- Step 8b: Provider selection ---
+	hasCLI, hasAPI := detectProviderCapabilities(detection)
+	effectiveProvider := autoSelectProvider(hasCLI, hasAPI)
+
+	// If both are available and interactive, let the user choose.
+	if hasCLI && hasAPI && interactive {
+		if err := huh.NewSelect[string]().
+			Title("LLM provider for compilation:").
+			Options(
+				huh.NewOption("Claude CLI (recommended, uses existing subscription)", project.ProviderCLI),
+				huh.NewOption("Anthropic API (direct API calls)", project.ProviderAPI),
+			).
+			Value(&effectiveProvider).
+			Run(); err != nil {
+			return err
+		}
+	}
+
 	// --- Step 9: Scaffold with spinner ---
 	opts := scaffold.Options{
 		ProjectDir: targetDir,
@@ -320,6 +338,7 @@ func run(_ context.Context, cmd *cli.Command) error {
 		GitInit:    needGitInit,
 		Model:      effectiveModel,
 		Encoding:   effectiveEncoding,
+		Provider:   effectiveProvider,
 	}
 
 	var result *scaffold.Result
@@ -361,6 +380,19 @@ func run(_ context.Context, cmd *cli.Command) error {
 	// Print key configuration values.
 	fmt.Printf("%s%s\n", tui.Indent(1),
 		tui.KeyValue("Model", effectiveModel))
+	if effectiveProvider != "" {
+		var providerLabel string
+		switch effectiveProvider {
+		case project.ProviderCLI:
+			providerLabel = "cli (Claude Code)"
+		case project.ProviderAPI:
+			providerLabel = "api (Anthropic API)"
+		default:
+			providerLabel = effectiveProvider
+		}
+		fmt.Printf("%s%s\n", tui.Indent(1),
+			tui.KeyValue("Provider", providerLabel))
+	}
 	if created {
 		fmt.Printf("%s%s\n", tui.Indent(1),
 			tui.KeyValue("Directory", targetDir))
@@ -446,6 +478,39 @@ func resolveTarget(args []string) (string, bool, error) {
 		return "", false, err
 	}
 	return abs, true, nil
+}
+
+// detectProviderCapabilities checks the detection results for Claude CLI
+// binary and Anthropic API key availability.
+func detectProviderCapabilities(detection detect.Result) (hasCLI, hasAPI bool) {
+	for _, t := range detection.Tools {
+		if t.Binary == "claude" {
+			hasCLI = true
+			break
+		}
+	}
+	for _, p := range detection.Providers {
+		if p.Name == "Anthropic" {
+			hasAPI = true
+			break
+		}
+	}
+	return hasCLI, hasAPI
+}
+
+// autoSelectProvider returns the appropriate provider string based on
+// detected capabilities. When both CLI and API are available, CLI is
+// preferred (non-interactive default). Returns empty string if neither
+// is available.
+func autoSelectProvider(hasCLI, hasAPI bool) string {
+	switch {
+	case hasCLI:
+		return project.ProviderCLI
+	case hasAPI:
+		return project.ProviderAPI
+	default:
+		return ""
+	}
 }
 
 // buildSummaryTree creates the tree structure for the init summary display.

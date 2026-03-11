@@ -36,6 +36,12 @@ const DefaultModel = "claude-sonnet-4-20250514"
 // DefaultEncoding is the fallback tokenizer encoding.
 const DefaultEncoding = "cl100k_base"
 
+// ProviderCLI indicates the local Claude CLI binary for LLM compilation tasks.
+const ProviderCLI = "cli"
+
+// ProviderAPI indicates the Anthropic Messages API for LLM compilation tasks.
+const ProviderAPI = "api"
+
 // DirPerm is the standard directory permission mode used throughout the project.
 const DirPerm = 0755
 
@@ -196,6 +202,11 @@ type AIConfig struct {
 
 // AICompilationConfig configures the model used during compilation.
 type AICompilationConfig struct {
+	// Provider is the LLM provider for compilation tasks ("cli" or "api").
+	// "cli" invokes the local Claude CLI binary; "api" uses the Anthropic
+	// Messages API directly. Empty string means auto-detect at compile time.
+	Provider string `yaml:"provider,omitempty"`
+
 	// Model is the AI model used for alias generation and bridge summaries.
 	Model string `yaml:"model"`
 
@@ -391,6 +402,16 @@ func (c *PreferencesConfig) WriteToFile(path string) error {
 // LoadPreferencesConfig reads and parses a preferences.yml file from the given path.
 func LoadPreferencesConfig(path string) (*PreferencesConfig, error) {
 	return loadYAMLFile[PreferencesConfig](path)
+}
+
+// LoadPreferencesConfigForProject loads the preferences configuration for a
+// project, given the project directory and config. This is a convenience
+// wrapper that constructs the full path to preferences.yml from
+// RootDir / .codectx / preferences.yml.
+func LoadPreferencesConfigForProject(projectDir string, cfg *Config) (*PreferencesConfig, error) {
+	rootDir := RootDir(projectDir, cfg)
+	codectxDir := filepath.Join(rootDir, CodectxDir)
+	return LoadPreferencesConfig(filepath.Join(codectxDir, PreferencesFile))
 }
 
 // loadYAMLFile reads a YAML file from disk and unmarshals it into a new

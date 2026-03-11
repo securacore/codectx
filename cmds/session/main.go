@@ -107,16 +107,14 @@ func runAdd(_ context.Context, cmd *cli.Command) error {
 	}
 
 	// Check for duplicates.
-	for _, existing := range cfg.Session.AlwaysLoaded {
-		if existing == ref {
-			fmt.Print(tui.WarnMsg{
-				Title: "Already in session context",
-				Detail: []string{
-					fmt.Sprintf("%s is already in always_loaded.", tui.StyleAccent.Render(ref)),
-				},
-			}.Render())
-			return nil
-		}
+	if isDuplicate(cfg.Session.AlwaysLoaded, ref) {
+		fmt.Print(tui.WarnMsg{
+			Title: "Already in session context",
+			Detail: []string{
+				fmt.Sprintf("%s is already in always_loaded.", tui.StyleAccent.Render(ref)),
+			},
+		}.Render())
+		return nil
 	}
 
 	// Resolve the reference to validate it and count tokens.
@@ -140,8 +138,7 @@ func runAdd(_ context.Context, cmd *cli.Command) error {
 	}
 
 	// Load AI config for encoding.
-	codectxDir := filepath.Join(rootDir, project.CodectxDir)
-	aiCfg, err := project.LoadAIConfig(filepath.Join(codectxDir, project.AIConfigFile))
+	aiCfg, err := project.LoadAIConfigForProject(projectDir, cfg)
 	if err != nil {
 		return fmt.Errorf("loading AI config: %w", err)
 	}
@@ -236,16 +233,7 @@ func runRemove(_ context.Context, cmd *cli.Command) error {
 	}
 
 	// Find and remove the reference.
-	found := false
-	filtered := make([]string, 0, len(cfg.Session.AlwaysLoaded))
-	for _, existing := range cfg.Session.AlwaysLoaded {
-		if existing == ref {
-			found = true
-			continue
-		}
-		filtered = append(filtered, existing)
-	}
-
+	filtered, found := removeRef(cfg.Session.AlwaysLoaded, ref)
 	if !found {
 		fmt.Print(tui.ErrorMsg{
 			Title: "Reference not found",
@@ -300,8 +288,7 @@ func runList(_ context.Context, _ *cli.Command) error {
 	packagesDir := project.PackagesPath(rootDir)
 
 	// Load AI config for encoding.
-	codectxDir := filepath.Join(rootDir, project.CodectxDir)
-	aiCfg, err := project.LoadAIConfig(filepath.Join(codectxDir, project.AIConfigFile))
+	aiCfg, err := project.LoadAIConfigForProject(projectDir, cfg)
 	if err != nil {
 		return fmt.Errorf("loading AI config: %w", err)
 	}
@@ -379,6 +366,31 @@ func loadProject() (string, *project.Config, error) {
 	}
 
 	return projectDir, cfg, nil
+}
+
+// isDuplicate checks whether ref already exists in the list.
+func isDuplicate(list []string, ref string) bool {
+	for _, existing := range list {
+		if existing == ref {
+			return true
+		}
+	}
+	return false
+}
+
+// removeRef removes the first occurrence of ref from the list.
+// Returns the filtered list and whether the ref was found.
+func removeRef(list []string, ref string) ([]string, bool) {
+	found := false
+	filtered := make([]string, 0, len(list))
+	for _, existing := range list {
+		if existing == ref && !found {
+			found = true
+			continue
+		}
+		filtered = append(filtered, existing)
+	}
+	return filtered, found
 }
 
 // computeSessionTotal resolves and assembles all session entries to get the total token count.

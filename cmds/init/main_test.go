@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/securacore/codectx/core/detect"
+	"github.com/securacore/codectx/core/project"
 	"github.com/securacore/codectx/core/tui"
 )
 
@@ -215,5 +217,136 @@ func TestBuildSummaryTree_CodectxChildren(t *testing.T) {
 		if codectxNode.Children[i].Name != expected {
 			t.Errorf(".codectx/ child %d: expected %q, got %q", i, expected, codectxNode.Children[i].Name)
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// detectProviderCapabilities
+// ---------------------------------------------------------------------------
+
+func TestDetectProviderCapabilities_BothAvailable(t *testing.T) {
+	detection := detect.Result{
+		Tools: []detect.Tool{
+			{Name: "Claude Code", Binary: "claude", Path: "/usr/bin/claude"},
+		},
+		Providers: []detect.Provider{
+			{Name: "Anthropic", EnvVar: "ANTHROPIC_API_KEY"},
+		},
+	}
+
+	hasCLI, hasAPI := detectProviderCapabilities(detection)
+	if !hasCLI {
+		t.Error("expected hasCLI=true")
+	}
+	if !hasAPI {
+		t.Error("expected hasAPI=true")
+	}
+}
+
+func TestDetectProviderCapabilities_OnlyCLI(t *testing.T) {
+	detection := detect.Result{
+		Tools: []detect.Tool{
+			{Name: "Claude Code", Binary: "claude"},
+		},
+	}
+
+	hasCLI, hasAPI := detectProviderCapabilities(detection)
+	if !hasCLI {
+		t.Error("expected hasCLI=true")
+	}
+	if hasAPI {
+		t.Error("expected hasAPI=false")
+	}
+}
+
+func TestDetectProviderCapabilities_OnlyAPI(t *testing.T) {
+	detection := detect.Result{
+		Providers: []detect.Provider{
+			{Name: "Anthropic", EnvVar: "ANTHROPIC_API_KEY"},
+		},
+	}
+
+	hasCLI, hasAPI := detectProviderCapabilities(detection)
+	if hasCLI {
+		t.Error("expected hasCLI=false")
+	}
+	if !hasAPI {
+		t.Error("expected hasAPI=true")
+	}
+}
+
+func TestDetectProviderCapabilities_NeitherAvailable(t *testing.T) {
+	detection := detect.Result{}
+
+	hasCLI, hasAPI := detectProviderCapabilities(detection)
+	if hasCLI {
+		t.Error("expected hasCLI=false")
+	}
+	if hasAPI {
+		t.Error("expected hasAPI=false")
+	}
+}
+
+func TestDetectProviderCapabilities_NonClaudeTool(t *testing.T) {
+	detection := detect.Result{
+		Tools: []detect.Tool{
+			{Name: "Aider", Binary: "aider"},
+		},
+	}
+
+	hasCLI, hasAPI := detectProviderCapabilities(detection)
+	if hasCLI {
+		t.Error("expected hasCLI=false for non-claude tool")
+	}
+	if hasAPI {
+		t.Error("expected hasAPI=false")
+	}
+}
+
+func TestDetectProviderCapabilities_NonAnthropicProvider(t *testing.T) {
+	detection := detect.Result{
+		Providers: []detect.Provider{
+			{Name: "OpenAI", EnvVar: "OPENAI_API_KEY"},
+		},
+	}
+
+	hasCLI, hasAPI := detectProviderCapabilities(detection)
+	if hasCLI {
+		t.Error("expected hasCLI=false")
+	}
+	if hasAPI {
+		t.Error("expected hasAPI=false for non-Anthropic provider")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// autoSelectProvider
+// ---------------------------------------------------------------------------
+
+func TestAutoSelectProvider_BothAvailable(t *testing.T) {
+	got := autoSelectProvider(true, true)
+	if got != project.ProviderCLI {
+		t.Errorf("expected %q, got %q", project.ProviderCLI, got)
+	}
+}
+
+func TestAutoSelectProvider_OnlyCLI(t *testing.T) {
+	got := autoSelectProvider(true, false)
+	if got != project.ProviderCLI {
+		t.Errorf("expected %q, got %q", project.ProviderCLI, got)
+	}
+}
+
+func TestAutoSelectProvider_OnlyAPI(t *testing.T) {
+	got := autoSelectProvider(false, true)
+	if got != project.ProviderAPI {
+		t.Errorf("expected %q, got %q", project.ProviderAPI, got)
+	}
+}
+
+func TestAutoSelectProvider_NeitherAvailable(t *testing.T) {
+	got := autoSelectProvider(false, false)
+	if got != "" {
+		t.Errorf("expected empty string, got %q", got)
 	}
 }

@@ -49,62 +49,20 @@ func run(_ context.Context, _ *cli.Command) error {
 	}
 
 	rootDir := project.RootDir(projectDir, cfg)
-	codectxDir := filepath.Join(rootDir, project.CodectxDir)
 
-	aiCfg, err := project.LoadAIConfig(filepath.Join(codectxDir, project.AIConfigFile))
+	aiCfg, err := project.LoadAIConfigForProject(projectDir, cfg)
 	if err != nil {
-		fmt.Print(tui.ErrorMsg{
-			Title: "Failed to load AI configuration",
-			Detail: []string{
-				fmt.Sprintf("Error reading %s", tui.StylePath.Render(project.CodectxDir+"/"+project.AIConfigFile)),
-				err.Error(),
-			},
-			Suggestions: []tui.Suggestion{
-				{Text: "Reinitialize the project:", Command: "codectx init"},
-			},
-		}.Render())
+		fmt.Print(renderConfigError("AI configuration", project.AIConfigFile, err))
 		return fmt.Errorf("loading AI config: %w", err)
 	}
 
-	prefsCfg, err := project.LoadPreferencesConfig(filepath.Join(codectxDir, project.PreferencesFile))
+	prefsCfg, err := project.LoadPreferencesConfigForProject(projectDir, cfg)
 	if err != nil {
-		fmt.Print(tui.ErrorMsg{
-			Title: "Failed to load preferences",
-			Detail: []string{
-				fmt.Sprintf("Error reading %s", tui.StylePath.Render(project.CodectxDir+"/"+project.PreferencesFile)),
-				err.Error(),
-			},
-			Suggestions: []tui.Suggestion{
-				{Text: "Reinitialize the project:", Command: "codectx init"},
-			},
-		}.Render())
+		fmt.Print(renderConfigError("preferences", project.PreferencesFile, err))
 		return fmt.Errorf("loading preferences: %w", err)
 	}
 
-	// Build active dependencies map from config.
-	activeDeps := make(map[string]bool)
-	for name, dep := range cfg.Dependencies {
-		if dep != nil && dep.Active {
-			activeDeps[name] = true
-		}
-	}
-
-	compiledDir := filepath.Join(codectxDir, project.CompiledDir)
-
-	compileCfg := compile.Config{
-		ProjectDir:  projectDir,
-		RootDir:     rootDir,
-		CompiledDir: compiledDir,
-		SystemDir:   project.SystemDir,
-		Encoding:    aiCfg.Compilation.Encoding,
-		Version:     version.Version,
-		Chunking:    prefsCfg.Chunking,
-		BM25:        prefsCfg.BM25,
-		Validation:  prefsCfg.Validation,
-		Taxonomy:    prefsCfg.Taxonomy,
-		ActiveDeps:  activeDeps,
-		Session:     cfg.Session,
-	}
+	compileCfg := buildCompileConfig(projectDir, rootDir, cfg, aiCfg, prefsCfg)
 
 	// --- Step 3: Run compilation pipeline ---
 	var result *compile.Result
@@ -132,7 +90,7 @@ func run(_ context.Context, _ *cli.Command) error {
 	}
 
 	// --- Step 4: Display summary ---
-	fmt.Print(renderSummary(result, cfg.Name, aiCfg.Compilation.Model, compiledDir, projectDir))
+	fmt.Print(renderSummary(result, cfg.Name, aiCfg.Compilation.Model, compileCfg.CompiledDir, projectDir))
 
 	// --- Step 5: Display warnings ---
 	if len(result.Warnings) > 0 {
@@ -140,6 +98,58 @@ func run(_ context.Context, _ *cli.Command) error {
 	}
 
 	return nil
+}
+
+// renderConfigError formats a configuration loading error for terminal display.
+func renderConfigError(configName, fileName string, err error) string {
+	return tui.ErrorMsg{
+		Title: fmt.Sprintf("Failed to load %s", configName),
+		Detail: []string{
+			fmt.Sprintf("Error reading %s", tui.StylePath.Render(project.CodectxDir+"/"+fileName)),
+			err.Error(),
+		},
+		Suggestions: []tui.Suggestion{
+			{Text: "Reinitialize the project:", Command: "codectx init"},
+		},
+	}.Render()
+}
+
+// buildCompileConfig assembles a compile.Config from the project, AI, and
+// preferences configurations. This is a pure data-mapping function that
+// is easily testable.
+func buildCompileConfig(
+	projectDir, rootDir string,
+	cfg *project.Config,
+	aiCfg *project.AIConfig,
+	prefsCfg *project.PreferencesConfig,
+) compile.Config {
+	activeDeps := make(map[string]bool)
+	for name, dep := range cfg.Dependencies {
+		if dep != nil && dep.Active {
+			activeDeps[name] = true
+		}
+	}
+
+	codectxDir := filepath.Join(rootDir, project.CodectxDir)
+	compiledDir := filepath.Join(codectxDir, project.CompiledDir)
+
+	return compile.Config{
+		ProjectDir:  projectDir,
+		RootDir:     rootDir,
+		CompiledDir: compiledDir,
+		SystemDir:   project.SystemDir,
+		Encoding:    aiCfg.Compilation.Encoding,
+		Version:     version.Version,
+		Chunking:    prefsCfg.Chunking,
+		BM25:        prefsCfg.BM25,
+		Validation:  prefsCfg.Validation,
+		Taxonomy:    prefsCfg.Taxonomy,
+		Model:       aiCfg.Compilation.Model,
+		Provider:    aiCfg.Compilation.Provider,
+		APIKey:      os.Getenv("ANTHROPIC_API_KEY"),
+		ActiveDeps:  activeDeps,
+		Session:     cfg.Session,
+	}
 }
 
 // renderCompileError formats a compilation error for terminal display.
@@ -217,6 +227,20 @@ func renderSummary(result *compile.Result, projectName, model, compiledDir, proj
 		fmt.Fprintf(&b, "%s%s\n", tui.Indent(1),
 			tui.KeyValue("Taxonomy", fmt.Sprintf("%s terms extracted",
 				tui.FormatNumber(result.TaxonomyTerms),
+			)),
+		)
+	}
+
+	// LLM augmentation.
+	if result.LLMSkipped {
+		fmt.Fprintf(&b, "%s%s\n", tui.Indent(1),
+			tui.KeyValue("LLM", fmt.Sprintf("skipped (%s)", result.LLMSkipReason)),
+		)
+	} else if result.LLMAliasCount > 0 || result.LLMBridgeCount > 0 {
+		fmt.Fprintf(&b, "%s%s\n", tui.Indent(1),
+			tui.KeyValue("LLM", fmt.Sprintf("%d aliases, %d bridges (%s)",
+				result.LLMAliasCount, result.LLMBridgeCount,
+				tui.FormatDuration(result.LLMSeconds),
 			)),
 		)
 	}

@@ -37,6 +37,10 @@ func setupTestProject(t *testing.T) (string, string) {
 }
 
 func defaultTestConfig(rootDir, compiledDir string) compile.Config {
+	taxCfg := project.DefaultPreferencesConfig().Taxonomy
+	// Disable LLM augmentation in tests to avoid real API/CLI calls.
+	taxCfg.LLMAliasGeneration = false
+
 	return compile.Config{
 		ProjectDir:  filepath.Dir(rootDir),
 		RootDir:     rootDir,
@@ -47,7 +51,7 @@ func defaultTestConfig(rootDir, compiledDir string) compile.Config {
 		Chunking:    project.DefaultPreferencesConfig().Chunking,
 		BM25:        project.DefaultPreferencesConfig().BM25,
 		Validation:  project.DefaultPreferencesConfig().Validation,
-		Taxonomy:    project.DefaultPreferencesConfig().Taxonomy,
+		Taxonomy:    taxCfg,
 		ActiveDeps:  nil,
 	}
 }
@@ -114,6 +118,7 @@ func TestRun_FullPipeline(t *testing.T) {
 		compile.StageWrite,
 		compile.StageIndex,
 		compile.StageTaxonomy,
+		compile.StageLLM,
 		compile.StageManifest,
 	}
 	for _, expected := range expectedStages {
@@ -127,6 +132,17 @@ func TestRun_FullPipeline(t *testing.T) {
 		if !found {
 			t.Errorf("expected progress stage %q, but it was not reported", expected)
 		}
+	}
+
+	// Verify LLM augmentation was skipped (disabled in test config).
+	if !result.LLMSkipped {
+		t.Error("expected LLM augmentation to be skipped in test")
+	}
+	if result.LLMAliasCount != 0 {
+		t.Errorf("expected 0 LLM aliases, got %d", result.LLMAliasCount)
+	}
+	if result.LLMBridgeCount != 0 {
+		t.Errorf("expected 0 LLM bridges, got %d", result.LLMBridgeCount)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	corecompile "github.com/securacore/codectx/core/compile"
+	"github.com/securacore/codectx/core/project"
 )
 
 // ---------------------------------------------------------------------------
@@ -313,3 +314,230 @@ func TestRenderCompileError_ReturnsWrappedError(t *testing.T) {
 type errTest string
 
 func (e errTest) Error() string { return string(e) }
+
+// ---------------------------------------------------------------------------
+// renderConfigError
+// ---------------------------------------------------------------------------
+
+func TestRenderConfigError_ContainsTitle(t *testing.T) {
+	got := renderConfigError("AI configuration", "ai.yml", errTest("file not found"))
+
+	if !strings.Contains(got, "Failed to load AI configuration") {
+		t.Errorf("expected title in output:\n%s", got)
+	}
+	if !strings.Contains(got, "ai.yml") {
+		t.Errorf("expected file name in output:\n%s", got)
+	}
+	if !strings.Contains(got, "file not found") {
+		t.Errorf("expected error message in output:\n%s", got)
+	}
+	if !strings.Contains(got, "codectx init") {
+		t.Errorf("expected reinitialize suggestion in output:\n%s", got)
+	}
+}
+
+func TestRenderConfigError_Preferences(t *testing.T) {
+	got := renderConfigError("preferences", "preferences.yml", errTest("parse error"))
+
+	if !strings.Contains(got, "Failed to load preferences") {
+		t.Errorf("expected preferences title in output:\n%s", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// buildCompileConfig
+// ---------------------------------------------------------------------------
+
+func TestBuildCompileConfig_BasicMapping(t *testing.T) {
+	cfg := &project.Config{
+		Name: "test-project",
+		Root: "docs",
+	}
+	aiCfg := &project.AIConfig{
+		Compilation: project.AICompilationConfig{
+			Model:    "claude-sonnet-4-20250514",
+			Encoding: "cl100k_base",
+			Provider: "cli",
+		},
+	}
+	prefsCfg := &project.PreferencesConfig{
+		Chunking: project.ChunkingConfig{
+			MinTokens: 100,
+			MaxTokens: 1500,
+		},
+	}
+
+	got := buildCompileConfig("/projects/test", "/projects/test/docs", cfg, aiCfg, prefsCfg)
+
+	if got.ProjectDir != "/projects/test" {
+		t.Errorf("ProjectDir = %q, want /projects/test", got.ProjectDir)
+	}
+	if got.RootDir != "/projects/test/docs" {
+		t.Errorf("RootDir = %q, want /projects/test/docs", got.RootDir)
+	}
+	if got.Model != "claude-sonnet-4-20250514" {
+		t.Errorf("Model = %q, want claude-sonnet-4-20250514", got.Model)
+	}
+	if got.Encoding != "cl100k_base" {
+		t.Errorf("Encoding = %q, want cl100k_base", got.Encoding)
+	}
+	if got.Provider != "cli" {
+		t.Errorf("Provider = %q, want cli", got.Provider)
+	}
+	if got.Chunking.MinTokens != 100 {
+		t.Errorf("Chunking.MinTokens = %d, want 100", got.Chunking.MinTokens)
+	}
+	if got.SystemDir != "system" {
+		t.Errorf("SystemDir = %q, want system", got.SystemDir)
+	}
+}
+
+func TestBuildCompileConfig_ActiveDeps(t *testing.T) {
+	cfg := &project.Config{
+		Dependencies: map[string]*project.DependencyConfig{
+			"pkg-a": {Active: true},
+			"pkg-b": {Active: false},
+			"pkg-c": {Active: true},
+			"pkg-d": nil,
+		},
+	}
+	aiCfg := &project.AIConfig{}
+	prefsCfg := &project.PreferencesConfig{}
+
+	got := buildCompileConfig("/p", "/r", cfg, aiCfg, prefsCfg)
+
+	if len(got.ActiveDeps) != 2 {
+		t.Fatalf("expected 2 active deps, got %d", len(got.ActiveDeps))
+	}
+	if !got.ActiveDeps["pkg-a"] {
+		t.Error("expected pkg-a to be active")
+	}
+	if !got.ActiveDeps["pkg-c"] {
+		t.Error("expected pkg-c to be active")
+	}
+	if got.ActiveDeps["pkg-b"] {
+		t.Error("expected pkg-b to NOT be active")
+	}
+}
+
+func TestBuildCompileConfig_NilDependencies(t *testing.T) {
+	cfg := &project.Config{}
+	aiCfg := &project.AIConfig{}
+	prefsCfg := &project.PreferencesConfig{}
+
+	got := buildCompileConfig("/p", "/r", cfg, aiCfg, prefsCfg)
+
+	if got.ActiveDeps == nil {
+		t.Fatal("ActiveDeps should not be nil")
+	}
+	if len(got.ActiveDeps) != 0 {
+		t.Errorf("expected 0 active deps, got %d", len(got.ActiveDeps))
+	}
+}
+
+func TestBuildCompileConfig_SessionPassthrough(t *testing.T) {
+	session := &project.SessionConfig{
+		AlwaysLoaded: []string{"foundation/standards"},
+		Budget:       25000,
+	}
+	cfg := &project.Config{Session: session}
+	aiCfg := &project.AIConfig{}
+	prefsCfg := &project.PreferencesConfig{}
+
+	got := buildCompileConfig("/p", "/r", cfg, aiCfg, prefsCfg)
+
+	if got.Session == nil {
+		t.Fatal("expected Session to be passed through")
+	}
+	if got.Session.Budget != 25000 {
+		t.Errorf("Session.Budget = %d, want 25000", got.Session.Budget)
+	}
+}
+
+func TestBuildCompileConfig_CompiledDir(t *testing.T) {
+	cfg := &project.Config{}
+	aiCfg := &project.AIConfig{}
+	prefsCfg := &project.PreferencesConfig{}
+
+	got := buildCompileConfig("/p", "/p/docs", cfg, aiCfg, prefsCfg)
+
+	if !strings.HasSuffix(got.CompiledDir, ".codectx/compiled") {
+		t.Errorf("CompiledDir = %q, expected to end with .codectx/compiled", got.CompiledDir)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// renderSummary — LLM lines
+// ---------------------------------------------------------------------------
+
+func TestRenderSummary_LLMSkipped(t *testing.T) {
+	result := &corecompile.Result{
+		TotalFiles:    5,
+		TotalChunks:   10,
+		ObjectChunks:  10,
+		TotalTokens:   5000,
+		AvgTokens:     500,
+		MinTokens:     200,
+		MaxTokens:     800,
+		LLMSkipped:    true,
+		LLMSkipReason: "no provider available",
+		TotalSeconds:  0.5,
+	}
+
+	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp")
+
+	if !strings.Contains(got, "LLM") {
+		t.Error("expected LLM line in summary")
+	}
+	if !strings.Contains(got, "skipped") {
+		t.Error("expected 'skipped' in LLM line")
+	}
+	if !strings.Contains(got, "no provider available") {
+		t.Error("expected skip reason in LLM line")
+	}
+}
+
+func TestRenderSummary_LLMWithResults(t *testing.T) {
+	result := &corecompile.Result{
+		TotalFiles:     5,
+		TotalChunks:    10,
+		ObjectChunks:   10,
+		TotalTokens:    5000,
+		AvgTokens:      500,
+		MinTokens:      200,
+		MaxTokens:      800,
+		LLMAliasCount:  42,
+		LLMBridgeCount: 8,
+		LLMSeconds:     2.5,
+		TotalSeconds:   3.0,
+	}
+
+	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp")
+
+	if !strings.Contains(got, "42 aliases") {
+		t.Error("expected alias count in LLM line")
+	}
+	if !strings.Contains(got, "8 bridges") {
+		t.Error("expected bridge count in LLM line")
+	}
+}
+
+func TestRenderSummary_LLMNoResults(t *testing.T) {
+	result := &corecompile.Result{
+		TotalFiles:   5,
+		TotalChunks:  10,
+		ObjectChunks: 10,
+		TotalTokens:  5000,
+		AvgTokens:    500,
+		MinTokens:    200,
+		MaxTokens:    800,
+		TotalSeconds: 0.5,
+	}
+
+	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp")
+
+	// When LLM is neither skipped nor produced results, no LLM line.
+	if strings.Contains(got, "LLM") {
+		t.Error("should not show LLM line when no results and not skipped")
+	}
+}

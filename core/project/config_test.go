@@ -296,6 +296,44 @@ func TestLoadAIConfigForProject_MissingFile(t *testing.T) {
 	}
 }
 
+func TestLoadPreferencesConfigForProject(t *testing.T) {
+	dir := t.TempDir()
+	cfg := project.DefaultConfig("test", "docs")
+
+	// Set up the directory structure: docs/.codectx/preferences.yml.
+	rootDir := project.RootDir(dir, &cfg)
+	codectxDir := filepath.Join(rootDir, project.CodectxDir)
+	if err := os.MkdirAll(codectxDir, project.DirPerm); err != nil {
+		t.Fatal(err)
+	}
+
+	original := project.DefaultPreferencesConfig()
+	original.Chunking.TargetTokens = 777
+	prefsPath := filepath.Join(codectxDir, project.PreferencesFile)
+	if err := original.WriteToFile(prefsPath); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := project.LoadPreferencesConfigForProject(dir, &cfg)
+	if err != nil {
+		t.Fatalf("LoadPreferencesConfigForProject: %v", err)
+	}
+
+	if loaded.Chunking.TargetTokens != 777 {
+		t.Errorf("target tokens = %d, want 777", loaded.Chunking.TargetTokens)
+	}
+}
+
+func TestLoadPreferencesConfigForProject_MissingFile(t *testing.T) {
+	dir := t.TempDir()
+	cfg := project.DefaultConfig("test", "docs")
+
+	_, err := project.LoadPreferencesConfigForProject(dir, &cfg)
+	if err == nil {
+		t.Error("expected error for missing preferences config file")
+	}
+}
+
 func TestPreferencesConfig_WriteAndLoad_Roundtrip(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "preferences.yml")

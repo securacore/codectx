@@ -124,3 +124,95 @@ func TestComputeSessionTotal_EmptyAlwaysLoaded(t *testing.T) {
 		t.Errorf("expected 0 for empty always_loaded, got %d", total)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// isDuplicate
+// ---------------------------------------------------------------------------
+
+func TestIsDuplicate_Found(t *testing.T) {
+	list := []string{"foundation/coding-standards", "foundation/error-handling"}
+	if !isDuplicate(list, "foundation/coding-standards") {
+		t.Error("expected duplicate to be found")
+	}
+}
+
+func TestIsDuplicate_NotFound(t *testing.T) {
+	list := []string{"foundation/coding-standards", "foundation/error-handling"}
+	if isDuplicate(list, "foundation/architecture") {
+		t.Error("expected no duplicate")
+	}
+}
+
+func TestIsDuplicate_EmptyList(t *testing.T) {
+	if isDuplicate(nil, "anything") {
+		t.Error("expected no duplicate in nil list")
+	}
+	if isDuplicate([]string{}, "anything") {
+		t.Error("expected no duplicate in empty list")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// removeRef
+// ---------------------------------------------------------------------------
+
+func TestRemoveRef_Found(t *testing.T) {
+	list := []string{"a", "b", "c"}
+	filtered, found := removeRef(list, "b")
+	if !found {
+		t.Fatal("expected found=true")
+	}
+	if len(filtered) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(filtered))
+	}
+	if filtered[0] != "a" || filtered[1] != "c" {
+		t.Errorf("expected [a, c], got %v", filtered)
+	}
+}
+
+func TestRemoveRef_NotFound(t *testing.T) {
+	list := []string{"a", "b", "c"}
+	filtered, found := removeRef(list, "d")
+	if found {
+		t.Error("expected found=false")
+	}
+	if len(filtered) != 3 {
+		t.Errorf("expected 3 items, got %d", len(filtered))
+	}
+}
+
+func TestRemoveRef_EmptyList(t *testing.T) {
+	filtered, found := removeRef(nil, "a")
+	if found {
+		t.Error("expected found=false for nil list")
+	}
+	if len(filtered) != 0 {
+		t.Errorf("expected 0 items, got %d", len(filtered))
+	}
+}
+
+func TestRemoveRef_FirstOccurrenceOnly(t *testing.T) {
+	list := []string{"a", "b", "a", "c"}
+	filtered, found := removeRef(list, "a")
+	if !found {
+		t.Fatal("expected found=true")
+	}
+	// Should only remove the first "a".
+	if len(filtered) != 3 {
+		t.Fatalf("expected 3 items, got %d", len(filtered))
+	}
+	if filtered[0] != "b" || filtered[1] != "a" || filtered[2] != "c" {
+		t.Errorf("expected [b, a, c], got %v", filtered)
+	}
+}
+
+func TestRemoveRef_SingleItem(t *testing.T) {
+	list := []string{"only"}
+	filtered, found := removeRef(list, "only")
+	if !found {
+		t.Fatal("expected found=true")
+	}
+	if len(filtered) != 0 {
+		t.Errorf("expected 0 items, got %d", len(filtered))
+	}
+}

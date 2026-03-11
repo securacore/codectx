@@ -7,9 +7,11 @@ require github.com/urfave/cli/v3 v3.7.0
 require (
 	charm.land/huh/v2 v2.0.1
 	charm.land/lipgloss/v2 v2.0.1
+	github.com/anthropics/anthropic-sdk-go v1.26.0
 	github.com/charmbracelet/x/term v0.2.2
 	github.com/tiktoken-go/tokenizer v0.7.0
 	github.com/yuin/goldmark v1.7.16
+	github.com/zuvaai/prose/v3 v3.0.0-20230309153214-faace3a1ead3
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -34,8 +36,11 @@ require (
 	github.com/mitchellh/hashstructure/v2 v2.0.2 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
+	github.com/tidwall/gjson v1.18.0 // indirect
+	github.com/tidwall/match v1.1.1 // indirect
+	github.com/tidwall/pretty v1.2.1 // indirect
+	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
-	github.com/zuvaai/prose/v3 v3.0.0-20230309153214-faace3a1ead3 // indirect
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 	gonum.org/v1/gonum v0.7.0 // indirect

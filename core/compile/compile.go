@@ -1,6 +1,7 @@
 package compile
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"os"
@@ -11,6 +12,7 @@ import (
 	codectx "github.com/securacore/codectx/core/context"
 	"github.com/securacore/codectx/core/index"
 	"github.com/securacore/codectx/core/link"
+	"github.com/securacore/codectx/core/llm"
 	"github.com/securacore/codectx/core/manifest"
 	"github.com/securacore/codectx/core/markdown"
 	"github.com/securacore/codectx/core/project"
@@ -20,17 +22,17 @@ import (
 
 // Stage names for progress reporting.
 const (
-	StagePrepare   = "prepare"
-	StageDiscover  = "discover"
-	StageParse     = "parse"
-	StageChunk     = "chunk"
-	StageWrite     = "write"
-	StageIndex     = "index"
-	StageTaxonomy  = "taxonomy"
-	StageManifest  = "manifest"
-	StageContext   = "context"
-	StageLink      = "link"
-	StageHeuristic = "heuristics"
+	StagePrepare  = "prepare"
+	StageDiscover = "discover"
+	StageParse    = "parse"
+	StageChunk    = "chunk"
+	StageWrite    = "write"
+	StageIndex    = "index"
+	StageTaxonomy = "taxonomy"
+	StageLLM      = "llm"
+	StageManifest = "manifest"
+	StageContext  = "context"
+	StageLink     = "link"
 )
 
 // Config holds all parameters needed to run the compilation pipeline.
@@ -65,6 +67,15 @@ type Config struct {
 
 	// Taxonomy holds taxonomy extraction settings from preferences.yml.
 	Taxonomy project.TaxonomyConfig
+
+	// Model is the compilation model name from ai.yml (e.g. "claude-sonnet-4-20250514").
+	Model string
+
+	// Provider is the LLM provider from ai.yml ("cli", "api", or "" for auto-detect).
+	Provider string
+
+	// APIKey is the Anthropic API key for the API provider. Empty if using CLI.
+	APIKey string
 
 	// ActiveDeps maps package names to active status.
 	// Only packages with a true value are included in compilation.
@@ -105,6 +116,13 @@ type Result struct {
 	// Taxonomy extraction.
 	TaxonomyTerms int
 
+	// LLM augmentation.
+	LLMAliasCount  int
+	LLMBridgeCount int
+	LLMSeconds     float64
+	LLMSkipped     bool
+	LLMSkipReason  string
+
 	// Timing.
 	TotalSeconds    float64
 	ParseSeconds    float64
@@ -130,11 +148,10 @@ type ProgressFunc func(stage, detail string)
 
 // Run executes the full compilation pipeline. It discovers source files,
 // parses and strips markdown, counts tokens, chunks documents, builds the
-// BM25 search index, extracts taxonomy terms, and generates all manifest files.
+// BM25 search index, extracts taxonomy terms, runs LLM augmentation for
+// alias generation and bridge summaries, and generates all manifest files.
 //
 // The progress callback is invoked at each stage transition. It may be nil.
-//
-// Stage 6 (LLM Augmentation) from the spec is deferred to a later build step.
 func Run(cfg Config, progress ProgressFunc) (*Result, error) {
 	if progress == nil {
 		progress = func(string, string) {}
@@ -170,7 +187,7 @@ func Run(cfg Config, progress ProgressFunc) (*Result, error) {
 	if result.TotalFiles == 0 {
 		// No files to compile. Write empty manifests and return.
 		progress(StageManifest, "No files to compile")
-		if err := writeEmptyManifests(cfg, result); err != nil {
+		if err := writeEmptyManifests(cfg); err != nil {
 			return nil, err
 		}
 		result.TotalSeconds = time.Since(totalStart).Seconds()
@@ -329,6 +346,42 @@ func Run(cfg Config, progress ProgressFunc) (*Result, error) {
 		return nil, fmt.Errorf("writing taxonomy: %w", err)
 	}
 
+	// --- Stage: LLM Augmentation ---
+	progress(StageLLM, "Augmenting with LLM")
+
+	llmStart := time.Now()
+	instructionsDir := filepath.Join(cfg.RootDir, cfg.SystemDir, "topics")
+
+	augResult := llm.Augment(context.Background(), llm.AugmentConfig{
+		Provider:        cfg.Provider,
+		APIKey:          cfg.APIKey,
+		Model:           cfg.Model,
+		ClaudeBinary:    "claude",
+		Taxonomy:        taxResult.Taxonomy,
+		Chunks:          allChunks,
+		TaxonomyConfig:  cfg.Taxonomy,
+		InstructionsDir: instructionsDir,
+	})
+
+	// Apply aliases to taxonomy and rewrite.
+	if !augResult.Skipped && len(augResult.Aliases) > 0 {
+		for key, aliases := range augResult.Aliases {
+			if term, ok := taxResult.Taxonomy.Terms[key]; ok {
+				term.Aliases = aliases
+			}
+		}
+		taxResult.Taxonomy.CompiledWith = cfg.Model
+		if err := taxResult.Taxonomy.WriteTo(taxPath); err != nil {
+			return nil, fmt.Errorf("rewriting taxonomy with aliases: %w", err)
+		}
+	}
+
+	result.LLMAliasCount = augResult.AliasCount
+	result.LLMBridgeCount = augResult.BridgeCount
+	result.LLMSeconds = time.Since(llmStart).Seconds()
+	result.LLMSkipped = augResult.Skipped
+	result.LLMSkipReason = augResult.SkipReason
+
 	// --- Stage: Generate manifests ---
 	progress(StageManifest, "Generating manifest files")
 
@@ -355,8 +408,29 @@ func Run(cfg Config, progress ProgressFunc) (*Result, error) {
 		systemHashes[cfg.SystemDir] = h
 	}
 
-	// Build manifest artifacts with taxonomy terms.
-	mfst := manifest.BuildManifest(allChunks, cfg.Encoding, nil, taxResult.ChunkTerms)
+	// Hash bridge-summaries directory for manifest cache invalidation.
+	var bridgeHash *string
+	bridgeDir := filepath.Join(cfg.RootDir, cfg.SystemDir, "topics", "bridge-summaries")
+	if info, err := os.Stat(bridgeDir); err == nil && info.IsDir() {
+		h, hashErr := manifest.HashDir(bridgeDir)
+		if hashErr != nil {
+			return nil, fmt.Errorf("hashing bridge instructions: %w", hashErr)
+		}
+		bridgeHash = &h
+	}
+
+	// Build manifest artifacts with taxonomy terms and bridge hash.
+	mfst := manifest.BuildManifest(allChunks, cfg.Encoding, bridgeHash, taxResult.ChunkTerms)
+
+	// Apply bridge summaries to manifest entries.
+	if !augResult.Skipped && len(augResult.Bridges) > 0 {
+		for id, bridge := range augResult.Bridges {
+			if entry := mfst.LookupEntry(id); entry != nil {
+				b := bridge
+				entry.BridgeToNext = &b
+			}
+		}
+	}
 	meta := manifest.BuildMetadata(allChunks, blocksBySource)
 	hashes := manifest.BuildHashes(fileHashes, systemHashes)
 
@@ -455,13 +529,20 @@ func Run(cfg Config, progress ProgressFunc) (*Result, error) {
 	}
 
 	// Populate taxonomy heuristics.
+	var avgAliases float64
+	if taxResult.Stats.CanonicalTerms > 0 {
+		avgAliases = float64(result.LLMAliasCount) / float64(taxResult.Stats.CanonicalTerms)
+	}
 	heur.SetTaxonomyStats(&manifest.TaxonomySection{
 		CanonicalTerms:               taxResult.Stats.CanonicalTerms,
+		TotalAliases:                 result.LLMAliasCount,
+		AverageAliasesPerTerm:        avgAliases,
 		TermsFromHeadings:            taxResult.Stats.TermsFromHeadings,
 		TermsFromCodeIdents:          taxResult.Stats.TermsFromCodeIdents,
 		TermsFromBoldTerms:           taxResult.Stats.TermsFromBoldTerms,
 		TermsFromStructuredPositions: taxResult.Stats.TermsFromStructured,
 		TermsFromPOSExtraction:       taxResult.Stats.TermsFromPOS,
+		AliasesFromLLM:               result.LLMAliasCount,
 	})
 
 	timing := &manifest.TimingSection{
@@ -471,6 +552,7 @@ func Run(cfg Config, progress ProgressFunc) (*Result, error) {
 		Chunking:           result.ChunkSeconds,
 		BM25Indexing:       result.IndexSeconds,
 		TaxonomyExtraction: result.TaxonomySeconds,
+		LLMAugmentation:    result.LLMSeconds,
 		ManifestGeneration: result.ManifestSeconds,
 		ContextAssembly:    result.ContextSeconds,
 		SyncEntryPoints:    result.LinkSeconds,
@@ -500,7 +582,7 @@ func contextRelativePath(cfg Config) string {
 }
 
 // writeEmptyManifests writes empty manifest files for projects with no source files.
-func writeEmptyManifests(cfg Config, _ *Result) error {
+func writeEmptyManifests(cfg Config) error {
 	mfst := manifest.BuildManifest(nil, cfg.Encoding, nil, nil)
 	meta := manifest.BuildMetadata(nil, nil)
 	hashes := manifest.BuildHashes(nil, nil)
