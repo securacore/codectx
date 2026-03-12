@@ -68,7 +68,7 @@ share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
+/MANIFEST
 pip-log.txt
 pip-delete-this-directory.txt
 htmlcov/
@@ -492,3 +492,4 @@ rebar.lock
 /lua
 /lua_modules
 /.luarocks
+!core/manifest/
