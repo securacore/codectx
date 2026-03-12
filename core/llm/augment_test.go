@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/securacore/codectx/core/chunk"
@@ -171,9 +172,9 @@ func TestAugment_FullPath_WithMockSender(t *testing.T) {
 
 	// Override ExecCommandFunc so the CLI sender returns mock data.
 	origExec := ExecCommandFunc
-	callCount := 0
+	var callCount atomic.Int32
 	ExecCommandFunc = func(ctx context.Context, _ string, args ...string) *exec.Cmd {
-		callCount++
+		callCount.Add(1)
 		// Check if this is an alias or bridge request by looking at prompt content.
 		prompt := args[len(args)-1]
 		if strings.Contains(prompt, "Canonical:") {
@@ -235,8 +236,8 @@ func TestAugment_FullPath_WithMockSender(t *testing.T) {
 		t.Error("expected bridge for 'obj:a.01'")
 	}
 
-	if callCount < 2 {
-		t.Errorf("expected at least 2 CLI calls (alias + bridge), got %d", callCount)
+	if callCount.Load() < 2 {
+		t.Errorf("expected at least 2 CLI calls (alias + bridge), got %d", callCount.Load())
 	}
 }
 
