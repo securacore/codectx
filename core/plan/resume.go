@@ -101,7 +101,7 @@ func replayChunks(step *Step, compiledDir, encoding string) ([]string, []*query.
 		}
 
 		results = append(results, genResult)
-		outputs = append(outputs, query.FormatGenerateSummary(genResult))
+		outputs = append(outputs, query.FormatGenerateSummary(genResult, "", ""))
 	}
 
 	return outputs, results, nil

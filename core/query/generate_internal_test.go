@@ -1,96 +1,11 @@
 package query
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/securacore/codectx/core/manifest"
 )
-
-// ---------------------------------------------------------------------------
-// topicSlug
-// ---------------------------------------------------------------------------
-
-func TestTopicSlug_BasicHeading(t *testing.T) {
-	resolved := []resolvedChunk{
-		{entry: &manifest.ManifestEntry{Heading: "Auth > JWT Tokens"}},
-	}
-	got := topicSlug(resolved)
-	if got != "auth-jwt-tokens" {
-		t.Errorf("got %q, want %q", got, "auth-jwt-tokens")
-	}
-}
-
-func TestTopicSlug_EmptyResolved(t *testing.T) {
-	got := topicSlug(nil)
-	if got != "generated" {
-		t.Errorf("got %q, want %q", got, "generated")
-	}
-}
-
-func TestTopicSlug_SpecialCharacters(t *testing.T) {
-	resolved := []resolvedChunk{
-		{entry: &manifest.ManifestEntry{Heading: "Auth (v2) & Sessions!"}},
-	}
-	got := topicSlug(resolved)
-	if got != "auth-v2-sessions" {
-		t.Errorf("got %q, want %q", got, "auth-v2-sessions")
-	}
-}
-
-func TestTopicSlug_LeadingHyphens(t *testing.T) {
-	resolved := []resolvedChunk{
-		{entry: &manifest.ManifestEntry{Heading: "> Leading Arrow"}},
-	}
-	got := topicSlug(resolved)
-	if got != "leading-arrow" {
-		t.Errorf("got %q, want %q", got, "leading-arrow")
-	}
-}
-
-func TestTopicSlug_ConsecutiveHyphens(t *testing.T) {
-	resolved := []resolvedChunk{
-		{entry: &manifest.ManifestEntry{Heading: "Auth  >  JWT"}},
-	}
-	got := topicSlug(resolved)
-	if got != "auth-jwt" {
-		t.Errorf("got %q, want %q", got, "auth-jwt")
-	}
-}
-
-func TestTopicSlug_OnlySpecialChars(t *testing.T) {
-	resolved := []resolvedChunk{
-		{entry: &manifest.ManifestEntry{Heading: "@#$%^&*()"}},
-	}
-	got := topicSlug(resolved)
-	if got != "generated" {
-		t.Errorf("got %q, want %q", got, "generated")
-	}
-}
-
-func TestTopicSlug_Truncation(t *testing.T) {
-	// Create a heading that produces a slug > 60 chars.
-	resolved := []resolvedChunk{
-		{entry: &manifest.ManifestEntry{Heading: "Authentication > JWT Tokens > Refresh Flow > Token Rotation > Expiry Strategy > Fallback"}},
-	}
-	got := topicSlug(resolved)
-	if len(got) > 60 {
-		t.Errorf("slug length %d exceeds 60: %q", len(got), got)
-	}
-	// Should not end with a hyphen after truncation.
-	if got[len(got)-1] == '-' {
-		t.Errorf("slug ends with hyphen: %q", got)
-	}
-}
-
-func TestTopicSlug_Numbers(t *testing.T) {
-	resolved := []resolvedChunk{
-		{entry: &manifest.ManifestEntry{Heading: "API v2 > Endpoint 42"}},
-	}
-	got := topicSlug(resolved)
-	if got != "api-v2-endpoint-42" {
-		t.Errorf("got %q, want %q", got, "api-v2-endpoint-42")
-	}
-}
 
 // ---------------------------------------------------------------------------
 // typeRankFor
@@ -216,5 +131,137 @@ func TestParseChunkIDs_OnlyWhitespace(t *testing.T) {
 	got := ParseChunkIDs("  ,  ,  ")
 	if len(got) != 0 {
 		t.Errorf("expected empty result for whitespace-only input, got %v", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// assembleDocument — bridge insertion
+// ---------------------------------------------------------------------------
+
+func TestAssembleDocument_AdjacentChunks_NoBridge(t *testing.T) {
+	bridgeText := "Some bridge text"
+	resolved := []resolvedChunk{
+		{
+			id: "obj:abc123.01",
+			entry: &manifest.ManifestEntry{
+				Type: "object", Source: "auth.md", Heading: "Auth",
+				Sequence: 1, BridgeToNext: &bridgeText,
+			},
+			content:  "# Auth\n\nFirst chunk content.",
+			typeRank: 0,
+		},
+		{
+			id: "obj:abc123.02",
+			entry: &manifest.ManifestEntry{
+				Type: "object", Source: "auth.md", Heading: "Auth",
+				Sequence: 2,
+			},
+			content:  "Second chunk content.",
+			typeRank: 0,
+		},
+	}
+
+	got := assembleDocument(resolved, []string{"obj:abc123.01", "obj:abc123.02"})
+
+	// Adjacent chunks (seq 1 -> 2) should NOT have a bridge inserted.
+	if strings.Contains(got, "Context bridge") {
+		t.Error("should not insert bridge between adjacent chunks")
+	}
+}
+
+func TestAssembleDocument_NonAdjacentChunks_InsertsBridge(t *testing.T) {
+	bridgeText := "Established JWT token structure and signing requirements"
+	resolved := []resolvedChunk{
+		{
+			id: "obj:abc123.01",
+			entry: &manifest.ManifestEntry{
+				Type: "object", Source: "auth.md", Heading: "Auth > JWT",
+				Sequence: 1, BridgeToNext: &bridgeText,
+			},
+			content:  "# JWT Tokens\n\nFirst chunk.",
+			typeRank: 0,
+		},
+		{
+			id: "obj:abc123.03",
+			entry: &manifest.ManifestEntry{
+				Type: "object", Source: "auth.md", Heading: "Auth > Validation",
+				Sequence: 3,
+			},
+			content:  "# Validation\n\nThird chunk.",
+			typeRank: 0,
+		},
+	}
+
+	got := assembleDocument(resolved, []string{"obj:abc123.01", "obj:abc123.03"})
+
+	if !strings.Contains(got, "Context bridge") {
+		t.Error("expected bridge between non-adjacent chunks")
+	}
+	if !strings.Contains(got, "Established JWT token structure") {
+		t.Error("expected bridge text content")
+	}
+}
+
+func TestAssembleDocument_NonAdjacentChunks_NilBridge(t *testing.T) {
+	resolved := []resolvedChunk{
+		{
+			id: "obj:abc123.01",
+			entry: &manifest.ManifestEntry{
+				Type: "object", Source: "auth.md", Heading: "Auth",
+				Sequence: 1, BridgeToNext: nil,
+			},
+			content:  "First chunk.",
+			typeRank: 0,
+		},
+		{
+			id: "obj:abc123.03",
+			entry: &manifest.ManifestEntry{
+				Type: "object", Source: "auth.md", Heading: "Auth",
+				Sequence: 3,
+			},
+			content:  "Third chunk.",
+			typeRank: 0,
+		},
+	}
+
+	got := assembleDocument(resolved, []string{"obj:abc123.01", "obj:abc123.03"})
+
+	// No bridge text available — should not insert bridge marker.
+	if strings.Contains(got, "Context bridge") {
+		t.Error("should not insert bridge when BridgeToNext is nil")
+	}
+}
+
+func TestAssembleDocument_DifferentSources_NoBridge(t *testing.T) {
+	bridgeText := "Some bridge text"
+	resolved := []resolvedChunk{
+		{
+			id: "obj:abc123.01",
+			entry: &manifest.ManifestEntry{
+				Type: "object", Source: "auth.md", Heading: "Auth",
+				Sequence: 1, BridgeToNext: &bridgeText,
+			},
+			content:  "Auth chunk.",
+			typeRank: 0,
+		},
+		{
+			id: "obj:def456.01",
+			entry: &manifest.ManifestEntry{
+				Type: "object", Source: "db.md", Heading: "Database",
+				Sequence: 1,
+			},
+			content:  "Database chunk.",
+			typeRank: 0,
+		},
+	}
+
+	got := assembleDocument(resolved, []string{"obj:abc123.01", "obj:def456.01"})
+
+	// Different source files — should use separator, not bridge.
+	if strings.Contains(got, "Context bridge") {
+		t.Error("should not insert bridge between chunks from different sources")
+	}
+	if !strings.Contains(got, "---") {
+		t.Error("expected separator between different source files")
 	}
 }

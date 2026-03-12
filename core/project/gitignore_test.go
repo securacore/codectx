@@ -26,6 +26,7 @@ func TestEnsureGitignore_CreatesNewFile(t *testing.T) {
 	expected := []string{
 		"docs/.codectx/compiled/",
 		"docs/.codectx/packages/",
+		"docs/.codectx/history/",
 		"docs/.codectx/ai.local.yml",
 		"!docs/.codectx/ai.yml",
 		"!docs/.codectx/preferences.yml",
@@ -101,6 +102,7 @@ func TestEnsureGitignore_Idempotent(t *testing.T) {
 	patterns := []string{
 		"docs/.codectx/compiled/",
 		"docs/.codectx/packages/",
+		"docs/.codectx/history/",
 		"docs/.codectx/ai.local.yml",
 		"!docs/.codectx/ai.yml",
 		"!docs/.codectx/preferences.yml",

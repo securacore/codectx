@@ -178,10 +178,6 @@ steps:
 		t.Errorf("output missing current step title: %s", output)
 	}
 
-	// Clean up generated files.
-	for _, gr := range result.GenerateResults {
-		_ = os.Remove(gr.FilePath)
-	}
 }
 
 func TestResume_HashesDrifted(t *testing.T) {
@@ -273,10 +269,6 @@ steps:
 		t.Error("AllMatch should be true when no dependencies")
 	}
 
-	// Clean up generated files.
-	for _, gr := range result.GenerateResults {
-		_ = os.Remove(gr.FilePath)
-	}
 }
 
 func TestResume_StepWithNoChunks(t *testing.T) {
@@ -386,8 +378,4 @@ steps:
 		t.Errorf("GenerateResults count = %d, want 2", len(result.GenerateResults))
 	}
 
-	// Clean up generated files.
-	for _, gr := range result.GenerateResults {
-		_ = os.Remove(gr.FilePath)
-	}
 }

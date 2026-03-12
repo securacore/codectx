@@ -89,6 +89,10 @@ A **package** is a publishable subset — just curated documentation content. Pa
         compiler-philosophy/
           README.md            # General principles governing compilation behavior
           README.spec.md
+        cli-usage/
+          README.md            # How AI tools use codectx query/generate commands
+        history/
+          README.md            # How AI tools use codectx history commands
       topics/
         taxonomy-generation/
           README.md            # Instructions the AI follows during alias generation
@@ -135,6 +139,11 @@ A **package** is a publishable subset — just curated documentation content. Pa
       packages/                # Installed dependency packages (gitignored)
         react-patterns@community:2.1.0/
         tailwind-guide@designteam:latest/
+      history/                 # Query and generate audit trail (gitignored)
+        query.history          # TSV log of query invocations
+        chunks.history         # TSV log of generate invocations
+        docs/                  # Archived generated documents
+          [hash12].[nanoTs].md
       compiled/                # All compiled output (gitignored)
         context.md             # Pre-assembled always-loaded foundations
         metadata.yaml          # Document relationship graph
@@ -347,6 +356,8 @@ description: "Engineering documentation for the my-project codebase"
 # Supports local paths and package references
 session:
   always_loaded:
+    # CLI usage (included by default — teaches AI how to use codectx query/generate)
+    - system/foundation/cli-usage
     # Local foundation docs
     - foundation/coding-standards
     - foundation/architecture-principles
@@ -495,6 +506,12 @@ taxonomy:
   pos_extraction: true       # Enable POS-based term extraction
   llm_alias_generation: true # Enable LLM pass for alias generation
 
+# Scaffold maintenance
+# When true, `codectx compile` auto-repairs missing directories,
+# restores deleted system default files, and manages .gitkeep files
+# in empty content directories. `codectx repair` always runs regardless.
+scaffold_maintenance: true
+
 # Documentation linting / validation
 validation:
   require_readme: true       # Every topic directory must have README.md
@@ -509,6 +526,7 @@ validation:
 # codectx — tooling state and compiled output
 docs/.codectx/compiled/
 docs/.codectx/packages/
+docs/.codectx/history/
 docs/.codectx/ai.local.yaml
 ```
 
@@ -1142,28 +1160,14 @@ system:
 
 **CLAUDE.md** (for Claude Code):
 ```markdown
-# Project Instructions
+# codectx
 
-Read the compiled engineering context before any task:
-- Context file: docs/.codectx/compiled/context.md
-
-Follow the instructions in that document with absolute priority.
-They override any assumptions from your training data for this project.
-
-## Documentation Queries
-
-For any development task, search documentation before writing code:
-- Query: `codectx query "your search terms"`
-- Generate: `codectx generate "obj:chunk-id,obj:chunk-id,spec:chunk-id,sys:chunk-id"`
-
-Query returns ranked instruction, reasoning, and system results.
-Generate assembles selected chunks into a single readable document.
-Read the returned files for task-specific guidance.
-
-Never assume knowledge that isn't in the documentation.
+STOP. Read [context](docs/.codectx/compiled/context.md) now.
+Do not proceed with any task until you have read that document
+completely and followed every instruction it contains.
 ```
 
-**Design rationale**: CLAUDE.md is deliberately minimal. Its only job is to bootstrap the AI into the codectx system. The actual instructions live in `context.md`. This maintains single-source-of-truth — foundation doc updates only require recompilation, not manual CLAUDE.md editing.
+**Design rationale**: CLAUDE.md is deliberately minimal and imperative. Its only job is to direct the AI to read context.md before doing anything else. CLI usage instructions, project conventions, and coding standards all live in `context.md` (compiled from `session.always_loaded`). This maintains single-source-of-truth — foundation doc updates only require recompilation, not manual CLAUDE.md editing. The terse, directive tone maximizes AI compliance across tool implementations.
 
 ### Stage 10: Generate Heuristics
 
@@ -1444,7 +1448,7 @@ Related chunks (adjacent to top instruction results, not scored):
 ```
 
 **`codectx generate "<chunk-id>,<chunk-id>,<chunk-id>"`**
-Assemble specific chunks into a single coherent reading document. Accepts `obj:`, `spec:`, and `sys:` prefixed chunk IDs in a single call, assembling a unified document with clear type demarcation.
+Assemble specific chunks into a single coherent reading document. Accepts `obj:`, `spec:`, and `sys:` prefixed chunk IDs in a single call, assembling a unified document with clear type demarcation. Supports `--file <path>` flag to write to a specific file instead of stdout.
 
 Internally:
 1. Load requested chunks (from objects/, specs/, or system/ based on prefix)
@@ -1453,19 +1457,34 @@ Internally:
 4. Restore heading hierarchy for document coherence
 5. Insert bridge summaries at boundaries where chunks from the same file are non-adjacent
 6. Format according to `output_format` in `ai.yaml`
-7. Write to `/tmp/codectx/[topic-slug].[timestamp].md`
-8. Tokenize and report count
-9. Append footer listing related chunks not requested but adjacent to those that were
+7. Compute SHA-256 content hash
+8. Print document to stdout (or to `--file` path if specified)
+9. Print summary to stderr (stdout mode) or stdout (`--file` mode)
+10. Save a copy to `.codectx/history/docs/` and log to `chunks.history` (best-effort)
 
-Output (returned to the AI):
+Output modes:
+
+**Default (stdout)** — document goes to stdout, summary to stderr:
 ```
-Generated: /tmp/codectx/authentication-jwt-refresh.1741532400.md (1,772 tokens)
-Contains: obj:a1b2c3.03, obj:a1b2c3.04, obj:d4e5f6.02, spec:f7g8h9.02
+[document content on stdout]
 
-Related chunks not included:
-  obj:a1b2c3.02 — Authentication > JWT Tokens > Token Structure (488 tokens)
-  obj:a1b2c3.05 — Authentication > JWT Tokens > Error Handling (412 tokens)
-  spec:f7g8h9.01 — Authentication > JWT Tokens (380 tokens)
+# On stderr:
+→ Generated (1,772 tokens, hash: a1b2c3d4e5f6)
+  History: .codectx/history/docs/a1b2c3d4e5f6.1741532400000000000.md
+  Contains: obj:a1b2c3.03, obj:a1b2c3.04, obj:d4e5f6.02, spec:f7g8h9.02
+  Related chunks not included:
+    obj:a1b2c3.02 — Authentication > JWT Tokens > Token Structure (488 tokens)
+    obj:a1b2c3.05 — Authentication > JWT Tokens > Error Handling (412 tokens)
+```
+
+**`--file` mode** — document goes to file, summary to stdout:
+```
+→ Generated output.md (1,772 tokens, hash: a1b2c3d4e5f6)
+  History: .codectx/history/docs/a1b2c3d4e5f6.1741532400000000000.md
+  Contains: obj:a1b2c3.03, obj:a1b2c3.04, obj:d4e5f6.02, spec:f7g8h9.02
+  Related chunks not included:
+    obj:a1b2c3.02 — Authentication > JWT Tokens > Token Structure (488 tokens)
+    obj:a1b2c3.05 — Authentication > JWT Tokens > Error Handling (412 tokens)
 ```
 
 **`codectx install`**
@@ -1527,6 +1546,34 @@ Remove an entry from the always-loaded session context.
 **`codectx session list`**
 List all always-loaded session context entries with individual token counts and total against the budget.
 
+**`codectx history`**
+View recent query and generate activity. Shows the last 10 queries and last 10 generates by default.
+
+Sub-subcommands:
+
+- `codectx history queries` — show recent query log entries (raw query, expanded query, result count)
+- `codectx history chunks` — show recent generate log entries (chunk IDs, token count, content hash)
+- `codectx history show <hash>` — print a previously generated document to stdout; `<hash>` is a prefix match against the 12-character short hash shown in generate output
+- `codectx history clear` — delete all history data (requires interactive confirmation via huh prompt; refuses in non-interactive mode)
+
+History data is stored in `.codectx/history/`:
+- `query.history` — TSV log of query invocations
+- `chunks.history` — TSV log of generate invocations
+- `docs/` — archived copies of generated documents
+
+All history operations are best-effort. History errors never block query or generate commands — they warn to stderr and continue.
+
+**`codectx repair`**
+Manually run scaffold maintenance unconditionally, regardless of the `scaffold_maintenance` preference. Discovers the project, then:
+
+1. Ensures all standard directories exist (content dirs + system dirs + history dirs)
+2. Restores any missing system default files from embedded assets
+3. Adds `.gitkeep` to empty top-level content directories (foundation, topics, plans, prompts)
+4. Removes `.gitkeep` from content directories that contain files
+5. Re-merges the `.gitignore` template (adds any missing entries without duplicating)
+
+Reports a summary of all actions taken. Useful after accidental deletions, git operations that remove empty directories, or when upgrading codectx to a version with new default files.
+
 **`codectx plan status [plan-name]`**
 Report the current state of a plan without loading context. Reads `plan.yaml` and returns the current step, completion percentage, blockers, dependency hash status (changed or unchanged), and stored queries for the current step.
 
@@ -1563,8 +1610,8 @@ Status: in-progress (step 3 of 5)
 Dependencies: all unchanged ✓
 
 Replaying context for step 3...
-Generated: /tmp/codectx/auth-migration-step3.1741532400.md (1,847 tokens)
-Contains: obj:a1b2c3.04, obj:d4e5f6.02, obj:d4e5f6.03, obj:x9y8z7.01, spec:x9y8z7.01
+→ Generated (1,847 tokens, hash: e7f8a9b0c1d2)
+  Contains: obj:a1b2c3.04, obj:d4e5f6.02, obj:d4e5f6.03, obj:x9y8z7.01, spec:x9y8z7.01
 
 Current step: Implement token service refactor
 Notes: User service and payment service updated. Order service remaining.
@@ -1903,7 +1950,99 @@ No enforcement of cross-package terminology consistency is needed. Each package'
 
 ---
 
-## Phase 9: Implementation Roadmap
+## Phase 9: History System
+
+### Purpose
+
+The history system provides an audit trail of all query and generate invocations within a project. It serves three roles:
+
+1. **Recall**: When a user or AI needs to revisit a previously generated document — perhaps to re-examine context from an earlier task or compare with updated documentation — the archived document is available without re-running the generate pipeline.
+
+2. **Audit**: The TSV logs record what was searched for, what was expanded to, how many results came back, which chunks were assembled, and what content hash was produced. This creates a traceable record of AI-documentation interactions.
+
+3. **Continuity**: If a session ends and the user returns later asking "what did I look at before?", the history provides the answer without relying on the AI's memory or the user's recollection.
+
+### Storage Layout
+
+All history data lives in `.codectx/history/` (gitignored):
+
+```
+.codectx/history/
+  query.history          # TSV log of query invocations
+  chunks.history         # TSV log of generate invocations
+  docs/                  # Archived copies of generated documents
+    [hash12].[nanoTs].md # e.g., a1b2c3d4e5f6.1741532400000000000.md
+```
+
+### TSV Format
+
+**query.history** — one line per `codectx query` invocation:
+```
+<nanosecondTimestamp>\t<rawQuery>\t<expandedQuery>\t<resultCount>
+```
+
+**chunks.history** — one line per `codectx generate` invocation:
+```
+<nanosecondTimestamp>\t<chunkID1,chunkID2,...>\t<tokenCount>\t<contentHash>
+```
+
+Tabs and newlines in field values are escaped to spaces. Nanosecond timestamps provide unique ordering even for rapid successive invocations.
+
+### Document Archival
+
+Every `codectx generate` invocation saves a copy of the assembled document to `history/docs/`. The filename is `<shortHash12>.<nanoTs>.md` where `shortHash12` is the first 12 characters of the SHA-256 content hash and `nanoTs` is the nanosecond timestamp.
+
+The `codectx history show <hash>` command accepts a prefix match against the short hash, so `codectx history show a1b2` matches `a1b2c3d4e5f6.1741532400000000000.md`.
+
+### Error Handling
+
+History operations are best-effort. If writing to a `.history` file fails or saving a document fails, the command warns to stderr and continues normally. If a document was saved successfully but the chunks.history write fails, the saved document is annotated with an HTML comment recording the error:
+
+```markdown
+<!-- codectx:warning chunks.history write failed: <error details> -->
+```
+
+This ensures the document remains useful even if its index entry is missing.
+
+### Pruning
+
+The history directory is capped at 100MB. When the limit is exceeded, pruning retains the last 5 entries in each `.history` file and the 5 most recent documents (by timestamp extracted from filename). Pruning runs automatically after each generate invocation via `CheckAndPrune`.
+
+### Directory Creation
+
+The history directory is created lazily via `EnsureDir` on the first query or generate invocation. It is also created during `codectx init` (as part of the scaffold) and repaired by `codectx repair`. `EnsureDir` also calls `EnsureGitignore` to ensure the history directory is gitignored in existing projects that may have been initialized before the history feature existed.
+
+---
+
+## Phase 10: Scaffold Maintenance
+
+### Purpose
+
+Over time, directories and files can be accidentally deleted — git operations may remove empty directories, users may clean up and inadvertently delete system defaults, or upgrades may introduce new default files. The scaffold maintenance system automatically detects and repairs these issues.
+
+### What Gets Maintained
+
+**Directories**: All standard directories in the project layout — content directories (foundation, topics, plans, prompts), system directories (system/foundation, system/topics, etc.), and tooling directories (history, history/docs). Missing directories are recreated.
+
+**System default files**: Files that ship as embedded assets and are restored by `codectx init` — compiler philosophy, cli-usage, taxonomy-generation instructions, bridge-summaries instructions, context-assembly instructions, history documentation, and system prompts. If any of these files are deleted, scaffold maintenance restores them from the embedded defaults. Files that exist (even if modified) are never overwritten.
+
+**`.gitkeep` files**: The four top-level content directories (foundation, topics, plans, prompts) receive a `.gitkeep` file when they are empty, ensuring git tracks the directory structure. When a content directory gains actual files, the `.gitkeep` is removed automatically.
+
+### Triggers
+
+**Automatic** (`codectx compile`): When `scaffold_maintenance` preference is true (the default), scaffold maintenance runs at the start of every compilation, after config loading but before the pipeline executes. A brief summary line is printed if any actions were taken.
+
+**Manual** (`codectx repair`): Runs unconditionally regardless of the preference setting. Reports a detailed summary of all actions taken. Useful for one-off repairs or when the preference is disabled.
+
+### The `scaffold_maintenance` Preference
+
+Declared in `preferences.yaml` as a boolean. Default: `true`. When `false`, the automatic trigger during `codectx compile` is skipped. The `codectx repair` command always runs regardless.
+
+Implementation uses a `*bool` pointer to distinguish between "not set" (nil, defaults to true) and "explicitly set to false". This follows the same pattern as the `auto_compile` preference.
+
+---
+
+## Phase 11: Implementation Roadmap
 
 ### Recommended Build Order
 
@@ -1974,6 +2113,11 @@ No enforcement of cross-package terminology consistency is needed. Each package'
 | Published vs project codectx.yaml | Two schemas sharing common identity fields, project adds session/active/registry | Single schema for both | Published packages shouldn't dictate consumer's session context or active/inactive state. Separation keeps package authoring simple and consumer configuration flexible. |
 | Plan context tracking | Per-step queries and chunk IDs with dependency hash drift detection | Directory-path-only references or global chunk lists | Per-step keeps context scoped — resuming step 3 doesn't load step 1's chunks. Stored queries enable re-search when docs drift. Stored chunks enable instant replay when docs haven't changed. Hash comparison bridges the two modes automatically. |
 | Compilation report | heuristics.yaml in compiled/ — regenerated every compile | No report, or stdout-only logging | Machine-parseable diagnostics let the AI orient itself on the documentation landscape. Humans get timing, budget utilization, and quality signals. Snapshot, not cumulative — always reflects current state. |
+| Generate output destination | stdout (default) with `--file` flag | Write to /tmp/codectx/ | stdout is pipeable, composable, and doesn't leave temp files. AI tools read stdout directly. `--file` flag covers cases where a persistent file is needed. Summary goes to stderr (stdout mode) or stdout (`--file` mode) so it never mixes with document content. |
+| History storage format | TSV flat files + archived markdown documents | SQLite database or structured JSON | TSV is append-only, trivially parseable, grep-friendly, and has no library dependencies. Documents are saved as-is for instant retrieval. No query language needed — history is a simple chronological log, not a relational dataset. |
+| History error policy | Best-effort with stderr warnings | Fail-fast or silent | History must never block the primary command. Warnings let users know something went wrong without interrupting their workflow. Document annotation preserves context when index writes fail. |
+| Scaffold maintenance trigger | Automatic on compile (when enabled) + manual via `codectx repair` | Only manual, or only automatic | Automatic catches drift early without user intervention. Manual provides an escape hatch when automatic is disabled or for one-off repairs. Two triggers, same underlying function. |
+| `.gitkeep` scope | Top-level content dirs only (foundation, topics, plans, prompts) | All empty dirs, or no `.gitkeep` management | Only content dirs need git tracking when empty (they define the project structure). System dirs and tooling dirs are recreated by scaffold maintenance and don't need git tracking. |
 
 ---
 

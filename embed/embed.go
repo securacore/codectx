@@ -52,6 +52,14 @@ func SystemFiles() []DefaultFile {
 			DestPath:  "system/topics/context-assembly/README.md",
 			EmbedPath: "defaults/context-assembly.md",
 		},
+		{
+			DestPath:  "system/foundation/cli-usage/README.md",
+			EmbedPath: "defaults/cli-usage.md",
+		},
+		{
+			DestPath:  "system/foundation/history/README.md",
+			EmbedPath: "defaults/history.md",
+		},
 	}
 }
 

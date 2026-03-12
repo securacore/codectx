@@ -399,6 +399,29 @@ func TestRenderSummary_LLMWithResults(t *testing.T) {
 	}
 }
 
+func TestRenderSummary_DetBridges(t *testing.T) {
+	result := &corecompile.Result{
+		TotalFiles:     5,
+		TotalChunks:    10,
+		ObjectChunks:   10,
+		TotalTokens:    5000,
+		AvgTokens:      500,
+		MinTokens:      200,
+		MaxTokens:      800,
+		DetBridgeCount: 7,
+		TotalSeconds:   0.5,
+	}
+
+	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp")
+
+	if !strings.Contains(got, "Bridges") {
+		t.Error("expected Bridges line in summary")
+	}
+	if !strings.Contains(got, "deterministic") {
+		t.Error("expected 'deterministic' in bridges line")
+	}
+}
+
 func TestRenderSummary_IncrementalMode(t *testing.T) {
 	result := &corecompile.Result{
 		TotalFiles:      10,

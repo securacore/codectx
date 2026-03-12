@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/securacore/codectx/cmds/shared"
+	"github.com/securacore/codectx/core/history"
 	"github.com/securacore/codectx/core/project"
 	corequery "github.com/securacore/codectx/core/query"
 	"github.com/securacore/codectx/core/tui"
@@ -96,6 +97,13 @@ func run(_ context.Context, cmd *cli.Command) error {
 
 	// --- Step 5: Display results ---
 	fmt.Print(corequery.FormatQueryResults(result))
+
+	// --- Step 6: History logging (best-effort) ---
+	histDir := history.HistoryDir(projectDir, cfg)
+	totalResults := len(result.Instructions) + len(result.Reasoning) + len(result.System)
+	if err := history.LogQuery(histDir, projectDir, cfg.Root, queryStr, result.ExpandedQuery, totalResults); err != nil {
+		shared.WarnHistory("logging query", err)
+	}
 
 	return nil
 }

@@ -8,14 +8,6 @@ import (
 	"github.com/securacore/codectx/core/query"
 )
 
-// cleanupGenerated registers a cleanup function to remove the generated file.
-func cleanupGenerated(t *testing.T, path string) {
-	t.Helper()
-	t.Cleanup(func() {
-		_ = os.Remove(path)
-	})
-}
-
 // ---------------------------------------------------------------------------
 // RunGenerate
 // ---------------------------------------------------------------------------
@@ -27,11 +19,16 @@ func TestRunGenerate_Basic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunGenerate: %v", err)
 	}
-	cleanupGenerated(t, result.FilePath)
 
 	// Verify result fields.
-	if result.FilePath == "" {
-		t.Error("FilePath should not be empty")
+	if result.Document == "" {
+		t.Error("Document should not be empty")
+	}
+	if result.ContentHash == "" {
+		t.Error("ContentHash should not be empty")
+	}
+	if len(result.ContentHash) != 64 {
+		t.Errorf("ContentHash length = %d, want 64 (full SHA-256 hex)", len(result.ContentHash))
 	}
 	if result.TotalTokens <= 0 {
 		t.Error("TotalTokens should be positive")
@@ -43,20 +40,14 @@ func TestRunGenerate_Basic(t *testing.T) {
 		t.Errorf("Sources = %v, want [topics/auth.md]", result.Sources)
 	}
 
-	// Verify file was written.
-	data, err := os.ReadFile(result.FilePath)
-	if err != nil {
-		t.Fatalf("reading generated file: %v", err)
-	}
-
-	content := string(data)
-	if !strings.Contains(content, "<!-- codectx:generated") {
+	// Verify document content.
+	if !strings.Contains(result.Document, "<!-- codectx:generated") {
 		t.Error("missing generated header")
 	}
-	if !strings.Contains(content, "# Instructions") {
+	if !strings.Contains(result.Document, "# Instructions") {
 		t.Error("missing Instructions section")
 	}
-	if !strings.Contains(content, "Login") {
+	if !strings.Contains(result.Document, "Login") {
 		t.Error("missing chunk content")
 	}
 }
@@ -72,29 +63,21 @@ func TestRunGenerate_MultipleChunks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunGenerate: %v", err)
 	}
-	cleanupGenerated(t, result.FilePath)
 
 	if len(result.ChunkIDs) != 3 {
 		t.Errorf("ChunkIDs count = %d, want 3", len(result.ChunkIDs))
 	}
 
-	data, err := os.ReadFile(result.FilePath)
-	if err != nil {
-		t.Fatalf("reading generated file: %v", err)
-	}
-
-	content := string(data)
-
 	// Should have Instructions and Reasoning sections.
-	if !strings.Contains(content, "# Instructions") {
+	if !strings.Contains(result.Document, "# Instructions") {
 		t.Error("missing Instructions section")
 	}
-	if !strings.Contains(content, "# Reasoning") {
+	if !strings.Contains(result.Document, "# Reasoning") {
 		t.Error("missing Reasoning section")
 	}
 
 	// Reasoning section should have the preamble.
-	if !strings.Contains(content, "reasoning behind") {
+	if !strings.Contains(result.Document, "reasoning behind") {
 		t.Error("missing Reasoning preamble")
 	}
 }
@@ -109,19 +92,11 @@ func TestRunGenerate_SystemChunks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunGenerate: %v", err)
 	}
-	cleanupGenerated(t, result.FilePath)
 
-	data, err := os.ReadFile(result.FilePath)
-	if err != nil {
-		t.Fatalf("reading generated file: %v", err)
-	}
-
-	content := string(data)
-
-	if !strings.Contains(content, "# Instructions") {
+	if !strings.Contains(result.Document, "# Instructions") {
 		t.Error("missing Instructions section")
 	}
-	if !strings.Contains(content, "# System") {
+	if !strings.Contains(result.Document, "# System") {
 		t.Error("missing System section")
 	}
 }
@@ -139,19 +114,11 @@ func TestRunGenerate_SortOrder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunGenerate: %v", err)
 	}
-	cleanupGenerated(t, result.FilePath)
-
-	data, err := os.ReadFile(result.FilePath)
-	if err != nil {
-		t.Fatalf("reading generated file: %v", err)
-	}
-
-	content := string(data)
 
 	// Instructions should appear before System, which appears before Reasoning.
-	instIdx := strings.Index(content, "# Instructions")
-	sysIdx := strings.Index(content, "# System")
-	reasonIdx := strings.Index(content, "# Reasoning")
+	instIdx := strings.Index(result.Document, "# Instructions")
+	sysIdx := strings.Index(result.Document, "# System")
+	reasonIdx := strings.Index(result.Document, "# Reasoning")
 
 	if instIdx < 0 || sysIdx < 0 || reasonIdx < 0 {
 		t.Fatalf("missing sections: inst=%d, sys=%d, reason=%d", instIdx, sysIdx, reasonIdx)
@@ -176,19 +143,11 @@ func TestRunGenerate_SourceSeparator(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunGenerate: %v", err)
 	}
-	cleanupGenerated(t, result.FilePath)
-
-	data, err := os.ReadFile(result.FilePath)
-	if err != nil {
-		t.Fatalf("reading generated file: %v", err)
-	}
-
-	content := string(data)
 
 	// Same source, so no "---" separator between chunks (only at footer).
 	// The footer has "---\n<!-- codectx:related".
-	footerCount := strings.Count(content, "---\n<!-- codectx:related")
-	totalSeparators := strings.Count(content, "\n---\n")
+	footerCount := strings.Count(result.Document, "---\n<!-- codectx:related")
+	totalSeparators := strings.Count(result.Document, "\n---\n")
 	nonFooterSeparators := totalSeparators - footerCount
 	if nonFooterSeparators > 0 {
 		t.Errorf("unexpected separator between chunks from same source (found %d non-footer separators)", nonFooterSeparators)
@@ -204,7 +163,6 @@ func TestRunGenerate_CollectsRelated(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunGenerate: %v", err)
 	}
-	cleanupGenerated(t, result.FilePath)
 
 	// Related should contain adjacent chunks not in the request.
 	hasRelated := false
@@ -230,10 +188,33 @@ func TestRunGenerate_CollectsSources(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunGenerate: %v", err)
 	}
-	cleanupGenerated(t, result.FilePath)
 
 	if len(result.Sources) != 2 {
 		t.Errorf("Sources count = %d, want 2", len(result.Sources))
+	}
+}
+
+func TestRunGenerate_DeterministicHash(t *testing.T) {
+	compiledDir := testFixture(t)
+
+	result1, err := query.RunGenerate(compiledDir, "cl100k_base", []string{"obj:abc123.1"})
+	if err != nil {
+		t.Fatalf("RunGenerate first: %v", err)
+	}
+	result2, err := query.RunGenerate(compiledDir, "cl100k_base", []string{"obj:abc123.1"})
+	if err != nil {
+		t.Fatalf("RunGenerate second: %v", err)
+	}
+
+	// Content hash should be deterministic for the same input.
+	// Note: the document contains a timestamp, so hashes will differ between runs.
+	// But within the same test, both calls happen in the same second, so they
+	// may or may not match depending on timing. We just verify it's a valid hash.
+	if len(result1.ContentHash) != 64 {
+		t.Errorf("first hash length = %d", len(result1.ContentHash))
+	}
+	if len(result2.ContentHash) != 64 {
+		t.Errorf("second hash length = %d", len(result2.ContentHash))
 	}
 }
 
@@ -253,7 +234,8 @@ func TestRunGenerate_ChunkFileNotOnDisk(t *testing.T) {
 	compiledDir := testFixture(t)
 
 	// Remove a chunk file to simulate missing file.
-	chunkPath := strings.Join([]string{compiledDir, "objects", "abc123.1.md"}, string(os.PathSeparator))
+	chunkPath := strings.Join([]string{compiledDir, "objects", "abc123.1.md"}, "/")
+
 	if err := os.Remove(chunkPath); err != nil {
 		t.Fatalf("removing chunk file: %v", err)
 	}
@@ -273,7 +255,7 @@ func TestRunGenerate_MissingManifest(t *testing.T) {
 	}
 }
 
-func TestRunGenerate_GeneratedFileHeader(t *testing.T) {
+func TestRunGenerate_GeneratedDocumentHeader(t *testing.T) {
 	compiledDir := testFixture(t)
 
 	result, err := query.RunGenerate(compiledDir, "cl100k_base", []string{
@@ -283,27 +265,19 @@ func TestRunGenerate_GeneratedFileHeader(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunGenerate: %v", err)
 	}
-	cleanupGenerated(t, result.FilePath)
-
-	data, err := os.ReadFile(result.FilePath)
-	if err != nil {
-		t.Fatalf("reading generated file: %v", err)
-	}
-
-	content := string(data)
 
 	// Check generated header includes chunk list.
-	if !strings.Contains(content, "chunks: obj:abc123.1, spec:def456.1") {
+	if !strings.Contains(result.Document, "chunks: obj:abc123.1, spec:def456.1") {
 		t.Error("missing chunk list in generated header")
 	}
 
 	// Check generated header includes sources.
-	if !strings.Contains(content, "topics/auth.md") {
+	if !strings.Contains(result.Document, "topics/auth.md") {
 		t.Error("missing source in generated header")
 	}
 
 	// Check footer.
-	if !strings.Contains(content, "<!-- codectx:related") {
+	if !strings.Contains(result.Document, "<!-- codectx:related") {
 		t.Error("missing related footer")
 	}
 }

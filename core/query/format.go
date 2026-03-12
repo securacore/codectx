@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/securacore/codectx/core/history"
 	"github.com/securacore/codectx/core/tui"
 )
 
@@ -95,26 +96,46 @@ func formatEntries(b *strings.Builder, entries []ResultEntry) {
 	}
 }
 
-// FormatGenerateSummary renders the stdout summary for a generate operation
-// with full TUI styling.
+// FormatGenerateSummary renders the summary for a generate operation with
+// full TUI styling. historyPath is the path to the saved history document
+// (always shown). filePath is the --file output path (empty when stdout mode).
 //
 // Output format:
 //
-//	✓ Generated: /tmp/codectx/auth-jwt.1741532400.md (1,772 tokens)
+//	✓ Generated (1,772 tokens, hash: a1b2c3d4e5f6)
+//	  History: docs/.codectx/history/docs/a1b2c3d4e5f6.1741532400.md
+//	  Written to: /path/to/output.md   (only when --file is used)
 //	  Contains: obj:a1b2c3.03, obj:a1b2c3.04, spec:f7g8h9.02
 //
 //	  Related chunks not included:
 //	    obj:a1b2c3.02 — Authentication > JWT Tokens > Token Structure (488 tokens)
-func FormatGenerateSummary(r *GenerateResult) string {
+func FormatGenerateSummary(r *GenerateResult, historyPath, filePath string) string {
 	var b strings.Builder
+
+	// Build the header: tokens + short hash.
+	shortHash := history.ShortHash(r.ContentHash)
 
 	fmt.Fprintf(&b, "\n%s %s\n",
 		tui.Success(),
-		tui.KeyValue("Generated", fmt.Sprintf("%s (%s tokens)",
-			tui.StylePath.Render(r.FilePath),
+		tui.StyleBold.Render(fmt.Sprintf("Generated (%s tokens, hash: %s)",
 			tui.FormatNumber(r.TotalTokens),
+			shortHash,
 		)),
 	)
+
+	if filePath != "" {
+		fmt.Fprintf(&b, "%s%s\n",
+			tui.Indent(1),
+			tui.KeyValue("Written to", tui.StylePath.Render(filePath)),
+		)
+	}
+
+	if historyPath != "" {
+		fmt.Fprintf(&b, "%s%s\n",
+			tui.Indent(1),
+			tui.KeyValue("History", tui.StylePath.Render(historyPath)),
+		)
+	}
 
 	styledIDs := make([]string, len(r.ChunkIDs))
 	for i, id := range r.ChunkIDs {

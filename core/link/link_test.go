@@ -165,14 +165,14 @@ func TestWrite_SingleIntegration(t *testing.T) {
 	}
 
 	content := string(data)
-	if !strings.Contains(content, "Project Instructions") {
-		t.Error("expected Project Instructions heading")
+	if !strings.Contains(content, "# codectx") {
+		t.Error("expected codectx heading")
+	}
+	if !strings.Contains(content, "STOP") {
+		t.Error("expected STOP directive")
 	}
 	if !strings.Contains(content, contextPath) {
 		t.Error("expected context path in content")
-	}
-	if !strings.Contains(content, "codectx query") {
-		t.Error("expected query command reference")
 	}
 }
 
@@ -239,7 +239,7 @@ func TestWrite_BackupsExistingFile(t *testing.T) {
 	if newErr != nil {
 		t.Fatalf("reading new CLAUDE.md: %v", newErr)
 	}
-	if !strings.Contains(string(newData), "Project Instructions") {
+	if !strings.Contains(string(newData), "# codectx") {
 		t.Error("expected new content in CLAUDE.md")
 	}
 }

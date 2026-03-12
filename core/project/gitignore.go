@@ -24,6 +24,7 @@ var gitignoreTemplate = []string{
 	"# Compiled output and tooling state",
 	"{{ROOT}}/.codectx/compiled/",
 	"{{ROOT}}/.codectx/packages/",
+	"{{ROOT}}/.codectx/history/",
 	"{{ROOT}}/.codectx/ai.local.yml",
 	"",
 	"# Force-include checked-in config",

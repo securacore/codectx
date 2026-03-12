@@ -1,30 +1,24 @@
 package query
 
 import (
+	"crypto/sha256"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/securacore/codectx/core/chunk"
 	"github.com/securacore/codectx/core/manifest"
-	"github.com/securacore/codectx/core/project"
-	"github.com/securacore/codectx/core/taxonomy"
 	"github.com/securacore/codectx/core/tokens"
 )
 
-// tmpDir is the directory where generated files are written.
-var tmpDir = filepath.Join(os.TempDir(), "codectx")
-
-// maxSlugLength is the maximum character length for topic slugs.
-const maxSlugLength = 60
-
 // GenerateResult holds the result of a generate (chunk assembly) operation.
 type GenerateResult struct {
-	// FilePath is the absolute path to the generated file.
-	FilePath string
+	// Document is the full assembled markdown content.
+	Document string
+
+	// ContentHash is the full hex SHA-256 hash of the assembled document.
+	ContentHash string
 
 	// TotalTokens is the token count of the generated document.
 	TotalTokens int
@@ -51,8 +45,9 @@ type resolvedChunk struct {
 // RunGenerate assembles requested chunks into a single reading document.
 //
 // It loads chunk content from disk, groups by type (Instructions, System,
-// Reasoning), sorts within groups by source+sequence, writes the assembled
-// document to /tmp/codectx/, and returns a summary.
+// Reasoning), sorts within groups by source+sequence, and returns the
+// assembled document content with metadata. The caller is responsible for
+// writing the document to stdout, a file, or history.
 //
 // Returns an error if any chunk ID is not found in the manifest or on disk.
 func RunGenerate(compiledDir, encoding string, chunkIDs []string) (*GenerateResult, error) {
@@ -95,6 +90,10 @@ func RunGenerate(compiledDir, encoding string, chunkIDs []string) (*GenerateResu
 	// Assemble the document.
 	doc := assembleDocument(resolved, chunkIDs)
 
+	// Compute content hash.
+	hash := sha256.Sum256([]byte(doc))
+	contentHash := fmt.Sprintf("%x", hash)
+
 	// Count tokens.
 	counter, err := tokens.New(encoding)
 	if err != nil {
@@ -103,13 +102,6 @@ func RunGenerate(compiledDir, encoding string, chunkIDs []string) (*GenerateResu
 	totalTokens, err := counter.Count(doc)
 	if err != nil {
 		return nil, fmt.Errorf("counting tokens: %w", err)
-	}
-
-	// Derive topic slug and write to file.
-	slug := topicSlug(resolved)
-	filePath, err := writeGeneratedFile(slug, doc)
-	if err != nil {
-		return nil, fmt.Errorf("writing generated file: %w", err)
 	}
 
 	// Collect sources (deduplicated, ordered).
@@ -123,7 +115,8 @@ func RunGenerate(compiledDir, encoding string, chunkIDs []string) (*GenerateResu
 	related := CollectRelated(chunkIDs, mfst, seen)
 
 	return &GenerateResult{
-		FilePath:    filePath,
+		Document:    doc,
+		ContentHash: contentHash,
 		TotalTokens: totalTokens,
 		ChunkIDs:    chunkIDs,
 		Sources:     sources,
@@ -186,13 +179,15 @@ func assembleDocument(resolved []resolvedChunk, chunkIDs []string) string {
 
 	// Group by type rank and assemble sections.
 	currentRank := -1
-	lastSource := ""
+	var prev *resolvedChunk
 
-	for _, rc := range resolved {
+	for i := range resolved {
+		rc := &resolved[i]
+
 		// Section change.
 		if rc.typeRank != currentRank {
 			currentRank = rc.typeRank
-			lastSource = ""
+			prev = nil
 
 			b.WriteString("\n# ")
 			b.WriteString(sectionTitle(currentRank))
@@ -205,14 +200,22 @@ func assembleDocument(resolved []resolvedChunk, chunkIDs []string) string {
 		}
 
 		// Source file change within a section — insert separator.
-		if lastSource != "" && rc.entry.Source != lastSource {
+		if prev != nil && rc.entry.Source != prev.entry.Source {
 			b.WriteString("\n---\n")
 		}
-		lastSource = rc.entry.Source
+
+		// Non-adjacent chunks from the same file — insert bridge.
+		if prev != nil && rc.entry.Source == prev.entry.Source {
+			if prev.entry.Sequence+1 != rc.entry.Sequence && prev.entry.BridgeToNext != nil {
+				fmt.Fprintf(&b, "\n---\n> **Context bridge**: %s\n---\n", *prev.entry.BridgeToNext)
+			}
+		}
 
 		// Write heading and content.
 		b.WriteString("\n")
 		b.WriteString(rc.content)
+
+		prev = rc
 	}
 
 	// Write related chunks footer.
@@ -222,46 +225,6 @@ func assembleDocument(resolved []resolvedChunk, chunkIDs []string) string {
 	b.WriteString("-->\n")
 
 	return b.String()
-}
-
-// topicSlug derives a kebab-case topic slug from the heading of the first chunk.
-// The slug is used as the filename prefix for generated documents.
-// Delegates to taxonomy.NormalizeKey for the core slug transformation,
-// then applies truncation and a fallback for empty results.
-func topicSlug(resolved []resolvedChunk) string {
-	if len(resolved) == 0 {
-		return "generated"
-	}
-
-	heading := resolved[0].entry.Heading
-	result := taxonomy.NormalizeKey(heading)
-
-	if result == "" {
-		return "generated"
-	}
-
-	// Truncate to maxSlugLength characters.
-	if len(result) > maxSlugLength {
-		result = result[:maxSlugLength]
-	}
-	return strings.TrimRight(result, "-")
-}
-
-// writeGeneratedFile writes the assembled document to /tmp/codectx/.
-func writeGeneratedFile(slug, content string) (string, error) {
-	if err := os.MkdirAll(tmpDir, project.DirPerm); err != nil {
-		return "", fmt.Errorf("creating output directory: %w", err)
-	}
-
-	timestamp := time.Now().Unix()
-	filename := fmt.Sprintf("%s.%d.md", slug, timestamp)
-	path := filepath.Join(tmpDir, filename)
-
-	if err := os.WriteFile(path, []byte(content), project.FilePerm); err != nil {
-		return "", fmt.Errorf("writing file: %w", err)
-	}
-
-	return path, nil
 }
 
 // ParseChunkIDs splits a comma-separated string of chunk IDs, trims

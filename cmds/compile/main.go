@@ -24,6 +24,7 @@ import (
 	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/compile"
 	"github.com/securacore/codectx/core/project"
+	"github.com/securacore/codectx/core/scaffold"
 	"github.com/securacore/codectx/core/tui"
 	"github.com/urfave/cli/v3"
 )
@@ -65,6 +66,35 @@ func run(_ context.Context, cmd *cli.Command) error {
 	if err != nil {
 		fmt.Print(renderConfigError("preferences", project.PreferencesFile, err))
 		return fmt.Errorf("loading preferences: %w", err)
+	}
+
+	// --- Step 2b: Scaffold maintenance (if enabled) ---
+	if prefsCfg.EffectiveScaffoldMaintenance() {
+		mr, mrErr := scaffold.Maintain(projectDir, cfg)
+		if mrErr != nil {
+			fmt.Print(tui.WarnMsg{
+				Title:  "Scaffold maintenance failed",
+				Detail: []string{mrErr.Error()},
+				Suggestions: []tui.Suggestion{
+					{Text: "Run manual repair:", Command: "codectx repair"},
+				},
+			}.Render())
+		} else if mr.HasActions() {
+			var parts []string
+			if mr.DirsCreated > 0 {
+				parts = append(parts, fmt.Sprintf("%d dirs", mr.DirsCreated))
+			}
+			if mr.FilesRestored > 0 {
+				parts = append(parts, fmt.Sprintf("%d files", mr.FilesRestored))
+			}
+			if mr.GitkeepsAdded > 0 {
+				parts = append(parts, fmt.Sprintf("+%d .gitkeep", mr.GitkeepsAdded))
+			}
+			if mr.GitkeepsRemoved > 0 {
+				parts = append(parts, fmt.Sprintf("-%d .gitkeep", mr.GitkeepsRemoved))
+			}
+			fmt.Printf("%s Scaffold: restored %s\n", tui.Arrow(), strings.Join(parts, ", "))
+		}
 	}
 
 	compileCfg := compile.BuildConfig(projectDir, rootDir, cfg, aiCfg, prefsCfg)
@@ -191,6 +221,15 @@ func renderSummary(result *compile.Result, projectName, model, compiledDir, proj
 		)
 	}
 
+	// Deterministic bridges.
+	if result.DetBridgeCount > 0 {
+		fmt.Fprintf(&b, "%s%s\n", tui.Indent(1),
+			tui.KeyValue("Bridges", fmt.Sprintf("%s deterministic",
+				tui.FormatNumber(result.DetBridgeCount),
+			)),
+		)
+	}
+
 	// LLM augmentation.
 	if result.LLMSkipped {
 		fmt.Fprintf(&b, "%s%s\n", tui.Indent(1),
@@ -265,6 +304,7 @@ func renderWarnings(warnings []string) string {
 	}.Render()
 }
 
+// countNonZero returns how many of the given ints are greater than zero.
 // countNonZero returns how many of the given ints are greater than zero.
 func countNonZero(values ...int) int {
 	count := 0

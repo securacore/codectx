@@ -7,12 +7,14 @@ import (
 
 	compilecmd "github.com/securacore/codectx/cmds/compile"
 	generatecmd "github.com/securacore/codectx/cmds/generate"
+	historycmd "github.com/securacore/codectx/cmds/history"
 	initcmd "github.com/securacore/codectx/cmds/init"
 	installcmd "github.com/securacore/codectx/cmds/install"
 	linkcmd "github.com/securacore/codectx/cmds/link"
 	plancmd "github.com/securacore/codectx/cmds/plan"
 	publishcmd "github.com/securacore/codectx/cmds/publish"
 	querycmd "github.com/securacore/codectx/cmds/query"
+	repaircmd "github.com/securacore/codectx/cmds/repair"
 	searchcmd "github.com/securacore/codectx/cmds/search"
 	sessioncmd "github.com/securacore/codectx/cmds/session"
 	updatecmd "github.com/securacore/codectx/cmds/update"
@@ -27,12 +29,14 @@ func main() {
 		Commands: []*cli.Command{
 			compilecmd.Command,
 			generatecmd.Command,
+			historycmd.Command,
 			initcmd.Command,
 			installcmd.Command,
 			linkcmd.Command,
 			plancmd.Command,
 			publishcmd.Command,
 			querycmd.Command,
+			repaircmd.Command,
 			searchcmd.Command,
 			sessioncmd.Command,
 			updatecmd.Command,

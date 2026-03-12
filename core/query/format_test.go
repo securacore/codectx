@@ -105,6 +105,41 @@ func TestFormatQueryResults_InstructionsOnly(t *testing.T) {
 	}
 }
 
+func TestFormatQueryResults_WithExpandedQuery(t *testing.T) {
+	r := &query.QueryResult{
+		RawQuery:      "login failures",
+		ExpandedQuery: "login failures authentication error-handling",
+		Instructions: []query.ResultEntry{
+			{ChunkID: "obj:abc123.1", Score: 6.00, Heading: "Auth", Source: "topics/auth.md", Sequence: 1, TotalInFile: 1, Tokens: 400},
+		},
+	}
+
+	got := query.FormatQueryResults(r)
+
+	if !strings.Contains(got, "Expanded:") {
+		t.Error("missing Expanded label")
+	}
+	if !strings.Contains(got, "authentication error-handling") {
+		t.Errorf("missing expanded query content, got:\n%s", got)
+	}
+}
+
+func TestFormatQueryResults_NoExpandedWhenSameAsRaw(t *testing.T) {
+	r := &query.QueryResult{
+		RawQuery:      "jwt auth",
+		ExpandedQuery: "jwt auth",
+		Instructions: []query.ResultEntry{
+			{ChunkID: "obj:abc123.1", Score: 6.00, Heading: "Auth", Source: "topics/auth.md", Sequence: 1, TotalInFile: 1, Tokens: 400},
+		},
+	}
+
+	got := query.FormatQueryResults(r)
+
+	if strings.Contains(got, "Expanded:") {
+		t.Error("should not show Expanded when same as raw query")
+	}
+}
+
 func TestFormatQueryResults_MultipleEntries(t *testing.T) {
 	r := &query.QueryResult{
 		RawQuery: "auth",
@@ -131,19 +166,23 @@ func TestFormatQueryResults_MultipleEntries(t *testing.T) {
 
 func TestFormatGenerateSummary_Basic(t *testing.T) {
 	r := &query.GenerateResult{
-		FilePath:    "/tmp/codectx/auth-jwt.1700000000.md",
 		TotalTokens: 1772,
+		ContentHash: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6abcd",
 		ChunkIDs:    []string{"obj:abc123.03", "spec:def456.02"},
 		Sources:     []string{"topics/auth.md", "topics/auth.spec.md"},
 	}
 
-	got := query.FormatGenerateSummary(r)
+	histPath := "docs/.codectx/history/docs/a1b2c3d4e5f6.1700000000000000000.md"
+	got := query.FormatGenerateSummary(r, histPath, "")
 
-	if !strings.Contains(got, "/tmp/codectx/auth-jwt.1700000000.md") {
-		t.Error("missing file path")
+	if !strings.Contains(got, histPath) {
+		t.Error("missing history path")
 	}
 	if !strings.Contains(got, "1,772 tokens") {
 		t.Error("missing token count")
+	}
+	if !strings.Contains(got, "a1b2c3d4e5f6") {
+		t.Error("missing short hash in header")
 	}
 	if !strings.Contains(got, "obj:abc123.03") || !strings.Contains(got, "spec:def456.02") {
 		t.Error("missing chunk IDs")
@@ -152,8 +191,8 @@ func TestFormatGenerateSummary_Basic(t *testing.T) {
 
 func TestFormatGenerateSummary_WithRelated(t *testing.T) {
 	r := &query.GenerateResult{
-		FilePath:    "/tmp/codectx/test.123.md",
 		TotalTokens: 500,
+		ContentHash: "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
 		ChunkIDs:    []string{"obj:abc123.01"},
 		Sources:     []string{"topics/test.md"},
 		Related: []query.RelatedEntry{
@@ -161,7 +200,7 @@ func TestFormatGenerateSummary_WithRelated(t *testing.T) {
 		},
 	}
 
-	got := query.FormatGenerateSummary(r)
+	got := query.FormatGenerateSummary(r, "docs/.codectx/history/docs/test.md", "")
 
 	if !strings.Contains(got, "Related chunks not included") {
 		t.Error("missing related section")
@@ -176,15 +215,53 @@ func TestFormatGenerateSummary_WithRelated(t *testing.T) {
 
 func TestFormatGenerateSummary_NoRelated(t *testing.T) {
 	r := &query.GenerateResult{
-		FilePath:    "/tmp/codectx/test.123.md",
 		TotalTokens: 500,
+		ContentHash: "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
 		ChunkIDs:    []string{"obj:abc123.01"},
 		Sources:     []string{"topics/test.md"},
 	}
 
-	got := query.FormatGenerateSummary(r)
+	got := query.FormatGenerateSummary(r, "", "")
 
 	if strings.Contains(got, "Related") {
 		t.Error("unexpected related section when no related chunks")
+	}
+}
+
+func TestFormatGenerateSummary_WithFilePath(t *testing.T) {
+	r := &query.GenerateResult{
+		TotalTokens: 500,
+		ContentHash: "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+		ChunkIDs:    []string{"obj:abc123.01"},
+		Sources:     []string{"topics/test.md"},
+	}
+
+	got := query.FormatGenerateSummary(r, "", "/path/to/output.md")
+
+	if !strings.Contains(got, "/path/to/output.md") {
+		t.Error("missing file path in output")
+	}
+	if !strings.Contains(got, "Written to") {
+		t.Error("missing 'Written to' label")
+	}
+}
+
+func TestFormatGenerateSummary_HistoryAndFilePath(t *testing.T) {
+	r := &query.GenerateResult{
+		TotalTokens: 500,
+		ContentHash: "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+		ChunkIDs:    []string{"obj:abc123.01"},
+		Sources:     []string{"topics/test.md"},
+	}
+
+	histPath := "docs/.codectx/history/docs/a1b2c3.md"
+	filePath := "/tmp/output.md"
+	got := query.FormatGenerateSummary(r, histPath, filePath)
+
+	if !strings.Contains(got, histPath) {
+		t.Error("missing history path")
+	}
+	if !strings.Contains(got, filePath) {
+		t.Error("missing file path")
 	}
 }

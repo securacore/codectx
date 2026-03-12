@@ -226,6 +226,17 @@ func Init(opts Options) (*Result, error) {
 	}
 	result.FilesCreated += written
 
+	// Create .gitkeep in empty content directories.
+	for _, dir := range contentDirs(docsRoot) {
+		added, _, err := manageGitkeep(dir)
+		if err != nil {
+			return nil, fmt.Errorf("creating .gitkeep in %s: %w", dir, err)
+		}
+		if added {
+			result.FilesCreated++
+		}
+	}
+
 	// Ensure .gitignore at repo root contains codectx entries.
 	if err := project.EnsureGitignore(opts.ProjectDir, root); err != nil {
 		return nil, err
@@ -255,6 +266,8 @@ func directories(docsRoot, codectxDir string) []string {
 
 		// System documentation (compiler instructions).
 		filepath.Join(docsRoot, project.SystemDir, "foundation", "compiler-philosophy"),
+		filepath.Join(docsRoot, project.SystemDir, "foundation", "cli-usage"),
+		filepath.Join(docsRoot, project.SystemDir, "foundation", "history"),
 		filepath.Join(docsRoot, project.SystemDir, "topics", "taxonomy-generation"),
 		filepath.Join(docsRoot, project.SystemDir, "topics", "bridge-summaries"),
 		filepath.Join(docsRoot, project.SystemDir, "topics", "context-assembly"),
@@ -263,6 +276,9 @@ func directories(docsRoot, codectxDir string) []string {
 
 		// Tooling state directory.
 		filepath.Join(codectxDir, project.PackagesDir),
+
+		// History directory for query/generate logs and document snapshots.
+		filepath.Join(codectxDir, "history", "docs"),
 	}
 
 	// Compiled output directories (chunk + BM25 subdirs).
@@ -339,4 +355,169 @@ func writeSystemDefaults(docsRoot string) (int, error) {
 	}
 
 	return written, nil
+}
+
+// MaintainResult holds the outcome of a scaffold maintenance operation.
+type MaintainResult struct {
+	// DirsCreated is the number of directories that were recreated.
+	DirsCreated int
+
+	// FilesRestored is the number of system default files that were restored.
+	FilesRestored int
+
+	// GitkeepsAdded is the number of .gitkeep files added to empty content dirs.
+	GitkeepsAdded int
+
+	// GitkeepsRemoved is the number of .gitkeep files removed from non-empty dirs.
+	GitkeepsRemoved int
+}
+
+// HasActions reports whether any maintenance actions were taken.
+func (r *MaintainResult) HasActions() bool {
+	return r.DirsCreated > 0 || r.FilesRestored > 0 || r.GitkeepsAdded > 0 || r.GitkeepsRemoved > 0
+}
+
+// Maintain ensures the scaffold structure is intact. It recreates missing
+// directories, restores missing system default files, and manages .gitkeep
+// files in the four top-level content directories (foundation, topics, plans,
+// prompts). Returns a summary of actions taken.
+//
+// This is called by `codectx compile` (when scaffold_maintenance is enabled)
+// and by `codectx repair` (unconditionally).
+func Maintain(projectDir string, cfg *project.Config) (*MaintainResult, error) {
+	root := project.ResolveRoot(cfg.Root)
+	docsRoot := filepath.Join(projectDir, root)
+	codectxDir := filepath.Join(docsRoot, project.CodectxDir)
+	result := &MaintainResult{}
+
+	// 1. Ensure all directories exist.
+	dirs := directories(docsRoot, codectxDir)
+	for _, dir := range dirs {
+		created, err := ensureDir(dir)
+		if err != nil {
+			return result, fmt.Errorf("ensuring directory %s: %w", dir, err)
+		}
+		if created {
+			result.DirsCreated++
+		}
+	}
+
+	// 2. Restore missing system default files.
+	restored, err := restoreMissingDefaults(docsRoot)
+	if err != nil {
+		return result, err
+	}
+	result.FilesRestored = restored
+
+	// 3. Manage .gitkeep in top-level content directories.
+	for _, dir := range contentDirs(docsRoot) {
+		added, removed, err := manageGitkeep(dir)
+		if err != nil {
+			return result, fmt.Errorf("managing .gitkeep in %s: %w", dir, err)
+		}
+		if added {
+			result.GitkeepsAdded++
+		}
+		if removed {
+			result.GitkeepsRemoved++
+		}
+	}
+
+	return result, nil
+}
+
+// contentDirs returns the four top-level content directories that receive
+// .gitkeep management.
+func contentDirs(docsRoot string) []string {
+	return []string{
+		filepath.Join(docsRoot, "foundation"),
+		filepath.Join(docsRoot, "topics"),
+		filepath.Join(docsRoot, "plans"),
+		filepath.Join(docsRoot, "prompts"),
+	}
+}
+
+// ensureDir creates a directory if it doesn't exist.
+// Returns true if the directory was created.
+func ensureDir(dir string) (bool, error) {
+	if _, err := os.Stat(dir); err == nil {
+		return false, nil
+	}
+	if err := os.MkdirAll(dir, project.DirPerm); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// restoreMissingDefaults checks each embedded system default file and writes
+// it if the destination file is missing. Returns the count of restored files.
+func restoreMissingDefaults(docsRoot string) (int, error) {
+	files := embed.SystemFiles()
+	restored := 0
+
+	for _, f := range files {
+		destPath := filepath.Join(docsRoot, f.DestPath)
+
+		// Skip if file already exists.
+		if _, err := os.Stat(destPath); err == nil {
+			continue
+		}
+
+		content, err := embed.ReadFile(f.EmbedPath)
+		if err != nil {
+			return restored, fmt.Errorf("reading embedded file %s: %w", f.EmbedPath, err)
+		}
+
+		if err := os.WriteFile(destPath, content, project.FilePerm); err != nil {
+			return restored, fmt.Errorf("restoring %s: %w", f.DestPath, err)
+		}
+		restored++
+	}
+
+	return restored, nil
+}
+
+// manageGitkeep manages a .gitkeep file in a directory:
+//   - If the directory is empty (or only contains .gitkeep): ensure .gitkeep exists
+//   - If the directory has real content: remove .gitkeep if it exists
+//
+// Returns (added, removed, error).
+func manageGitkeep(dir string) (bool, bool, error) {
+	gitkeepPath := filepath.Join(dir, ".gitkeep")
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, false, nil // dir doesn't exist, handled by ensureDir
+		}
+		return false, false, err
+	}
+
+	// Count non-.gitkeep entries.
+	realContent := 0
+	for _, e := range entries {
+		if e.Name() != ".gitkeep" {
+			realContent++
+		}
+	}
+
+	if realContent == 0 {
+		// Empty directory — ensure .gitkeep exists.
+		if _, err := os.Stat(gitkeepPath); err == nil {
+			return false, false, nil // already exists
+		}
+		if err := os.WriteFile(gitkeepPath, nil, project.FilePerm); err != nil {
+			return false, false, err
+		}
+		return true, false, nil
+	}
+
+	// Directory has content — remove .gitkeep if it exists.
+	if _, err := os.Stat(gitkeepPath); err == nil {
+		if err := os.Remove(gitkeepPath); err != nil {
+			return false, false, err
+		}
+		return false, true, nil
+	}
+	return false, false, nil
 }

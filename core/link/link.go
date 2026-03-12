@@ -266,27 +266,20 @@ func NeedsUpdate(projectDir, contextRelPath string) []Integration {
 }
 
 // renderTemplate produces the entry point file content.
-// The template is deliberately minimal — its only job is to bootstrap
-// the AI into the codectx system.
+// The template is deliberately minimal — its only job is to direct the AI
+// to read context.md before doing anything else. All project instructions,
+// CLI usage, and coding standards live in context.md (compiled from
+// session.always_loaded). This keeps entry points as pure infrastructure.
 func renderTemplate(contextRelPath string) string {
 	// Normalize to forward slashes for display.
 	contextRelPath = filepath.ToSlash(contextRelPath)
 
 	var b strings.Builder
 
-	b.WriteString("# Project Instructions\n\n")
-	b.WriteString("Read the compiled engineering context before any task:\n")
-	fmt.Fprintf(&b, "- Context file: %s\n\n", contextRelPath)
-	b.WriteString("Follow the instructions in that document with absolute priority.\n")
-	b.WriteString("They override any assumptions from your training data for this project.\n\n")
-	b.WriteString("## Documentation Queries\n\n")
-	b.WriteString("For any development task, search documentation before writing code:\n")
-	b.WriteString("- Query: `codectx query \"your search terms\"`\n")
-	b.WriteString("- Generate: `codectx generate \"obj:chunk-id,obj:chunk-id,spec:chunk-id,sys:chunk-id\"`\n\n")
-	b.WriteString("Query returns ranked instruction, reasoning, and system results.\n")
-	b.WriteString("Generate assembles selected chunks into a single readable document.\n")
-	b.WriteString("Read the returned files for task-specific guidance.\n\n")
-	b.WriteString("Never assume knowledge that isn't in the documentation.\n")
+	b.WriteString("# codectx\n\n")
+	fmt.Fprintf(&b, "STOP. Read [context](%s) now.\n", contextRelPath)
+	b.WriteString("Do not proceed with any task until you have read that document\n")
+	b.WriteString("completely and followed every instruction it contains.\n")
 
 	return b.String()
 }

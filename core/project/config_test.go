@@ -820,6 +820,31 @@ func TestAutoCompile_MissingField_DefaultsTrue(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// PreferencesConfig.EffectiveScaffoldMaintenance
+// ---------------------------------------------------------------------------
+
+func TestEffectiveScaffoldMaintenance_NilDefaultsTrue(t *testing.T) {
+	cfg := &project.PreferencesConfig{ScaffoldMaintenance: nil}
+	if got := cfg.EffectiveScaffoldMaintenance(); !got {
+		t.Error("EffectiveScaffoldMaintenance() with nil should return true")
+	}
+}
+
+func TestEffectiveScaffoldMaintenance_ExplicitTrue(t *testing.T) {
+	cfg := &project.PreferencesConfig{ScaffoldMaintenance: project.BoolPtr(true)}
+	if got := cfg.EffectiveScaffoldMaintenance(); !got {
+		t.Error("EffectiveScaffoldMaintenance() with explicit true should return true")
+	}
+}
+
+func TestEffectiveScaffoldMaintenance_ExplicitFalse(t *testing.T) {
+	cfg := &project.PreferencesConfig{ScaffoldMaintenance: project.BoolPtr(false)}
+	if got := cfg.EffectiveScaffoldMaintenance(); got {
+		t.Error("EffectiveScaffoldMaintenance() with explicit false should return false")
+	}
+}
+
 func TestBoolPtr(t *testing.T) {
 	truePtr := project.BoolPtr(true)
 	if truePtr == nil || !*truePtr {

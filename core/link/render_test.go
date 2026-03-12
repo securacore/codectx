@@ -25,27 +25,27 @@ func TestRenderTemplate_ContainsCodectxMarker(t *testing.T) {
 	}
 }
 
-func TestRenderTemplate_ContainsQueryCommand(t *testing.T) {
+func TestRenderTemplate_ContainsStopDirective(t *testing.T) {
 	content := renderTemplate("path/to/context.md")
 
-	if !strings.Contains(content, "codectx query") {
-		t.Error("expected query command in rendered template")
+	if !strings.Contains(content, "STOP") {
+		t.Error("expected STOP directive in rendered template")
 	}
 }
 
-func TestRenderTemplate_ContainsGenerateCommand(t *testing.T) {
-	content := renderTemplate("path/to/context.md")
+func TestRenderTemplate_ContainsMarkdownLink(t *testing.T) {
+	content := renderTemplate("docs/.codectx/compiled/context.md")
 
-	if !strings.Contains(content, "codectx generate") {
-		t.Error("expected generate command in rendered template")
+	if !strings.Contains(content, "[context](docs/.codectx/compiled/context.md)") {
+		t.Error("expected markdown link to context.md")
 	}
 }
 
-func TestRenderTemplate_ContainsProjectInstructionsHeading(t *testing.T) {
+func TestRenderTemplate_ContainsCodectxHeading(t *testing.T) {
 	content := renderTemplate("path/to/context.md")
 
-	if !strings.Contains(content, "# Project Instructions") {
-		t.Error("expected Project Instructions heading")
+	if !strings.Contains(content, "# codectx") {
+		t.Error("expected codectx heading")
 	}
 }
 
@@ -55,5 +55,13 @@ func TestRenderTemplate_ForwardSlashPaths(t *testing.T) {
 
 	if !strings.Contains(content, "docs/.codectx/compiled/context.md") {
 		t.Error("expected forward-slash path to be preserved")
+	}
+}
+
+func TestRenderTemplate_DoNotProceed(t *testing.T) {
+	content := renderTemplate("path/to/context.md")
+
+	if !strings.Contains(content, "Do not proceed") {
+		t.Error("expected 'Do not proceed' directive in template")
 	}
 }

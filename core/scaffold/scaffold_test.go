@@ -51,6 +51,8 @@ func TestInit_CreatesFullDirectoryStructure(t *testing.T) {
 		"docs/plans",
 		"docs/prompts",
 		"docs/system/foundation/compiler-philosophy",
+		"docs/system/foundation/cli-usage",
+		"docs/system/foundation/history",
 		"docs/system/topics/taxonomy-generation",
 		"docs/system/topics/bridge-summaries",
 		"docs/system/topics/context-assembly",
@@ -63,6 +65,7 @@ func TestInit_CreatesFullDirectoryStructure(t *testing.T) {
 		"docs/.codectx/compiled/bm25/specs",
 		"docs/.codectx/compiled/bm25/system",
 		"docs/.codectx/packages",
+		"docs/.codectx/history/docs",
 	}
 
 	for _, d := range expectedDirs {
@@ -151,6 +154,8 @@ func TestInit_CreatesSystemDefaults(t *testing.T) {
 	expectedFiles := map[string]string{
 		"system/foundation/compiler-philosophy/README.md":      "Compiler Philosophy",
 		"system/foundation/compiler-philosophy/README.spec.md": "Compiler Philosophy Reasoning",
+		"system/foundation/cli-usage/README.md":                "CLI Usage",
+		"system/foundation/history/README.md":                  "History",
 		"system/topics/taxonomy-generation/README.md":          "Taxonomy Alias Generation",
 		"system/topics/taxonomy-generation/README.spec.md":     "Taxonomy Generation Reasoning",
 		"system/topics/bridge-summaries/README.md":             "Bridge Summary Generation",
@@ -197,6 +202,7 @@ func TestInit_CreatesGitignore(t *testing.T) {
 	expectedEntries := []string{
 		"docs/.codectx/compiled/",
 		"docs/.codectx/packages/",
+		"docs/.codectx/history/",
 		"docs/.codectx/ai.local.yml",
 		"!docs/.codectx/ai.yml",
 		"!docs/.codectx/preferences.yml",
@@ -770,5 +776,262 @@ func TestCheck_NestedSkippedWhenAlreadyInitialized(t *testing.T) {
 	}
 	if result.NestedProject {
 		t.Error("expected NestedProject to be false when AlreadyInitialized is true")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Init .gitkeep tests
+// ---------------------------------------------------------------------------
+
+func TestInit_CreatesGitkeepInEmptyContentDirs(t *testing.T) {
+	dir := t.TempDir()
+
+	_, err := scaffold.Init(scaffold.Options{
+		ProjectDir: dir,
+		Name:       "gitkeep-test",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	contentDirs := []string{"foundation", "topics", "plans", "prompts"}
+	for _, d := range contentDirs {
+		gitkeepPath := filepath.Join(dir, "docs", d, ".gitkeep")
+		if _, err := os.Stat(gitkeepPath); err != nil {
+			t.Errorf("expected .gitkeep in docs/%s: %v", d, err)
+		}
+	}
+}
+
+func TestInit_NoGitkeepInCodectxDir(t *testing.T) {
+	dir := t.TempDir()
+
+	_, err := scaffold.Init(scaffold.Options{
+		ProjectDir: dir,
+		Name:       "no-gitkeep-codectx",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// .codectx directories should NOT have .gitkeep.
+	codectxDirs := []string{
+		"docs/.codectx/compiled",
+		"docs/.codectx/packages",
+		"docs/.codectx/history",
+	}
+	for _, d := range codectxDirs {
+		gitkeepPath := filepath.Join(dir, d, ".gitkeep")
+		if _, err := os.Stat(gitkeepPath); err == nil {
+			t.Errorf("unexpected .gitkeep in %s", d)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Maintain tests
+// ---------------------------------------------------------------------------
+
+func TestMaintain_NoActionsOnFreshProject(t *testing.T) {
+	dir := t.TempDir()
+
+	_, err := scaffold.Init(scaffold.Options{
+		ProjectDir: dir,
+		Name:       "maintain-test",
+	})
+	if err != nil {
+		t.Fatalf("init failed: %v", err)
+	}
+
+	cfg, err := project.LoadConfig(filepath.Join(dir, project.ConfigFileName))
+	if err != nil {
+		t.Fatalf("loading config: %v", err)
+	}
+
+	result, err := scaffold.Maintain(dir, cfg)
+	if err != nil {
+		t.Fatalf("Maintain: %v", err)
+	}
+
+	// Fresh project should have no actions (everything already exists).
+	if result.HasActions() {
+		t.Errorf("expected no actions on fresh project, got: dirs=%d files=%d +gitkeep=%d -gitkeep=%d",
+			result.DirsCreated, result.FilesRestored, result.GitkeepsAdded, result.GitkeepsRemoved)
+	}
+}
+
+func TestMaintain_RestoresDeletedDirectory(t *testing.T) {
+	dir := t.TempDir()
+
+	_, err := scaffold.Init(scaffold.Options{
+		ProjectDir: dir,
+		Name:       "restore-dir-test",
+	})
+	if err != nil {
+		t.Fatalf("init failed: %v", err)
+	}
+
+	cfg, err := project.LoadConfig(filepath.Join(dir, project.ConfigFileName))
+	if err != nil {
+		t.Fatalf("loading config: %v", err)
+	}
+
+	// Delete the topics directory entirely.
+	topicsDir := filepath.Join(dir, "docs", "topics")
+	if err := os.RemoveAll(topicsDir); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := scaffold.Maintain(dir, cfg)
+	if err != nil {
+		t.Fatalf("Maintain: %v", err)
+	}
+
+	if result.DirsCreated == 0 {
+		t.Error("expected at least one directory to be recreated")
+	}
+
+	// Verify topics/ was restored with .gitkeep.
+	if _, err := os.Stat(topicsDir); err != nil {
+		t.Errorf("expected topics/ to be restored: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(topicsDir, ".gitkeep")); err != nil {
+		t.Errorf("expected .gitkeep in restored topics/: %v", err)
+	}
+}
+
+func TestMaintain_RestoresDeletedSystemFile(t *testing.T) {
+	dir := t.TempDir()
+
+	_, err := scaffold.Init(scaffold.Options{
+		ProjectDir: dir,
+		Name:       "restore-file-test",
+	})
+	if err != nil {
+		t.Fatalf("init failed: %v", err)
+	}
+
+	cfg, err := project.LoadConfig(filepath.Join(dir, project.ConfigFileName))
+	if err != nil {
+		t.Fatalf("loading config: %v", err)
+	}
+
+	// Delete a system default file.
+	sysFile := filepath.Join(dir, "docs", "system", "foundation", "cli-usage", "README.md")
+	if err := os.Remove(sysFile); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := scaffold.Maintain(dir, cfg)
+	if err != nil {
+		t.Fatalf("Maintain: %v", err)
+	}
+
+	if result.FilesRestored == 0 {
+		t.Error("expected at least one file to be restored")
+	}
+
+	// Verify file was restored.
+	data, err := os.ReadFile(sysFile)
+	if err != nil {
+		t.Fatalf("expected file to be restored: %v", err)
+	}
+	if !strings.Contains(string(data), "CLI Usage") {
+		t.Error("restored file doesn't have expected content")
+	}
+}
+
+func TestMaintain_RemovesGitkeepWhenContentAdded(t *testing.T) {
+	dir := t.TempDir()
+
+	_, err := scaffold.Init(scaffold.Options{
+		ProjectDir: dir,
+		Name:       "gitkeep-remove-test",
+	})
+	if err != nil {
+		t.Fatalf("init failed: %v", err)
+	}
+
+	cfg, err := project.LoadConfig(filepath.Join(dir, project.ConfigFileName))
+	if err != nil {
+		t.Fatalf("loading config: %v", err)
+	}
+
+	// Add content to the topics directory.
+	topicsDir := filepath.Join(dir, "docs", "topics")
+	if err := os.WriteFile(filepath.Join(topicsDir, "auth.md"), []byte("# Auth"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := scaffold.Maintain(dir, cfg)
+	if err != nil {
+		t.Fatalf("Maintain: %v", err)
+	}
+
+	if result.GitkeepsRemoved == 0 {
+		t.Error("expected .gitkeep to be removed from topics/")
+	}
+
+	// Verify .gitkeep is gone.
+	gitkeepPath := filepath.Join(topicsDir, ".gitkeep")
+	if _, err := os.Stat(gitkeepPath); err == nil {
+		t.Error(".gitkeep should be removed when directory has content")
+	}
+}
+
+func TestMaintain_AddsGitkeepWhenContentRemoved(t *testing.T) {
+	dir := t.TempDir()
+
+	_, err := scaffold.Init(scaffold.Options{
+		ProjectDir: dir,
+		Name:       "gitkeep-add-test",
+	})
+	if err != nil {
+		t.Fatalf("init failed: %v", err)
+	}
+
+	cfg, err := project.LoadConfig(filepath.Join(dir, project.ConfigFileName))
+	if err != nil {
+		t.Fatalf("loading config: %v", err)
+	}
+
+	// Add content then run maintain to remove .gitkeep.
+	topicsDir := filepath.Join(dir, "docs", "topics")
+	contentFile := filepath.Join(topicsDir, "auth.md")
+	if err := os.WriteFile(contentFile, []byte("# Auth"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, _ = scaffold.Maintain(dir, cfg)
+
+	// Now remove the content file.
+	if err := os.Remove(contentFile); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := scaffold.Maintain(dir, cfg)
+	if err != nil {
+		t.Fatalf("Maintain: %v", err)
+	}
+
+	if result.GitkeepsAdded == 0 {
+		t.Error("expected .gitkeep to be added to empty topics/")
+	}
+
+	// Verify .gitkeep is back.
+	gitkeepPath := filepath.Join(topicsDir, ".gitkeep")
+	if _, err := os.Stat(gitkeepPath); err != nil {
+		t.Errorf("expected .gitkeep to be restored: %v", err)
+	}
+}
+
+func TestMaintain_HasActionsReportsBool(t *testing.T) {
+	r := &scaffold.MaintainResult{}
+	if r.HasActions() {
+		t.Error("expected HasActions to be false for zero result")
+	}
+
+	r.DirsCreated = 1
+	if !r.HasActions() {
+		t.Error("expected HasActions to be true when dirs created")
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/securacore/codectx/core/bridge"
 	"github.com/securacore/codectx/core/chunk"
 	codectx "github.com/securacore/codectx/core/context"
 	"github.com/securacore/codectx/core/index"
@@ -120,6 +121,9 @@ type Result struct {
 
 	// Taxonomy extraction.
 	TaxonomyTerms int
+
+	// Bridge generation.
+	DetBridgeCount int // deterministic bridges (heading + RAKE + last sentence)
 
 	// LLM augmentation.
 	LLMAliasCount  int
@@ -728,12 +732,25 @@ func (ps *pipelineState) stageManifests() error {
 
 	mfst := manifest.BuildManifest(ps.allChunks, ps.cfg.Encoding, bridgeHash, ps.taxResult.ChunkTerms)
 
-	// Apply bridge summaries from LLM.
+	// Generate deterministic bridge summaries for all adjacent chunk pairs.
+	// These use heading transitions, RAKE key phrases, and last-sentence
+	// extraction — no LLM calls required.
+	detBridges := bridge.GenerateAll(ps.allChunks, mfst)
+	for id, b := range detBridges {
+		if entry := mfst.LookupEntry(id); entry != nil {
+			text := b
+			entry.BridgeToNext = &text
+		}
+	}
+	ps.result.DetBridgeCount = len(detBridges)
+
+	// Apply LLM bridge summaries (when enabled). These overwrite deterministic
+	// bridges with higher-quality LLM-generated text.
 	if !ps.augResult.Skipped && len(ps.augResult.Bridges) > 0 {
-		for id, bridge := range ps.augResult.Bridges {
+		for id, b := range ps.augResult.Bridges {
 			if entry := mfst.LookupEntry(id); entry != nil {
-				b := bridge
-				entry.BridgeToNext = &b
+				text := b
+				entry.BridgeToNext = &text
 			}
 		}
 	}

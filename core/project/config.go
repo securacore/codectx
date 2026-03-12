@@ -179,8 +179,11 @@ func DefaultConfig(name string, root string) Config {
 		Version:     "0.1.0",
 		Description: "",
 		Session: &SessionConfig{
-			AlwaysLoaded: []string{},
-			Budget:       DefaultSessionBudget,
+			AlwaysLoaded: []string{
+				"system/foundation/cli-usage",
+				"system/foundation/history",
+			},
+			Budget: DefaultSessionBudget,
 		},
 		Dependencies: map[string]*DependencyConfig{},
 		Registry:     DefaultRegistry,
@@ -295,6 +298,13 @@ type PreferencesConfig struct {
 	// Defaults to true when absent. Uses a pointer to distinguish
 	// "not set" (nil → default true) from "explicitly set to false".
 	AutoCompile *bool `yaml:"auto_compile,omitempty"`
+
+	// ScaffoldMaintenance controls whether the compile command automatically
+	// regenerates missing directories, restores system default files, and
+	// manages .gitkeep files in content directories.
+	// Defaults to true when absent. Uses a pointer to distinguish
+	// "not set" (nil → default true) from "explicitly set to false".
+	ScaffoldMaintenance *bool `yaml:"scaffold_maintenance,omitempty"`
 
 	// Chunking configures chunk compilation settings.
 	Chunking ChunkingConfig `yaml:"chunking"`
@@ -413,6 +423,16 @@ func (c *PreferencesConfig) AutoCompileIsDefault() bool {
 	return c.AutoCompile == nil
 }
 
+// EffectiveScaffoldMaintenance returns whether scaffold maintenance is enabled.
+// Returns true when ScaffoldMaintenance is nil (field absent from config file),
+// preserving backwards compatibility for existing preferences.yml files.
+func (c *PreferencesConfig) EffectiveScaffoldMaintenance() bool {
+	if c.ScaffoldMaintenance == nil {
+		return true
+	}
+	return *c.ScaffoldMaintenance
+}
+
 // BoolPtr returns a pointer to the given bool value.
 // Used when setting *bool fields like AutoCompile in config structs.
 func BoolPtr(v bool) *bool {
@@ -422,7 +442,8 @@ func BoolPtr(v bool) *bool {
 // DefaultPreferencesConfig returns a PreferencesConfig with sensible defaults.
 func DefaultPreferencesConfig() PreferencesConfig {
 	return PreferencesConfig{
-		AutoCompile: BoolPtr(true),
+		AutoCompile:         BoolPtr(true),
+		ScaffoldMaintenance: BoolPtr(true),
 		Chunking: ChunkingConfig{
 			TargetTokens:      450,
 			MinTokens:         200,
