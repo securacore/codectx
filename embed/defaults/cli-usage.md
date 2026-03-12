@@ -36,4 +36,10 @@ Restores missing directories and default system files. Run after accidental dele
 
 ## When to Search
 
-Search before writing code for any task involving project-specific patterns, conventions, or architecture. If the query returns relevant results, retrieve and read them before proceeding. If the user references earlier context, check `codectx history` first.
+Search before starting any development task. Query first to understand existing patterns, conventions, and constraints before writing or modifying code.
+
+Re-search as understanding evolves. When investigation reveals new terms, components, or patterns not covered by the initial query, run `codectx query` again with the new information. Repeat until the relevant documentation has been reviewed.
+
+Validate before finalizing. Before completing a task, query for the areas you changed to confirm your implementation aligns with documented conventions. If the documentation contradicts your approach, follow the documentation.
+
+If the user references earlier context, check `codectx history` first.
