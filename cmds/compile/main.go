@@ -93,7 +93,7 @@ func run(_ context.Context, cmd *cli.Command) error {
 			if mr.GitkeepsRemoved > 0 {
 				parts = append(parts, fmt.Sprintf("-%d .gitkeep", mr.GitkeepsRemoved))
 			}
-			fmt.Printf("%s Scaffold: restored %s\n", tui.Arrow(), strings.Join(parts, ", "))
+			fmt.Printf("%s Scaffold: %s\n", tui.Arrow(), strings.Join(parts, ", "))
 		}
 	}
 

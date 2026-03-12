@@ -132,9 +132,15 @@ func run(_ context.Context, cmd *cli.Command) error {
 	}
 
 	// Make history path relative to CWD for cleaner display.
+	// Use EvalSymlinks on CWD to handle macOS /tmp -> /private/tmp symlinks.
 	if historyPath != "" {
-		if rel, relErr := filepath.Rel(".", historyPath); relErr == nil {
-			historyPath = rel
+		if cwd, cwdErr := os.Getwd(); cwdErr == nil {
+			if realCwd, evalErr := filepath.EvalSymlinks(cwd); evalErr == nil {
+				cwd = realCwd
+			}
+			if rel, relErr := filepath.Rel(cwd, historyPath); relErr == nil {
+				historyPath = rel
+			}
 		}
 	}
 
