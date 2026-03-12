@@ -31,6 +31,14 @@ func FormatQueryResults(r *QueryResult) string {
 		tui.StyleBold.Render(fmt.Sprintf("%q", r.RawQuery)),
 	)
 
+	// Show expanded query if expansion added any tokens.
+	if r.ExpandedQuery != "" && r.ExpandedQuery != r.RawQuery {
+		fmt.Fprintf(&b, "%sExpanded: %s\n",
+			tui.Indent(1),
+			tui.StyleMuted.Render(r.ExpandedQuery),
+		)
+	}
+
 	if len(r.Instructions) > 0 {
 		fmt.Fprintf(&b, "\n%s\n", tui.StyleBold.Render("Instructions:"))
 		formatEntries(&b, r.Instructions)

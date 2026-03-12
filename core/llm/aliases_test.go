@@ -42,7 +42,7 @@ func (m *mockSender) SendBridges(_ context.Context, _, _ string) (*BridgeRespons
 }
 
 func TestBuildAliasBatchPrompt(t *testing.T) {
-	terms := []*AliasRequest{
+	terms := []*aliasRequest{
 		{
 			Key:       "authentication",
 			Canonical: "Authentication",
@@ -93,12 +93,14 @@ func TestGenerateAliases_MockSender(t *testing.T) {
 		},
 	}
 
-	terms := []*AliasRequest{
+	terms := []*aliasRequest{
 		{Key: "authentication", Canonical: "Authentication", Source: "heading"},
 		{Key: "jwt", Canonical: "JWT", Source: "code_identifier", Broader: "authentication"},
 	}
 
-	result := GenerateAliases(context.Background(), sender, terms, "instructions", 10, 50)
+	result := generateAliases(context.Background(), aliasGenConfig{
+		sender: sender, terms: terms, instructions: "instructions", maxAliases: 10, batchSize: 50,
+	})
 
 	if result.Errors != 0 {
 		t.Errorf("expected 0 errors, got %d", result.Errors)
@@ -116,7 +118,9 @@ func TestGenerateAliases_MockSender(t *testing.T) {
 
 func TestGenerateAliases_EmptyTerms(t *testing.T) {
 	sender := &mockSender{}
-	result := GenerateAliases(context.Background(), sender, nil, "instructions", 10, 50)
+	result := generateAliases(context.Background(), aliasGenConfig{
+		sender: sender, instructions: "instructions", maxAliases: 10, batchSize: 50,
+	})
 
 	if result.TotalAliases != 0 {
 		t.Errorf("expected 0 aliases, got %d", result.TotalAliases)
@@ -136,13 +140,15 @@ func TestGenerateAliases_BatchSplit(t *testing.T) {
 		},
 	}
 
-	terms := make([]*AliasRequest, 7)
+	terms := make([]*aliasRequest, 7)
 	for i := range terms {
 		key := string(rune('a' + i))
-		terms[i] = &AliasRequest{Key: key, Canonical: strings.ToUpper(key), Source: "heading"}
+		terms[i] = &aliasRequest{Key: key, Canonical: strings.ToUpper(key), Source: "heading"}
 	}
 
-	result := GenerateAliases(context.Background(), sender, terms, "instructions", 10, 3)
+	result := generateAliases(context.Background(), aliasGenConfig{
+		sender: sender, terms: terms, instructions: "instructions", maxAliases: 10, batchSize: 3,
+	})
 
 	if sender.aliasCalls != 3 {
 		t.Errorf("expected 3 batches, got %d", sender.aliasCalls)
@@ -167,13 +173,15 @@ func TestGenerateAliases_BatchError(t *testing.T) {
 		},
 	}
 
-	terms := []*AliasRequest{
+	terms := []*aliasRequest{
 		{Key: "a", Canonical: "A", Source: "heading"},
 		{Key: "b", Canonical: "B", Source: "heading"},
 		{Key: "c", Canonical: "C", Source: "heading"},
 	}
 
-	result := GenerateAliases(context.Background(), sender, terms, "instructions", 10, 1)
+	result := generateAliases(context.Background(), aliasGenConfig{
+		sender: sender, terms: terms, instructions: "instructions", maxAliases: 10, batchSize: 1,
+	})
 
 	if result.Errors != 1 {
 		t.Errorf("expected 1 error, got %d", result.Errors)
@@ -195,11 +203,13 @@ func TestGenerateAliases_UnknownKeyFiltered(t *testing.T) {
 		},
 	}
 
-	terms := []*AliasRequest{
+	terms := []*aliasRequest{
 		{Key: "auth", Canonical: "Auth", Source: "heading"},
 	}
 
-	result := GenerateAliases(context.Background(), sender, terms, "instructions", 10, 50)
+	result := generateAliases(context.Background(), aliasGenConfig{
+		sender: sender, terms: terms, instructions: "instructions", maxAliases: 10, batchSize: 50,
+	})
 
 	if _, ok := result.Aliases["unknown-key"]; ok {
 		t.Error("expected unknown key to be filtered out")
@@ -210,7 +220,7 @@ func TestGenerateAliases_UnknownKeyFiltered(t *testing.T) {
 }
 
 func TestGroupByBranch(t *testing.T) {
-	terms := []*AliasRequest{
+	terms := []*aliasRequest{
 		{Key: "jwt", Broader: "authentication"},
 		{Key: "authentication"},
 		{Key: "oauth", Broader: "authentication"},
@@ -248,11 +258,13 @@ func TestGenerateAliases_DefaultBatchAndMaxAlias(t *testing.T) {
 		},
 	}
 
-	terms := []*AliasRequest{
+	terms := []*aliasRequest{
 		{Key: "auth", Canonical: "Auth", Source: "heading"},
 	}
 
-	result := GenerateAliases(context.Background(), sender, terms, "instructions", 0, 0)
+	result := generateAliases(context.Background(), aliasGenConfig{
+		sender: sender, terms: terms, instructions: "instructions",
+	})
 
 	if result.TotalAliases != 1 {
 		t.Errorf("expected 1 alias, got %d", result.TotalAliases)

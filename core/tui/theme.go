@@ -41,51 +41,47 @@ var lightDark = lipgloss.LightDark(hasDark)
 
 // --- Color Palette ---
 // All colors adapt to light/dark terminal backgrounds.
+// Unexported: consumers use the Style* variables or rendered icon functions.
 
-// ColorSuccess is used for completed operations, checkmarks, and positive outcomes.
-var ColorSuccess = lightDark(lipgloss.Color("#16A34A"), lipgloss.Color("#4ADE80"))
-
-// ColorWarning is used for drift detection, budget alerts, and caution states.
-var ColorWarning = lightDark(lipgloss.Color("#CA8A04"), lipgloss.Color("#FACC15"))
-
-// ColorError is used for failed operations, validation errors, and critical states.
-var ColorError = lightDark(lipgloss.Color("#DC2626"), lipgloss.Color("#F87171"))
-
-// ColorMuted is used for secondary information, timestamps, and pending states.
-var ColorMuted = lightDark(lipgloss.Color("#6B7280"), lipgloss.Color("#9CA3AF"))
-
-// ColorAccent is used for highlighted terms, file paths, chunk IDs, and commands.
-var ColorAccent = lightDark(lipgloss.Color("#0891B2"), lipgloss.Color("#22D3EE"))
+var colorSuccess = lightDark(lipgloss.Color("#16A34A"), lipgloss.Color("#4ADE80"))
+var colorWarning = lightDark(lipgloss.Color("#CA8A04"), lipgloss.Color("#FACC15"))
+var colorError = lightDark(lipgloss.Color("#DC2626"), lipgloss.Color("#F87171"))
+var colorMuted = lightDark(lipgloss.Color("#6B7280"), lipgloss.Color("#9CA3AF"))
+var colorAccent = lightDark(lipgloss.Color("#0891B2"), lipgloss.Color("#22D3EE"))
 
 // --- Styles ---
 // Pre-built lipgloss styles for common output patterns.
 
 // StyleWarning renders text in the warning color (yellow).
-var StyleWarning = lipgloss.NewStyle().Foreground(ColorWarning)
+var StyleWarning = lipgloss.NewStyle().Foreground(colorWarning)
 
-// StyleError renders text in the error color (red).
-var StyleError = lipgloss.NewStyle().Foreground(ColorError)
+// styleError renders text in the error color (red). Unexported: only used
+// by renderMessage internally.
+var styleError = lipgloss.NewStyle().Foreground(colorError)
 
 // StyleMuted renders text in the muted color (gray).
-var StyleMuted = lipgloss.NewStyle().Foreground(ColorMuted)
+var StyleMuted = lipgloss.NewStyle().Foreground(colorMuted)
 
 // StyleAccent renders text in the accent color (cyan).
-var StyleAccent = lipgloss.NewStyle().Foreground(ColorAccent)
+var StyleAccent = lipgloss.NewStyle().Foreground(colorAccent)
 
 // StyleBold renders text in bold.
 var StyleBold = lipgloss.NewStyle().Bold(true)
 
-// StyleErrorIcon renders the error icon (✗) in error color, bold.
-var StyleErrorIcon = lipgloss.NewStyle().Foreground(ColorError).Bold(true)
+// styleErrorIcon renders the error icon in error color, bold. Unexported:
+// only consumed by ErrorIcon().
+var styleErrorIcon = lipgloss.NewStyle().Foreground(colorError).Bold(true)
 
-// StyleSuccessIcon renders the success icon (✓) in success color, bold.
-var StyleSuccessIcon = lipgloss.NewStyle().Foreground(ColorSuccess).Bold(true)
+// styleSuccessIcon renders the success icon in success color, bold. Unexported:
+// only consumed by Success().
+var styleSuccessIcon = lipgloss.NewStyle().Foreground(colorSuccess).Bold(true)
 
-// StyleWarningIcon renders the warning icon (⚠) in warning color, bold.
-var StyleWarningIcon = lipgloss.NewStyle().Foreground(ColorWarning).Bold(true)
+// styleWarningIcon renders the warning icon in warning color, bold. Unexported:
+// only consumed by Warning().
+var styleWarningIcon = lipgloss.NewStyle().Foreground(colorWarning).Bold(true)
 
 // StyleCommand renders inline command references — accent colored for visibility.
-var StyleCommand = lipgloss.NewStyle().Foreground(ColorAccent)
+var StyleCommand = lipgloss.NewStyle().Foreground(colorAccent)
 
 // StylePath renders file paths — accent colored for visibility.
 var StylePath = StyleAccent
@@ -94,15 +90,15 @@ var StylePath = StyleAccent
 // Pre-rendered icon strings for direct use in fmt output.
 
 // Success renders the ✓ icon in success style.
-func Success() string { return StyleSuccessIcon.Render(IconSuccess) }
+func Success() string { return styleSuccessIcon.Render(IconSuccess) }
 
 // Warning renders the ⚠ icon in warning style.
-func Warning() string { return StyleWarningIcon.Render(IconWarning) }
+func Warning() string { return styleWarningIcon.Render(IconWarning) }
 
 // Error() would shadow the builtin — use ErrorIcon instead.
 
 // ErrorIcon renders the ✗ icon in error style.
-func ErrorIcon() string { return StyleErrorIcon.Render(IconError) }
+func ErrorIcon() string { return styleErrorIcon.Render(IconError) }
 
 // Arrow renders the -> icon in accent style for progress/status indication.
 func Arrow() string { return StyleAccent.Render(IconArrow) }

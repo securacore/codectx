@@ -125,6 +125,26 @@ func (idx *Index) QueryAll(query string, topN int) map[IndexType][]ScoredResult 
 	return results
 }
 
+// QueryAllWithTokens runs pre-tokenized/expanded tokens against all three
+// indexes. Unlike QueryAll, this skips the Tokenize step, allowing the
+// caller to supply tokens that have already been expanded (e.g. via
+// taxonomy-based query expansion).
+func (idx *Index) QueryAllWithTokens(tokens []string, topN int) map[IndexType][]ScoredResult {
+	results := make(map[IndexType][]ScoredResult, len(idx.Indexes))
+	if len(tokens) == 0 {
+		return results
+	}
+
+	for it, bm25 := range idx.Indexes {
+		r := bm25.Score(tokens, topN)
+		if len(r) > 0 {
+			results[it] = r
+		}
+	}
+
+	return results
+}
+
 // IndexStats holds statistics about a single BM25 index, used for
 // heuristics.yaml reporting.
 type IndexStats struct {

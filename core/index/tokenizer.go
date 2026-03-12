@@ -16,6 +16,8 @@ package index
 import (
 	"regexp"
 	"strings"
+
+	"github.com/kljensen/snowball"
 )
 
 // tokenPattern matches word tokens while preserving compound terms.
@@ -51,15 +53,108 @@ var technicalStopwords = map[string]bool{
 	"true": true, "false": true, "nil": true, "err": true,
 }
 
+// isCodeIdentifier reports whether a lowercased token looks like a code
+// identifier that should not be stemmed. Criteria:
+//   - Contains a dot (dotted path: http.handler, os.path.join)
+//   - Contains an underscore (snake_case: user_id, get_name)
+//   - Contains both letters and digits (version-like: v2, sha256, http2)
+//   - Is all uppercase in the original form (constant: API, JWT, HTTP)
+func isCodeIdentifier(lower, original string) bool {
+	if strings.ContainsAny(lower, "._") {
+		return true
+	}
+
+	// Check for mixed letters+digits (e.g. "sha256", "v2", "http2").
+	hasLetter := false
+	hasDigit := false
+	for _, r := range lower {
+		if r >= 'a' && r <= 'z' {
+			hasLetter = true
+		} else if r >= '0' && r <= '9' {
+			hasDigit = true
+		}
+		if hasLetter && hasDigit {
+			return true
+		}
+	}
+
+	// Pure numeric tokens (like "200") are not code identifiers per se,
+	// but the stemmer handles them fine (returns them unchanged).
+
+	// ALL_CAPS in original form (before lowering) — likely an acronym.
+	// Must contain at least one letter (pure numeric like "200" is not ALL_CAPS).
+	if len(original) >= 2 && hasLetter && original == strings.ToUpper(original) {
+		return true
+	}
+
+	// CamelCase / PascalCase in original form — likely a code identifier.
+	// Detected by finding an uppercase letter after a lowercase letter or
+	// a lowercase letter after an uppercase letter (beyond the first char).
+	if hasMixedCase(original) {
+		return true
+	}
+
+	return false
+}
+
+// hasMixedCase reports whether s contains an uppercase ASCII letter after the
+// first character. This catches camelCase (getUserByID), PascalCase
+// (CreateUser), and acronym-prefix identifiers (HTTPServer) while ignoring
+// simple sentence-start capitalization (Hello, Running).
+func hasMixedCase(s string) bool {
+	for i, r := range s {
+		if i > 0 && r >= 'A' && r <= 'Z' {
+			return true
+		}
+	}
+	return false
+}
+
+// stemToken applies Snowball/Porter2 stemming to a single lowercased token.
+// For hyphenated compounds, each component is stemmed independently and
+// rejoined. Code identifiers and technical stopwords are returned unchanged.
+func stemToken(lower, original string) string {
+	// Never stem technical stopwords (e.g. "false" → "fals" is wrong).
+	if technicalStopwords[lower] {
+		return lower
+	}
+
+	// Never stem code identifiers.
+	if isCodeIdentifier(lower, original) {
+		return lower
+	}
+
+	// Hyphenated compounds: stem each component and rejoin.
+	if strings.Contains(lower, "-") {
+		parts := strings.Split(lower, "-")
+		for i, part := range parts {
+			if stemmed, err := snowball.Stem(part, "english", false); err == nil {
+				parts[i] = stemmed
+			}
+		}
+		return strings.Join(parts, "-")
+	}
+
+	// Regular token: stem it.
+	if stemmed, err := snowball.Stem(lower, "english", false); err == nil {
+		return stemmed
+	}
+	return lower
+}
+
 // Tokenize splits text into search tokens using the domain-aware tokenizer.
 //
 // Behavior:
-//   - Preserves compound terms: "error-handling" stays whole
-//   - Preserves code identifiers: "CreateUser" → "createuser"
-//   - Preserves dotted paths: "http.Handler" → "http.handler"
+//   - Preserves compound terms: "error-handling" stays whole (components stemmed)
+//   - Preserves code identifiers: "CreateUser" → "createuser" (not stemmed)
+//   - Preserves dotted paths: "http.Handler" → "http.handler" (not stemmed)
 //   - Lowercases all tokens for case-insensitive matching
+//   - Applies Snowball/Porter2 stemming to regular English tokens
 //   - Removes standard English stopwords (40 words)
 //   - Preserves technical stopwords: null, void, async, await, true, false, nil, err
+//
+// The same function is used at both index time and query time, ensuring
+// symmetric stemming.
 //
 // Returns nil for empty input.
 func Tokenize(text string) []string {
@@ -81,7 +176,7 @@ func Tokenize(text string) []string {
 			continue
 		}
 
-		tokens = append(tokens, lower)
+		tokens = append(tokens, stemToken(lower, word))
 	}
 
 	if len(tokens) == 0 {

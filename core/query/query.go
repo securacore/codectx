@@ -3,8 +3,10 @@
 // three index types (objects, specs, system), enriches results with manifest
 // metadata, and assembles selected chunks into coherent reading documents.
 //
+// Query expansion via the compiled taxonomy is supported: tokens are
+// expanded with aliases, synonyms, and narrower terms before BM25 scoring.
+//
 // This package is consumed by the cmds/query and cmds/generate CLI commands.
-// It does not handle taxonomy-based query expansion (deferred to Step 9).
 package query
 
 import (
@@ -14,12 +16,17 @@ import (
 	"github.com/securacore/codectx/core/index"
 	"github.com/securacore/codectx/core/manifest"
 	"github.com/securacore/codectx/core/project"
+	"github.com/securacore/codectx/core/taxonomy"
 )
 
 // QueryResult holds the complete result of a search query across all indexes.
 type QueryResult struct {
 	// RawQuery is the original search query string.
 	RawQuery string
+
+	// ExpandedQuery is the post-expansion query string, showing all tokens
+	// that were actually searched. Empty if no expansion occurred.
+	ExpandedQuery string
 
 	// Instructions contains scored object (instruction) chunk results.
 	Instructions []ResultEntry
@@ -81,9 +88,13 @@ func CompiledDir(projectDir string, cfg *project.Config) string {
 
 // RunQuery executes a search query against the compiled documentation.
 //
-// It loads the BM25 indexes from disk, runs the query against all three
+// It loads the BM25 indexes from disk, attempts to load the taxonomy for
+// query expansion, runs the (possibly expanded) query against all three
 // index types, enriches results with manifest metadata, and collects
 // related adjacent chunks.
+//
+// If the taxonomy cannot be loaded (e.g. first compile hasn't run yet),
+// the query proceeds without expansion — this is not an error.
 func RunQuery(compiledDir, query string, topN int) (*QueryResult, error) {
 	// Load BM25 indexes.
 	idx, err := index.Load(compiledDir)
@@ -97,11 +108,30 @@ func RunQuery(compiledDir, query string, topN int) (*QueryResult, error) {
 		return nil, fmt.Errorf("loading manifest: %w", err)
 	}
 
-	// Query all three indexes.
-	allResults := idx.QueryAll(query, topN)
+	// Attempt to load taxonomy for query expansion.
+	// Failure is non-fatal — we just skip expansion.
+	var tax *taxonomy.Taxonomy
+	var aliasIdx *taxonomy.AliasIndex
+	taxPath := taxonomy.TaxonomyPath(compiledDir)
+	if loaded, loadErr := taxonomy.Load(taxPath); loadErr == nil {
+		tax = loaded
+		aliasIdx = taxonomy.BuildAliasIndex(tax)
+	}
+
+	// Expand query tokens using taxonomy aliases and dictionary.
+	expandedTokens, expandedStr := ExpandQuery(query, tax, aliasIdx)
+
+	// Query all three indexes with expanded tokens.
+	var allResults map[index.IndexType][]index.ScoredResult
+	if len(expandedTokens) > 0 {
+		allResults = idx.QueryAllWithTokens(expandedTokens, topN)
+	} else {
+		allResults = make(map[index.IndexType][]index.ScoredResult)
+	}
 
 	result := &QueryResult{
-		RawQuery: query,
+		RawQuery:      query,
+		ExpandedQuery: expandedStr,
 	}
 
 	// Track all result chunk IDs to exclude from related.

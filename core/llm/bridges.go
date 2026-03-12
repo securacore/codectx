@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/securacore/codectx/core/chunk"
 )
@@ -17,8 +20,8 @@ const defaultBridgeBatchSize = 20
 // in bridge prompts. Content is truncated at word boundaries.
 const bridgeContentMaxLen = 500
 
-// BridgePair represents a pair of adjacent chunks needing a bridge summary.
-type BridgePair struct {
+// bridgePair represents a pair of adjacent chunks needing a bridge summary.
+type bridgePair struct {
 	// ChunkID is the ID of the "from" chunk.
 	ChunkID string
 
@@ -41,8 +44,8 @@ type BridgePair struct {
 	NextContent string
 }
 
-// BridgeResult holds the output of batched bridge generation.
-type BridgeResult struct {
+// bridgeResult holds the output of batched bridge generation.
+type bridgeResult struct {
 	// Bridges maps chunk IDs to their generated bridge summary text.
 	Bridges map[string]string
 
@@ -50,62 +53,100 @@ type BridgeResult struct {
 	Errors int
 }
 
-// GenerateBridges sends batched bridge summary requests to the LLM.
+// bridgeGenConfig holds parameters for batched bridge generation.
+type bridgeGenConfig struct {
+	sender       Sender
+	pairs        []*bridgePair
+	instructions string
+	batchSize    int
+	concurrency  int
+}
+
+// generateBridges sends batched bridge summary requests to the LLM.
 //
 // Each batch contains up to batchSize pairs (default 20 if <= 0).
-// The instructions parameter is the content of the bridge-summaries
-// README.md file, used as the system prompt.
+// The concurrency parameter controls the maximum number of concurrent
+// LLM calls. If <= 0, batches are processed sequentially.
 //
 // Returns partial results if some batches fail (graceful degradation).
-func GenerateBridges(ctx context.Context, sender Sender, pairs []*BridgePair, instructions string, batchSize int) *BridgeResult {
+func generateBridges(ctx context.Context, cfg bridgeGenConfig) *bridgeResult {
+	batchSize := cfg.batchSize
 	if batchSize <= 0 {
 		batchSize = defaultBridgeBatchSize
 	}
 
-	result := &BridgeResult{
+	result := &bridgeResult{
 		Bridges: make(map[string]string),
 	}
 
-	if len(pairs) == 0 {
+	if len(cfg.pairs) == 0 {
 		return result
 	}
 
-	for i := 0; i < len(pairs); i += batchSize {
-		end := i + batchSize
-		if end > len(pairs) {
-			end = len(pairs)
-		}
-		batch := pairs[i:end]
-
-		prompt := buildBridgeBatchPrompt(batch)
-
-		resp, err := sender.SendBridges(ctx, instructions, prompt)
-		if err != nil {
-			result.Errors++
-			continue
-		}
-
-		// Build a set of valid chunk IDs for this batch.
-		validIDs := make(map[string]bool, len(batch))
-		for _, p := range batch {
-			validIDs[p.ChunkID] = true
-		}
-
-		for _, bridge := range resp.Bridges {
-			if !validIDs[bridge.ChunkID] {
-				continue // Ignore unexpected IDs from the LLM.
-			}
-			if bridge.Summary != "" {
-				result.Bridges[bridge.ChunkID] = bridge.Summary
-			}
-		}
+	// Split into batches.
+	type batchEntry struct {
+		batch []*bridgePair
 	}
+	var batches []batchEntry
+	for i := 0; i < len(cfg.pairs); i += batchSize {
+		end := i + batchSize
+		if end > len(cfg.pairs) {
+			end = len(cfg.pairs)
+		}
+		batches = append(batches, batchEntry{batch: cfg.pairs[i:end]})
+	}
+
+	// Process batches concurrently with bounded parallelism.
+	// Sequential by default; callers opt-in to concurrency explicitly.
+	var mu sync.Mutex
+	g, gctx := errgroup.WithContext(ctx)
+	concurrency := cfg.concurrency
+	if concurrency <= 0 {
+		concurrency = 1
+	}
+	g.SetLimit(concurrency)
+
+	for _, entry := range batches {
+		batch := entry.batch // capture for goroutine
+		g.Go(func() error {
+			prompt := buildBridgeBatchPrompt(batch)
+
+			resp, err := cfg.sender.SendBridges(gctx, cfg.instructions, prompt)
+			if err != nil {
+				mu.Lock()
+				result.Errors++
+				mu.Unlock()
+				return nil //nolint:nilerr // Graceful degradation: track in result.Errors, don't abort.
+			}
+
+			// Build a set of valid chunk IDs for this batch.
+			validIDs := make(map[string]bool, len(batch))
+			for _, p := range batch {
+				validIDs[p.ChunkID] = true
+			}
+
+			mu.Lock()
+			defer mu.Unlock()
+			for _, bridge := range resp.Bridges {
+				if !validIDs[bridge.ChunkID] {
+					continue
+				}
+				if bridge.Summary != "" {
+					result.Bridges[bridge.ChunkID] = bridge.Summary
+				}
+			}
+
+			return nil
+		})
+	}
+
+	_ = g.Wait() // Errors are tracked via result.Errors, not returned.
 
 	return result
 }
 
 // buildBridgeBatchPrompt constructs the user message for a batch of chunk pairs.
-func buildBridgeBatchPrompt(batch []*BridgePair) string {
+func buildBridgeBatchPrompt(batch []*bridgePair) string {
 	var b strings.Builder
 
 	b.WriteString("Generate a one-line bridge summary for each chunk boundary below. " +
@@ -124,14 +165,14 @@ func buildBridgeBatchPrompt(batch []*BridgePair) string {
 	return b.String()
 }
 
-// BuildBridgePairs constructs BridgePair list from chunks.
+// buildBridgePairs constructs bridgePair list from chunks.
 //
 // For each pair of adjacent non-spec chunks from the same source file,
-// a BridgePair is created. Spec chunks are excluded because they use
+// a bridgePair is created. Spec chunks are excluded because they use
 // parent_object linking instead of adjacency.
 //
 // Content is truncated to bridgeContentMaxLen characters at word boundaries.
-func BuildBridgePairs(chunks []chunk.Chunk) []*BridgePair {
+func buildBridgePairs(chunks []chunk.Chunk) []*bridgePair {
 	// Group non-spec chunks by source file.
 	bySource := make(map[string][]chunk.Chunk)
 	for _, c := range chunks {
@@ -141,7 +182,7 @@ func BuildBridgePairs(chunks []chunk.Chunk) []*BridgePair {
 		bySource[c.Source] = append(bySource[c.Source], c)
 	}
 
-	var pairs []*BridgePair
+	var pairs []*bridgePair
 
 	for _, group := range bySource {
 		// Sort by sequence within each file.
@@ -154,7 +195,7 @@ func BuildBridgePairs(chunks []chunk.Chunk) []*BridgePair {
 			curr := &group[i]
 			next := &group[i+1]
 
-			pairs = append(pairs, &BridgePair{
+			pairs = append(pairs, &bridgePair{
 				ChunkID:     curr.ID,
 				NextChunkID: next.ID,
 				Source:      curr.Source,

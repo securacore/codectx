@@ -4,12 +4,22 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/securacore/codectx/core/chunk"
 	"github.com/securacore/codectx/core/project"
 	"github.com/securacore/codectx/core/taxonomy"
 	"github.com/securacore/codectx/embed"
+)
+
+// Default concurrency limits for LLM batch processing.
+const (
+	// defaultAPIConcurrency is the default number of concurrent API calls.
+	defaultAPIConcurrency = 4
+
+	// defaultCLIConcurrency is the default number of concurrent CLI calls.
+	defaultCLIConcurrency = 2
 )
 
 // AugmentConfig holds all parameters for the LLM augmentation stage.
@@ -38,6 +48,10 @@ type AugmentConfig struct {
 	// InstructionsDir is the absolute path to the system/topics/ directory
 	// containing taxonomy-generation/ and bridge-summaries/ subdirectories.
 	InstructionsDir string
+
+	// Concurrency is the maximum number of concurrent LLM calls per task.
+	// If <= 0, a default is chosen based on the provider (4 for API, 2 for CLI).
+	Concurrency int
 }
 
 // AugmentResult holds the output of the LLM augmentation stage.
@@ -102,37 +116,80 @@ func Augment(ctx context.Context, cfg AugmentConfig) *AugmentResult {
 		return result
 	}
 
+	// Determine concurrency.
+	concurrency := cfg.Concurrency
+	if concurrency <= 0 {
+		if cfg.Provider == project.ProviderCLI {
+			concurrency = defaultCLIConcurrency
+		} else {
+			concurrency = defaultAPIConcurrency
+		}
+	}
+
 	// Read instruction files (with embedded fallback).
 	aliasInstructions := readInstructions(cfg.InstructionsDir, "taxonomy-generation", "defaults/taxonomy-generation.md")
 	bridgeInstructions := readInstructions(cfg.InstructionsDir, "bridge-summaries", "defaults/bridge-summaries.md")
 
-	// Task 1: Alias generation.
+	// Run alias generation and bridge generation concurrently.
+	// They are independent tasks that can safely share the sender.
+	var wg sync.WaitGroup
+	var aliasResult *aliasResult
+	var bridgeResult *bridgeResult
+
+	// Task 1: Alias generation (concurrent batches).
 	if cfg.Taxonomy != nil && len(cfg.Taxonomy.Terms) > 0 {
-		terms := buildAliasRequests(cfg.Taxonomy)
-		aliasResult := GenerateAliases(ctx, sender, terms, aliasInstructions, cfg.TaxonomyConfig.MaxAliasCount, 0)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			terms := buildAliasRequests(cfg.Taxonomy)
+			aliasResult = generateAliases(ctx, aliasGenConfig{
+				sender:       sender,
+				terms:        terms,
+				instructions: aliasInstructions,
+				maxAliases:   cfg.TaxonomyConfig.MaxAliasCount,
+				concurrency:  concurrency,
+			})
+		}()
+	}
+
+	// Task 2: Bridge summaries (concurrent batches).
+	if len(cfg.Chunks) > 0 {
+		pairs := buildBridgePairs(cfg.Chunks)
+		if len(pairs) > 0 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				bridgeResult = generateBridges(ctx, bridgeGenConfig{
+					sender:       sender,
+					pairs:        pairs,
+					instructions: bridgeInstructions,
+					concurrency:  concurrency,
+				})
+			}()
+		}
+	}
+
+	wg.Wait()
+
+	// Collect results.
+	if aliasResult != nil {
 		result.Aliases = aliasResult.Aliases
 		result.AliasCount = aliasResult.TotalAliases
 	}
-
-	// Task 2: Bridge summaries.
-	if len(cfg.Chunks) > 0 {
-		pairs := BuildBridgePairs(cfg.Chunks)
-		if len(pairs) > 0 {
-			bridgeResult := GenerateBridges(ctx, sender, pairs, bridgeInstructions, 0)
-			result.Bridges = bridgeResult.Bridges
-			result.BridgeCount = len(bridgeResult.Bridges)
-		}
+	if bridgeResult != nil {
+		result.Bridges = bridgeResult.Bridges
+		result.BridgeCount = len(bridgeResult.Bridges)
 	}
 
 	result.Seconds = time.Since(start).Seconds()
 	return result
 }
 
-// buildAliasRequests converts taxonomy terms into AliasRequest structs.
-func buildAliasRequests(tax *taxonomy.Taxonomy) []*AliasRequest {
-	requests := make([]*AliasRequest, 0, len(tax.Terms))
+// buildAliasRequests converts taxonomy terms into aliasRequest structs.
+func buildAliasRequests(tax *taxonomy.Taxonomy) []*aliasRequest {
+	requests := make([]*aliasRequest, 0, len(tax.Terms))
 	for key, term := range tax.Terms {
-		requests = append(requests, &AliasRequest{
+		requests = append(requests, &aliasRequest{
 			Key:       key,
 			Canonical: term.Canonical,
 			Source:    term.Source,

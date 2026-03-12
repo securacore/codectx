@@ -484,8 +484,8 @@ func TestDefaultPreferencesConfig_HasSensibleDefaults(t *testing.T) {
 	if !cfg.Taxonomy.POSExtraction {
 		t.Error("expected POS extraction to be enabled")
 	}
-	if !cfg.Taxonomy.LLMAliasGeneration {
-		t.Error("expected LLM alias generation to be enabled")
+	if cfg.Taxonomy.LLMAliasGeneration {
+		t.Error("expected LLM alias generation to be disabled by default")
 	}
 	if !cfg.Validation.RequireReadme {
 		t.Error("expected require_readme to be true")

@@ -44,7 +44,7 @@ type Suggestion struct {
 //	  <suggestion text>
 //	    <command>
 func (e ErrorMsg) Render() string {
-	return renderMessage(ErrorIcon(), StyleError, "Error: "+e.Title, e.Detail, e.Suggestions)
+	return renderMessage(ErrorIcon(), styleError, "Error: "+e.Title, e.Detail, e.Suggestions)
 }
 
 // WarnMsg represents a non-fatal warning with the same structure as ErrorMsg.
@@ -54,11 +54,14 @@ type WarnMsg struct {
 
 	// Detail provides additional context. Optional.
 	Detail []string
+
+	// Suggestions are actionable next steps the user can take. Optional.
+	Suggestions []Suggestion
 }
 
 // Render formats the warning message for terminal display.
 func (w WarnMsg) Render() string {
-	return renderMessage(Warning(), StyleWarning, w.Title, w.Detail, nil)
+	return renderMessage(Warning(), StyleWarning, w.Title, w.Detail, w.Suggestions)
 }
 
 // ProjectNotFoundError returns the rendered error message for when no

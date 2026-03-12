@@ -12,7 +12,7 @@ func TestRenderTree_SingleNode(t *testing.T) {
 		{Name: "file.txt"},
 	}
 
-	result := tui.RenderTree(nodes)
+	result := tui.RenderTreeForTest(nodes)
 
 	if !strings.Contains(result, "file.txt") {
 		t.Error("expected file name in tree output")
@@ -29,7 +29,7 @@ func TestRenderTree_MultipleNodes(t *testing.T) {
 		{Name: "third.txt"},
 	}
 
-	result := tui.RenderTree(nodes)
+	result := tui.RenderTreeForTest(nodes)
 
 	if !strings.Contains(result, "first.txt") {
 		t.Error("expected first file")
@@ -69,7 +69,7 @@ func TestRenderTree_NestedNodes(t *testing.T) {
 		},
 	}
 
-	result := tui.RenderTree(nodes)
+	result := tui.RenderTreeForTest(nodes)
 
 	if !strings.Contains(result, "parent/") {
 		t.Error("expected parent directory")
@@ -102,7 +102,7 @@ func TestRenderTree_DeeplyNested(t *testing.T) {
 		},
 	}
 
-	result := tui.RenderTree(nodes)
+	result := tui.RenderTreeForTest(nodes)
 
 	if !strings.Contains(result, "a/") {
 		t.Error("expected level 1")
@@ -116,7 +116,7 @@ func TestRenderTree_DeeplyNested(t *testing.T) {
 }
 
 func TestRenderTree_EmptySlice(t *testing.T) {
-	result := tui.RenderTree(nil)
+	result := tui.RenderTreeForTest(nil)
 	if result != "" {
 		t.Errorf("expected empty string for nil nodes, got %q", result)
 	}

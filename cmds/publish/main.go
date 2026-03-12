@@ -42,10 +42,9 @@ var validPackageDirs = []string{
 
 func run(ctx context.Context, _ *cli.Command) error {
 	// Step 1: Find and load project config.
-	projectDir, cfg, err := project.DiscoverAndLoad(".")
+	projectDir, cfg, err := shared.DiscoverProject()
 	if err != nil {
-		fmt.Print(tui.ProjectNotFoundError())
-		return fmt.Errorf("project not found: %w", err)
+		return err
 	}
 
 	// Step 2: Validate required fields.

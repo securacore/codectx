@@ -21,7 +21,9 @@ func TestSourceRank(t *testing.T) {
 		{SourceBoldTerm, 2},
 		{SourceStructuredPosition, 3},
 		{SourcePOS, 4},
-		{"unknown", 5},
+		{SourceCorpusAbbreviation, 5},
+		{SourceDictionary, 6},
+		{"unknown", 7},
 	}
 
 	for _, tt := range tests {
@@ -31,7 +33,7 @@ func TestSourceRank(t *testing.T) {
 		}
 	}
 
-	// Verify ordering: heading < code < bold < structured < pos.
+	// Verify ordering: heading < code < bold < structured < pos < corpus_abbr < dictionary.
 	if sourceRank(SourceHeading) >= sourceRank(SourceCodeIdentifier) {
 		t.Error("heading should rank higher (lower number) than code identifier")
 	}
@@ -43,6 +45,12 @@ func TestSourceRank(t *testing.T) {
 	}
 	if sourceRank(SourceStructuredPosition) >= sourceRank(SourcePOS) {
 		t.Error("structured position should rank higher than POS extraction")
+	}
+	if sourceRank(SourcePOS) >= sourceRank(SourceCorpusAbbreviation) {
+		t.Error("POS should rank higher than corpus abbreviation")
+	}
+	if sourceRank(SourceCorpusAbbreviation) >= sourceRank(SourceDictionary) {
+		t.Error("corpus abbreviation should rank higher than dictionary")
 	}
 }
 
@@ -524,5 +532,458 @@ func TestBuildChunkTermsMap(t *testing.T) {
 	terms1 := result["obj:a.1"]
 	if terms1[0] != "auth" || terms1[1] != "oauth" {
 		t.Errorf("expected sorted [auth, oauth], got %v", terms1)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Corpus abbreviation extraction
+// ---------------------------------------------------------------------------
+
+func TestExtractCorpusAbbreviations_ExpansionFirst(t *testing.T) {
+	// Pattern: "Full Name (ABBR)"
+	chunks := []chunk.Chunk{
+		{
+			ID:   "obj:test.1",
+			Type: chunk.ChunkObject,
+			Blocks: []markdown.Block{
+				{Type: markdown.BlockParagraph, Content: "JSON Web Token (JWT) is used for authentication."},
+			},
+		},
+	}
+
+	pairs := extractCorpusAbbreviations(chunks)
+	if len(pairs) != 1 {
+		t.Fatalf("expected 1 pair, got %d: %v", len(pairs), pairs)
+	}
+	if pairs[0].Abbreviation != "JWT" {
+		t.Errorf("expected abbreviation 'JWT', got %q", pairs[0].Abbreviation)
+	}
+	if pairs[0].Expansion != "JSON Web Token" {
+		t.Errorf("expected expansion 'JSON Web Token', got %q", pairs[0].Expansion)
+	}
+}
+
+func TestExtractCorpusAbbreviations_AbbrFirst(t *testing.T) {
+	// Pattern: "ABBR (Full Name)"
+	chunks := []chunk.Chunk{
+		{
+			ID:   "obj:test.1",
+			Type: chunk.ChunkObject,
+			Blocks: []markdown.Block{
+				{Type: markdown.BlockParagraph, Content: "API (Application Programming Interface) enables integration."},
+			},
+		},
+	}
+
+	pairs := extractCorpusAbbreviations(chunks)
+	if len(pairs) != 1 {
+		t.Fatalf("expected 1 pair, got %d: %v", len(pairs), pairs)
+	}
+	if pairs[0].Abbreviation != "API" {
+		t.Errorf("expected abbreviation 'API', got %q", pairs[0].Abbreviation)
+	}
+	if pairs[0].Expansion != "Application Programming Interface" {
+		t.Errorf("expected expansion 'Application Programming Interface', got %q", pairs[0].Expansion)
+	}
+}
+
+func TestExtractCorpusAbbreviations_Deduplication(t *testing.T) {
+	// Same abbreviation pattern appearing in multiple chunks.
+	chunks := []chunk.Chunk{
+		{
+			ID:   "obj:test.1",
+			Type: chunk.ChunkObject,
+			Blocks: []markdown.Block{
+				{Type: markdown.BlockParagraph, Content: "JSON Web Token (JWT) is a standard."},
+			},
+		},
+		{
+			ID:   "obj:test.2",
+			Type: chunk.ChunkObject,
+			Blocks: []markdown.Block{
+				{Type: markdown.BlockParagraph, Content: "The JSON Web Token (JWT) format is compact."},
+			},
+		},
+	}
+
+	pairs := extractCorpusAbbreviations(chunks)
+	if len(pairs) != 1 {
+		t.Errorf("expected 1 deduplicated pair, got %d: %v", len(pairs), pairs)
+	}
+}
+
+func TestExtractCorpusAbbreviations_MultiplePairs(t *testing.T) {
+	chunks := []chunk.Chunk{
+		{
+			ID:   "obj:test.1",
+			Type: chunk.ChunkObject,
+			Blocks: []markdown.Block{
+				{Type: markdown.BlockParagraph, Content: "JSON Web Token (JWT) and Transport Layer Security (TLS) are both important."},
+			},
+		},
+	}
+
+	pairs := extractCorpusAbbreviations(chunks)
+	if len(pairs) != 2 {
+		t.Fatalf("expected 2 pairs, got %d: %v", len(pairs), pairs)
+	}
+
+	abbrs := make(map[string]bool)
+	for _, p := range pairs {
+		abbrs[p.Abbreviation] = true
+	}
+	if !abbrs["JWT"] {
+		t.Error("expected JWT abbreviation")
+	}
+	if !abbrs["TLS"] {
+		t.Error("expected TLS abbreviation")
+	}
+}
+
+func TestExtractCorpusAbbreviations_NoMatch(t *testing.T) {
+	chunks := []chunk.Chunk{
+		{
+			ID:   "obj:test.1",
+			Type: chunk.ChunkObject,
+			Blocks: []markdown.Block{
+				{Type: markdown.BlockParagraph, Content: "Regular text without abbreviation patterns."},
+			},
+		},
+	}
+
+	pairs := extractCorpusAbbreviations(chunks)
+	if len(pairs) != 0 {
+		t.Errorf("expected 0 pairs, got %d: %v", len(pairs), pairs)
+	}
+}
+
+func TestIsPlausibleAbbreviation(t *testing.T) {
+	tests := []struct {
+		abbr, expansion string
+		want            bool
+	}{
+		{"JWT", "JSON Web Token", true},
+		{"API", "Application Programming Interface", true},
+		{"TLS", "Transport Layer Security", true},
+		// Abbreviation longer than expansion.
+		{"TOOLONG", "Tool", false},
+		// First letter mismatch.
+		{"XYZ", "Application", false},
+		// Too short abbreviation.
+		{"A", "Application", false},
+	}
+
+	for _, tt := range tests {
+		got := isPlausibleAbbreviation(tt.abbr, tt.expansion)
+		if got != tt.want {
+			t.Errorf("isPlausibleAbbreviation(%q, %q) = %v, want %v", tt.abbr, tt.expansion, got, tt.want)
+		}
+	}
+}
+
+func TestApplyCorpusAbbreviations(t *testing.T) {
+	terms := map[string]*Term{
+		"json-web-token": {
+			Canonical: "JSON Web Token",
+			Source:    SourceHeading,
+		},
+		"jwt": {
+			Canonical: "JWT",
+			Source:    SourceCodeIdentifier,
+		},
+	}
+
+	pairs := []aliasPair{
+		{Abbreviation: "JWT", Expansion: "JSON Web Token"},
+	}
+
+	applyCorpusAbbreviations(terms, pairs)
+
+	// The expansion term should get the abbreviation as alias.
+	jwtTerm := terms["json-web-token"]
+	if len(jwtTerm.Aliases) != 1 || jwtTerm.Aliases[0] != "jwt" {
+		t.Errorf("expected 'json-web-token' to have alias 'jwt', got %v", jwtTerm.Aliases)
+	}
+
+	// The abbreviation term should get the expansion as alias.
+	abbrTerm := terms["jwt"]
+	if len(abbrTerm.Aliases) != 1 || abbrTerm.Aliases[0] != "json web token" {
+		t.Errorf("expected 'jwt' to have alias 'json web token', got %v", abbrTerm.Aliases)
+	}
+}
+
+func TestApplyCorpusAbbreviations_NoDuplicateAliases(t *testing.T) {
+	terms := map[string]*Term{
+		"jwt": {
+			Canonical: "JWT",
+			Source:    SourceCodeIdentifier,
+			Aliases:   []string{"json web token"},
+		},
+	}
+
+	pairs := []aliasPair{
+		{Abbreviation: "JWT", Expansion: "JSON Web Token"},
+	}
+
+	applyCorpusAbbreviations(terms, pairs)
+
+	// Should not add duplicate alias.
+	if len(terms["jwt"].Aliases) != 1 {
+		t.Errorf("expected 1 alias (no duplicate), got %d: %v", len(terms["jwt"].Aliases), terms["jwt"].Aliases)
+	}
+}
+
+func TestApplyCorpusAbbreviations_NoMatchingTerm(t *testing.T) {
+	terms := map[string]*Term{
+		"authentication": {
+			Canonical: "Authentication",
+			Source:    SourceHeading,
+		},
+	}
+
+	pairs := []aliasPair{
+		{Abbreviation: "JWT", Expansion: "JSON Web Token"},
+	}
+
+	applyCorpusAbbreviations(terms, pairs)
+
+	// No aliases should be added since neither term matches.
+	if len(terms["authentication"].Aliases) != 0 {
+		t.Errorf("expected 0 aliases, got %v", terms["authentication"].Aliases)
+	}
+}
+
+func TestAddAlias(t *testing.T) {
+	term := &Term{Canonical: "Test"}
+
+	addAlias(term, "alias1")
+	addAlias(term, "alias2")
+	addAlias(term, "alias1") // duplicate
+
+	if len(term.Aliases) != 2 {
+		t.Errorf("expected 2 aliases, got %d: %v", len(term.Aliases), term.Aliases)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Technical dictionary
+// ---------------------------------------------------------------------------
+
+func TestDictionaryLookup_KnownTerms(t *testing.T) {
+	tests := []struct {
+		key      string
+		wantSome string // at least one expected synonym
+	}{
+		{"jwt", "json web token"},
+		{"api", "application programming interface"},
+		{"json-web-token", "jwt"},
+		{"application-programming-interface", "api"},
+		{"http", "hypertext transfer protocol"},
+		{"auth", "authentication"},
+		{"cli", "command line interface"},
+		{"db", "database"},
+		{"k8s", "kubernetes"},
+		{"ci", "continuous integration"},
+	}
+
+	for _, tt := range tests {
+		syns := DictionaryLookup(tt.key)
+		if syns == nil {
+			t.Errorf("DictionaryLookup(%q) = nil, expected synonyms", tt.key)
+			continue
+		}
+		found := false
+		for _, s := range syns {
+			if s == tt.wantSome {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("DictionaryLookup(%q) = %v, expected to contain %q", tt.key, syns, tt.wantSome)
+		}
+	}
+}
+
+func TestDictionaryLookup_UnknownTerm(t *testing.T) {
+	syns := DictionaryLookup("xyzzy-nonexistent")
+	if syns != nil {
+		t.Errorf("expected nil for unknown term, got %v", syns)
+	}
+}
+
+func TestDictionarySize(t *testing.T) {
+	size := dictionarySize()
+	// The dictionary should have a substantial number of entries.
+	if size < 200 {
+		t.Errorf("expected at least 200 dictionary entries, got %d", size)
+	}
+	// Sanity upper bound.
+	if size > 10000 {
+		t.Errorf("dictionary unexpectedly large: %d entries", size)
+	}
+}
+
+func TestDictionary_Bidirectional(t *testing.T) {
+	// For selected entries, verify both directions exist.
+	bidirectional := []struct {
+		a, b string
+	}{
+		{"jwt", "json-web-token"},
+		{"api", "application-programming-interface"},
+		{"http", "hypertext-transfer-protocol"},
+		{"cli", "command-line-interface"},
+		{"k8s", "kubernetes"},
+		{"db", "database"},
+		{"ci", "continuous-integration"},
+		{"auth", "authentication"},
+	}
+
+	for _, tt := range bidirectional {
+		asyns := DictionaryLookup(tt.a)
+		bsyns := DictionaryLookup(tt.b)
+
+		if asyns == nil {
+			t.Errorf("DictionaryLookup(%q) = nil", tt.a)
+		}
+		if bsyns == nil {
+			t.Errorf("DictionaryLookup(%q) = nil", tt.b)
+		}
+	}
+}
+
+func TestApplyDictionary(t *testing.T) {
+	terms := map[string]*Term{
+		"jwt": {
+			Canonical: "JWT",
+			Source:    SourceCodeIdentifier,
+		},
+		"authentication": {
+			Canonical: "Authentication",
+			Source:    SourceHeading,
+		},
+	}
+
+	applyDictionary(terms)
+
+	// JWT should get "json web token" as alias.
+	jwtTerm := terms["jwt"]
+	found := false
+	for _, a := range jwtTerm.Aliases {
+		if a == "json web token" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected 'jwt' to have alias 'json web token', got %v", jwtTerm.Aliases)
+	}
+
+	// Authentication should get "auth" as alias.
+	authTerm := terms["authentication"]
+	found = false
+	for _, a := range authTerm.Aliases {
+		if a == "auth" || a == "authn" || a == "identity verification" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected 'authentication' to have auth-related alias, got %v", authTerm.Aliases)
+	}
+}
+
+func TestApplyDictionary_NoTermMatch(t *testing.T) {
+	terms := map[string]*Term{
+		"custom-term": {
+			Canonical: "Custom Term",
+			Source:    SourceHeading,
+		},
+	}
+
+	applyDictionary(terms)
+
+	// No aliases should be added since the term isn't in the dictionary.
+	if len(terms["custom-term"].Aliases) != 0 {
+		t.Errorf("expected 0 aliases for unknown term, got %v", terms["custom-term"].Aliases)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// AliasIndex
+// ---------------------------------------------------------------------------
+
+func TestBuildAliasIndex_LookupByCanonical(t *testing.T) {
+	tax := &Taxonomy{
+		Terms: map[string]*Term{
+			"jwt": {
+				Canonical: "JWT",
+				Aliases:   []string{"json web token"},
+			},
+		},
+	}
+
+	idx := BuildAliasIndex(tax)
+
+	// Lookup by canonical name.
+	if key := idx.LookupByAlias("JWT"); key != "jwt" {
+		t.Errorf("expected key 'jwt' for canonical 'JWT', got %q", key)
+	}
+
+	// Lookup by alias.
+	if key := idx.LookupByAlias("json web token"); key != "jwt" {
+		t.Errorf("expected key 'jwt' for alias 'json web token', got %q", key)
+	}
+
+	// Lookup by key itself.
+	if key := idx.LookupByAlias("jwt"); key != "jwt" {
+		t.Errorf("expected key 'jwt' for key 'jwt', got %q", key)
+	}
+
+	// Case-insensitive.
+	if key := idx.LookupByAlias("Jwt"); key != "jwt" {
+		t.Errorf("expected key 'jwt' for 'Jwt', got %q", key)
+	}
+}
+
+func TestBuildAliasIndex_NoMatch(t *testing.T) {
+	tax := &Taxonomy{
+		Terms: map[string]*Term{
+			"jwt": {
+				Canonical: "JWT",
+			},
+		},
+	}
+
+	idx := BuildAliasIndex(tax)
+
+	if key := idx.LookupByAlias("nonexistent"); key != "" {
+		t.Errorf("expected empty for unknown alias, got %q", key)
+	}
+}
+
+func TestBuildAliasIndex_lookupTerm(t *testing.T) {
+	tax := &Taxonomy{
+		Terms: map[string]*Term{
+			"jwt": {
+				Canonical: "JWT",
+				Aliases:   []string{"json web token"},
+			},
+		},
+	}
+
+	idx := BuildAliasIndex(tax)
+
+	term := idx.lookupTerm("json web token", tax)
+	if term == nil {
+		t.Fatal("expected to find term for 'json web token'")
+	}
+	if term.Canonical != "JWT" {
+		t.Errorf("expected canonical 'JWT', got %q", term.Canonical)
+	}
+
+	// No match.
+	if idx.lookupTerm("nonexistent", tax) != nil {
+		t.Error("expected nil for unknown term")
 	}
 }

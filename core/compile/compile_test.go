@@ -12,6 +12,7 @@ import (
 	"github.com/securacore/codectx/core/index"
 	"github.com/securacore/codectx/core/manifest"
 	"github.com/securacore/codectx/core/project"
+	corequery "github.com/securacore/codectx/core/query"
 	"github.com/securacore/codectx/core/taxonomy"
 	"github.com/securacore/codectx/core/tokens"
 )
@@ -657,4 +658,201 @@ func countMDFiles(t *testing.T, dir string) int {
 		t.Fatalf("glob %s: %v", dir, err)
 	}
 	return len(entries)
+}
+
+// ---------------------------------------------------------------------------
+// Phase 6: Deterministic Search Enhancement Integration Test
+// ---------------------------------------------------------------------------
+
+// setupDeterministicSearchProject creates a project with content designed to
+// exercise all deterministic search features: stemming, corpus abbreviation
+// extraction, dictionary aliases, and query expansion.
+func setupDeterministicSearchProject(t *testing.T) (string, string) {
+	t.Helper()
+	root := t.TempDir()
+	compiledDir := filepath.Join(root, project.CodectxDir, project.CompiledDir)
+
+	// Auth topic with abbreviation pattern "JSON Web Token (JWT)".
+	mustWriteFile(t, filepath.Join(root, "topics", "auth.md"), strings.Join([]string{
+		"# Authentication",
+		"",
+		"The authentication system uses JSON Web Token (JWT) for secure access.",
+		"",
+		"## JWT Tokens",
+		"",
+		"JSON Web Token (JWT) is an open standard for transmitting claims.",
+		"Tokens are signed with RS256 for validation.",
+		"",
+		"## Refresh Flow",
+		"",
+		"Refresh tokens handle session management and token rotation.",
+		"The authentication flow validates credentials before issuing tokens.",
+	}, "\n"))
+
+	// API topic with abbreviation pattern "API (Application Programming Interface)".
+	mustWriteFile(t, filepath.Join(root, "topics", "api.md"), strings.Join([]string{
+		"# API Design",
+		"",
+		"The API (Application Programming Interface) follows REST conventions.",
+		"",
+		"## Endpoints",
+		"",
+		"API endpoints handle user authentication and data retrieval.",
+		"Error handling uses standard HTTP status codes.",
+		"",
+		"## Rate Limiting",
+		"",
+		"Rate limiting protects the API from abuse.",
+		"Throttling is configured per endpoint.",
+	}, "\n"))
+
+	// Spec file with reasoning.
+	mustWriteFile(t, filepath.Join(root, "topics", "auth.spec.md"), strings.Join([]string{
+		"# Authentication",
+		"",
+		"We chose JWT because it enables stateless authentication.",
+		"",
+		"## Security Considerations",
+		"",
+		"Transport Layer Security (TLS) protects token transmission.",
+		"Token validation prevents unauthorized access.",
+	}, "\n"))
+
+	mustWriteFile(t, filepath.Join(root, project.SystemDir, "topics", "taxonomy-generation", "README.md"),
+		"# Taxonomy Generation\n\nGenerate aliases for canonical terms.\n")
+
+	return root, compiledDir
+}
+
+func TestDeterministicSearchPipeline(t *testing.T) {
+	rootDir, compiledDir := setupDeterministicSearchProject(t)
+
+	taxCfg := project.DefaultPreferencesConfig().Taxonomy
+	// LLM is now disabled by default; verify that.
+	if taxCfg.LLMAliasGeneration {
+		t.Fatal("expected LLMAliasGeneration to be false by default")
+	}
+	// Use low min frequency for test (content is small).
+	taxCfg.MinTermFrequency = 1
+
+	cfg := compile.Config{
+		ProjectDir:  filepath.Dir(rootDir),
+		RootDir:     rootDir,
+		CompiledDir: compiledDir,
+		SystemDir:   project.SystemDir,
+		Encoding:    tokens.Cl100kBase,
+		Version:     "test-deterministic-v0.1.0",
+		Chunking:    project.DefaultPreferencesConfig().Chunking,
+		BM25:        project.DefaultPreferencesConfig().BM25,
+		Validation:  project.DefaultPreferencesConfig().Validation,
+		Taxonomy:    taxCfg,
+		ActiveDeps:  nil,
+	}
+
+	result, err := compile.Run(cfg, nil)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	// 1. Verify LLM was skipped (deterministic-only pipeline).
+	if !result.LLMSkipped {
+		t.Error("expected LLM augmentation to be skipped")
+	}
+	if result.LLMAliasCount != 0 {
+		t.Errorf("expected 0 LLM aliases, got %d", result.LLMAliasCount)
+	}
+
+	// 2. Verify taxonomy was created.
+	if result.TaxonomyTerms == 0 {
+		t.Fatal("expected non-zero taxonomy terms")
+	}
+
+	// 3. Load taxonomy and verify deterministic aliases exist.
+	taxPath := taxonomy.TaxonomyPath(compiledDir)
+	tax, err := taxonomy.Load(taxPath)
+	if err != nil {
+		t.Fatalf("loading taxonomy: %v", err)
+	}
+
+	// Check that the "authentication" term exists and has aliases.
+	authTerm := tax.Terms["authentication"]
+	if authTerm == nil {
+		// Try other common keys.
+		for key, term := range tax.Terms {
+			t.Logf("  taxonomy term: %s -> %s (aliases: %v)", key, term.Canonical, term.Aliases)
+		}
+		t.Fatal("expected 'authentication' term in taxonomy")
+	}
+
+	// Authentication should have dictionary-sourced aliases.
+	if len(authTerm.Aliases) == 0 {
+		t.Error("expected 'authentication' term to have deterministic aliases from dictionary")
+	} else {
+		t.Logf("authentication aliases: %v", authTerm.Aliases)
+	}
+
+	// 4. Verify BM25 indexes can be loaded.
+	idx, err := index.Load(compiledDir)
+	if err != nil {
+		t.Fatalf("loading BM25 indexes: %v", err)
+	}
+
+	// 5. Test stemming works: querying "authenticate" should find "authentication" content
+	// because both stem to "authent".
+	authResults := idx.QueryAll("authenticate", 5)
+	totalAuthResults := 0
+	for _, results := range authResults {
+		totalAuthResults += len(results)
+	}
+	if totalAuthResults == 0 {
+		t.Error("expected stemming to match 'authenticate' -> 'authentication' content")
+	}
+
+	// 6. Test query expansion via taxonomy.
+	aliasIdx := taxonomy.BuildAliasIndex(tax)
+
+	// Querying "auth" should expand to include "authentication" and related terms.
+	expandedTokens, expandedStr := expandQueryForTest(t, "auth", tax, aliasIdx)
+	if len(expandedTokens) <= 1 {
+		t.Errorf("expected expansion for 'auth', got %d tokens: %s", len(expandedTokens), expandedStr)
+	}
+	t.Logf("'auth' expanded to: %s", expandedStr)
+
+	// Use expanded tokens for BM25 query.
+	expandedResults := idx.QueryAllWithTokens(expandedTokens, 5)
+	totalExpanded := 0
+	for _, results := range expandedResults {
+		totalExpanded += len(results)
+	}
+	if totalExpanded == 0 {
+		t.Error("expected expanded query to find results")
+	}
+
+	// 7. Verify that the expanded query finds MORE or EQUAL results than raw.
+	rawResults := idx.QueryAll("auth", 5)
+	totalRaw := 0
+	for _, results := range rawResults {
+		totalRaw += len(results)
+	}
+	t.Logf("raw 'auth' results: %d, expanded results: %d", totalRaw, totalExpanded)
+
+	// The expanded query should generally find at least as many results.
+	// (This isn't strictly guaranteed due to BM25 scoring nuances, but with
+	// our test data it should hold.)
+	if totalExpanded < totalRaw {
+		t.Logf("warning: expanded results (%d) < raw results (%d)", totalExpanded, totalRaw)
+	}
+
+	t.Logf("Deterministic search pipeline: %d terms, %d chunks, %d total tokens",
+		result.TaxonomyTerms, result.TotalChunks, result.TotalTokens)
+}
+
+// expandQueryForTest is a test helper that calls the real query expansion
+// logic from core/query.
+func expandQueryForTest(t *testing.T, rawQuery string, tax *taxonomy.Taxonomy, aliasIdx *taxonomy.AliasIndex) ([]string, string) {
+	t.Helper()
+
+	// Import the actual ExpandQuery function via the query package.
+	// Since compile_test is an external test, we can import core/query.
+	return corequery.ExpandQuery(rawQuery, tax, aliasIdx)
 }

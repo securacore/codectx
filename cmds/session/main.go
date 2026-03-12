@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/x/term"
+	"github.com/securacore/codectx/cmds/shared"
 	codectx "github.com/securacore/codectx/core/context"
 	"github.com/securacore/codectx/core/project"
 	"github.com/securacore/codectx/core/tui"
@@ -113,6 +114,9 @@ func runAdd(_ context.Context, cmd *cli.Command) error {
 			Detail: []string{
 				fmt.Sprintf("%s is already in always_loaded.", tui.StyleAccent.Render(ref)),
 			},
+			Suggestions: []tui.Suggestion{
+				{Text: "List current session entries:", Command: "codectx session list"},
+			},
 		}.Render())
 		return nil
 	}
@@ -194,6 +198,9 @@ func runAdd(_ context.Context, cmd *cli.Command) error {
 				fmt.Sprintf("Consider removing entries or increasing the budget in %s.",
 					tui.StylePath.Render(project.ConfigFileName)),
 			},
+			Suggestions: []tui.Suggestion{
+				{Text: "Remove an entry:", Command: "codectx session remove <ref>"},
+			},
 		}.Render())
 	}
 
@@ -227,6 +234,9 @@ func runRemove(_ context.Context, cmd *cli.Command) error {
 			Title: "No session context configured",
 			Detail: []string{
 				"There are no entries in session.always_loaded to remove.",
+			},
+			Suggestions: []tui.Suggestion{
+				{Text: "Add an entry first:", Command: "codectx session add <ref>"},
 			},
 		}.Render())
 		return nil
@@ -359,13 +369,7 @@ func renderSessionList(assembly *codectx.AssemblyResult, budget int) string {
 // loadProject discovers and loads the project configuration.
 // Returns (projectDir, config, error).
 func loadProject() (string, *project.Config, error) {
-	projectDir, cfg, err := project.DiscoverAndLoad(".")
-	if err != nil {
-		fmt.Print(tui.ProjectNotFoundError())
-		return "", nil, fmt.Errorf("project not found: %w", err)
-	}
-
-	return projectDir, cfg, nil
+	return shared.DiscoverProject()
 }
 
 // isDuplicate checks whether ref already exists in the list.

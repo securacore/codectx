@@ -49,6 +49,8 @@ const (
 	SourceBoldTerm           = "bold_term"
 	SourceStructuredPosition = "structured_position"
 	SourcePOS                = "pos_extraction"
+	SourceCorpusAbbreviation = "corpus_abbreviation"
+	SourceDictionary         = "dictionary"
 )
 
 // Taxonomy is the top-level structure for taxonomy.yml.
@@ -116,8 +118,12 @@ func sourceRank(source string) int {
 		return 3
 	case SourcePOS:
 		return 4
-	default:
+	case SourceCorpusAbbreviation:
 		return 5
+	case SourceDictionary:
+		return 6
+	default:
+		return 7
 	}
 }
 
@@ -170,4 +176,79 @@ func NormalizeKey(s string) string {
 	s = slugSep.ReplaceAllString(s, "-")
 	s = leadTrailHyphen.ReplaceAllString(s, "")
 	return s
+}
+
+// AliasIndex is a reverse index mapping lowercased aliases and canonical
+// names to their term keys. Used for query expansion: given a query token,
+// look up which taxonomy term(s) it maps to.
+type AliasIndex struct {
+	// lookup maps a lowercased alias or canonical to term key.
+	lookup map[string]string
+}
+
+// BuildAliasIndex constructs a reverse alias index from the taxonomy.
+// For each term, both the canonical name (lowercased) and all aliases
+// are mapped to the term key. If two terms share an alias, the first
+// one encountered wins (stable by sorted key order).
+func BuildAliasIndex(tax *Taxonomy) *AliasIndex {
+	ai := &AliasIndex{
+		lookup: make(map[string]string, len(tax.Terms)*3),
+	}
+
+	// Sort keys for deterministic behavior.
+	keys := make([]string, 0, len(tax.Terms))
+	for k := range tax.Terms {
+		keys = append(keys, k)
+	}
+	sortStrings(keys)
+
+	for _, key := range keys {
+		term := tax.Terms[key]
+
+		// Map the canonical name (lowercased).
+		canonical := strings.ToLower(term.Canonical)
+		if _, exists := ai.lookup[canonical]; !exists {
+			ai.lookup[canonical] = key
+		}
+
+		// Map each alias.
+		for _, alias := range term.Aliases {
+			lower := strings.ToLower(alias)
+			if _, exists := ai.lookup[lower]; !exists {
+				ai.lookup[lower] = key
+			}
+		}
+
+		// Map the key itself (it's already normalized/lowercase).
+		if _, exists := ai.lookup[key]; !exists {
+			ai.lookup[key] = key
+		}
+	}
+
+	return ai
+}
+
+// sortStrings sorts a string slice in place.
+func sortStrings(s []string) {
+	for i := 1; i < len(s); i++ {
+		for j := i; j > 0 && s[j] < s[j-1]; j-- {
+			s[j], s[j-1] = s[j-1], s[j]
+		}
+	}
+}
+
+// LookupByAlias returns the term key that matches the given alias or
+// canonical name (case-insensitive). Returns empty string if no match.
+func (ai *AliasIndex) LookupByAlias(alias string) string {
+	return ai.lookup[strings.ToLower(alias)]
+}
+
+// lookupTerm returns the full Term for a given alias/canonical, or nil if
+// no match exists. Requires the taxonomy to resolve the key.
+func (ai *AliasIndex) lookupTerm(alias string, tax *Taxonomy) *Term {
+	key := ai.LookupByAlias(alias)
+	if key == "" {
+		return nil
+	}
+	return tax.Terms[key]
 }

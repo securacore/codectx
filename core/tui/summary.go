@@ -14,17 +14,9 @@ type TreeNode struct {
 	Children []TreeNode
 }
 
-// RenderTree formats a list of tree nodes as an indented directory tree
-// with box-drawing characters. Example output:
-//
-//	docs/
-//	├── codectx.yml
-//	├── .codectx/
-//	│   ├── ai.yml
-//	│   └── preferences.yml
-//	├── foundation/
-//	└── topics/
-func RenderTree(nodes []TreeNode) string {
+// renderTree formats a list of tree nodes as an indented directory tree
+// with box-drawing characters.
+func renderTree(nodes []TreeNode) string {
 	var b strings.Builder
 	renderNodes(&b, nodes, "")
 	return b.String()
@@ -65,7 +57,7 @@ func InitSummary(projectName string, tree []TreeNode, nextSteps []string) string
 
 	// Directory tree.
 	fmt.Fprintf(&b, "%s%s\n\n", Indent(1), StyleMuted.Render("Created:"))
-	treeStr := RenderTree(tree)
+	treeStr := renderTree(tree)
 	for _, line := range strings.Split(strings.TrimRight(treeStr, "\n"), "\n") {
 		fmt.Fprintf(&b, "%s%s\n", Indent(1), line)
 	}

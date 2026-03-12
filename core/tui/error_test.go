@@ -146,3 +146,56 @@ func TestWarnMsg_Render_WithDetail(t *testing.T) {
 		t.Error("expected detail line 2")
 	}
 }
+
+func TestWarnMsg_Render_WithSuggestions(t *testing.T) {
+	msg := tui.WarnMsg{
+		Title: "session context exceeds budget",
+		Suggestions: []tui.Suggestion{
+			{Text: "Remove an entry:", Command: "codectx session rm <ref>"},
+			{Text: "Or increase the budget in codectx.yml"},
+		},
+	}
+
+	result := msg.Render()
+
+	if !strings.Contains(result, "session context exceeds budget") {
+		t.Error("expected warning title in output")
+	}
+	if !strings.Contains(result, "Remove an entry") {
+		t.Error("expected first suggestion text")
+	}
+	if !strings.Contains(result, "codectx session rm <ref>") {
+		t.Error("expected first suggestion command")
+	}
+	if !strings.Contains(result, "increase the budget") {
+		t.Error("expected second suggestion text (no command)")
+	}
+}
+
+func TestWarnMsg_Render_Full(t *testing.T) {
+	msg := tui.WarnMsg{
+		Title:  "3 validation warning(s)",
+		Detail: []string{"Missing description in api.md", "Empty section in setup.md"},
+		Suggestions: []tui.Suggestion{
+			{Text: "Fix the warnings and recompile:", Command: "codectx compile"},
+		},
+	}
+
+	result := msg.Render()
+
+	if !strings.Contains(result, "3 validation warning(s)") {
+		t.Error("expected title")
+	}
+	if !strings.Contains(result, "Missing description") {
+		t.Error("expected detail line 1")
+	}
+	if !strings.Contains(result, "Empty section") {
+		t.Error("expected detail line 2")
+	}
+	if !strings.Contains(result, "Fix the warnings") {
+		t.Error("expected suggestion text")
+	}
+	if !strings.Contains(result, "codectx compile") {
+		t.Error("expected suggestion command")
+	}
+}

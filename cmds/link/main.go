@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 
 	"github.com/charmbracelet/x/term"
+	"github.com/securacore/codectx/cmds/shared"
 	corelink "github.com/securacore/codectx/core/link"
 	"github.com/securacore/codectx/core/project"
 	"github.com/securacore/codectx/core/tui"
@@ -49,10 +50,9 @@ func run(_ context.Context, cmd *cli.Command) error {
 	interactive := term.IsTerminal(os.Stdin.Fd()) && !cmd.Bool("yes")
 
 	// --- Step 1: Discover and load the project ---
-	projectDir, cfg, err := project.DiscoverAndLoad(".")
+	projectDir, cfg, err := shared.DiscoverProject()
 	if err != nil {
-		fmt.Print(tui.ProjectNotFoundError())
-		return fmt.Errorf("project not found: %w", err)
+		return err
 	}
 
 	contextRelPath := project.ContextRelPath(cfg.Root)

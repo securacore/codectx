@@ -117,10 +117,9 @@ func countChanged(entries []changeEntry) int {
 
 func run(ctx context.Context, cmd *cli.Command) error {
 	// Step 1: Discover project.
-	projectDir, cfg, err := project.DiscoverAndLoad(".")
+	projectDir, cfg, err := shared.DiscoverProject()
 	if err != nil {
-		fmt.Print(tui.ProjectNotFoundError())
-		return fmt.Errorf("project not found: %w", err)
+		return err
 	}
 
 	if len(cfg.Dependencies) == 0 {

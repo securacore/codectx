@@ -10,7 +10,7 @@ import (
 )
 
 func TestBuildBridgeBatchPrompt(t *testing.T) {
-	pairs := []*BridgePair{
+	pairs := []*bridgePair{
 		{
 			ChunkID:     "obj:a1b2c3.01",
 			NextChunkID: "obj:a1b2c3.02",
@@ -59,12 +59,14 @@ func TestGenerateBridges_MockSender(t *testing.T) {
 		},
 	}
 
-	pairs := []*BridgePair{
+	pairs := []*bridgePair{
 		{ChunkID: "obj:a1b2c3.01", NextChunkID: "obj:a1b2c3.02"},
 		{ChunkID: "obj:a1b2c3.02", NextChunkID: "obj:a1b2c3.03"},
 	}
 
-	result := GenerateBridges(context.Background(), sender, pairs, "instructions", 20)
+	result := generateBridges(context.Background(), bridgeGenConfig{
+		sender: sender, pairs: pairs, instructions: "instructions", batchSize: 20,
+	})
 
 	if result.Errors != 0 {
 		t.Errorf("expected 0 errors, got %d", result.Errors)
@@ -79,7 +81,9 @@ func TestGenerateBridges_MockSender(t *testing.T) {
 
 func TestGenerateBridges_EmptyPairs(t *testing.T) {
 	sender := &mockSender{}
-	result := GenerateBridges(context.Background(), sender, nil, "instructions", 20)
+	result := generateBridges(context.Background(), bridgeGenConfig{
+		sender: sender, instructions: "instructions", batchSize: 20,
+	})
 
 	if len(result.Bridges) != 0 {
 		t.Errorf("expected 0 bridges, got %d", len(result.Bridges))
@@ -101,11 +105,13 @@ func TestGenerateBridges_UnknownIDFiltered(t *testing.T) {
 		},
 	}
 
-	pairs := []*BridgePair{
+	pairs := []*bridgePair{
 		{ChunkID: "obj:valid.01", NextChunkID: "obj:valid.02"},
 	}
 
-	result := GenerateBridges(context.Background(), sender, pairs, "instructions", 20)
+	result := generateBridges(context.Background(), bridgeGenConfig{
+		sender: sender, pairs: pairs, instructions: "instructions", batchSize: 20,
+	})
 
 	if _, ok := result.Bridges["obj:unknown.99"]; ok {
 		t.Error("expected unknown ID to be filtered out")
@@ -129,13 +135,15 @@ func TestGenerateBridges_BatchError(t *testing.T) {
 		},
 	}
 
-	pairs := []*BridgePair{
+	pairs := []*bridgePair{
 		{ChunkID: "a"},
 		{ChunkID: "b"},
 		{ChunkID: "c"},
 	}
 
-	result := GenerateBridges(context.Background(), sender, pairs, "instructions", 1)
+	result := generateBridges(context.Background(), bridgeGenConfig{
+		sender: sender, pairs: pairs, instructions: "instructions", batchSize: 1,
+	})
 
 	if result.Errors != 1 {
 		t.Errorf("expected 1 error, got %d", result.Errors)
@@ -155,7 +163,7 @@ func TestBuildBridgePairs(t *testing.T) {
 		{ID: "sys:ghi.02", Type: chunk.ChunkSystem, Source: "system/topics/tax.md", Sequence: 2, Content: "System 2"},
 	}
 
-	pairs := BuildBridgePairs(chunks)
+	pairs := buildBridgePairs(chunks)
 
 	// 3 object chunks in auth.md -> 2 pairs.
 	// 2 system chunks in tax.md -> 1 pair.
@@ -186,7 +194,7 @@ func TestBuildBridgePairs_ExcludesSpecs(t *testing.T) {
 		{ID: "spec:a.02", Type: chunk.ChunkSpec, Source: "docs/auth.spec.md", Sequence: 2, Content: "Spec 2"},
 	}
 
-	pairs := BuildBridgePairs(chunks)
+	pairs := buildBridgePairs(chunks)
 	if len(pairs) != 0 {
 		t.Errorf("expected 0 pairs for spec-only chunks, got %d", len(pairs))
 	}

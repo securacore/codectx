@@ -351,3 +351,154 @@ func looksLikeSentence(text string) bool {
 	}
 	return false
 }
+
+// ---------------------------------------------------------------------------
+// Corpus-mined abbreviation extraction
+// ---------------------------------------------------------------------------
+
+// aliasPair represents a bidirectional abbreviation relationship mined from
+// the corpus. Both the abbreviation and expansion are provided so aliases
+// can be added to whichever term exists in the taxonomy.
+type aliasPair struct {
+	// Abbreviation is the short form (e.g. "JWT").
+	Abbreviation string
+
+	// Expansion is the long form (e.g. "JSON Web Token").
+	Expansion string
+}
+
+// abbrPatternExpFirst matches "Full Name (ABBR)" patterns.
+// The expansion is in group 1, the abbreviation in group 2.
+// Abbreviation must be 2-10 uppercase letters/digits.
+var abbrPatternExpFirst = regexp.MustCompile(`\b([A-Z][a-zA-Z0-9](?:[a-zA-Z0-9 -]{1,50}[a-zA-Z0-9])?)\s+\(([A-Z][A-Z0-9]{1,9})\)`)
+
+// abbrPatternAbbrFirst matches "ABBR (Full Name)" patterns.
+// The abbreviation is in group 1, the expansion in group 2.
+var abbrPatternAbbrFirst = regexp.MustCompile(`\b([A-Z][A-Z0-9]{1,9})\s+\(([A-Z][a-zA-Z0-9](?:[a-zA-Z0-9 -]{1,50}[a-zA-Z0-9])?)\)`)
+
+// extractCorpusAbbreviations scans all chunk content for abbreviation
+// definition patterns like "JSON Web Token (JWT)" or "JWT (JSON Web Token)".
+//
+// Returns deduplicated alias pairs. Each pair represents a bidirectional
+// relationship: the abbreviation is an alias for the expansion and vice versa.
+// abbrPairKey is used for deduplication of abbreviation pairs.
+type abbrPairKey struct {
+	abbr string
+	exp  string
+}
+
+func extractCorpusAbbreviations(chunks []chunk.Chunk) []aliasPair {
+	seen := make(map[abbrPairKey]bool)
+	var pairs []aliasPair
+
+	for i := range chunks {
+		c := &chunks[i]
+		for _, block := range c.Blocks {
+			content := block.Content
+			if content == "" {
+				continue
+			}
+			extractAbbrFromText(content, seen, &pairs)
+		}
+	}
+
+	return pairs
+}
+
+// extractAbbrFromText scans text for abbreviation patterns and appends
+// unique pairs. The seen map deduplicates across calls.
+func extractAbbrFromText(text string, seen map[abbrPairKey]bool, pairs *[]aliasPair) {
+	// Pattern 1: "Full Name (ABBR)"
+	for _, match := range abbrPatternExpFirst.FindAllStringSubmatch(text, -1) {
+		expansion := strings.TrimSpace(match[1])
+		abbr := strings.TrimSpace(match[2])
+		if !isPlausibleAbbreviation(abbr, expansion) {
+			continue
+		}
+		key := abbrPairKey{strings.ToLower(abbr), strings.ToLower(expansion)}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		*pairs = append(*pairs, aliasPair{
+			Abbreviation: abbr,
+			Expansion:    expansion,
+		})
+	}
+
+	// Pattern 2: "ABBR (Full Name)"
+	for _, match := range abbrPatternAbbrFirst.FindAllStringSubmatch(text, -1) {
+		abbr := strings.TrimSpace(match[1])
+		expansion := strings.TrimSpace(match[2])
+		if !isPlausibleAbbreviation(abbr, expansion) {
+			continue
+		}
+		key := abbrPairKey{strings.ToLower(abbr), strings.ToLower(expansion)}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		*pairs = append(*pairs, aliasPair{
+			Abbreviation: abbr,
+			Expansion:    expansion,
+		})
+	}
+}
+
+// isPlausibleAbbreviation checks whether an abbreviation plausibly
+// corresponds to the expansion. The abbreviation letters should roughly
+// match the initial letters of words in the expansion.
+//
+// This is intentionally lenient — it just checks that the first letter
+// of the abbreviation matches the first letter of the expansion, and
+// that the abbreviation is shorter than the expansion.
+func isPlausibleAbbreviation(abbr, expansion string) bool {
+	if len(abbr) >= len(expansion) {
+		return false
+	}
+
+	// Abbreviation must be at least 2 characters.
+	if len(abbr) < 2 {
+		return false
+	}
+
+	// First letter of abbreviation should match first letter of expansion
+	// (case-insensitive).
+	if !strings.EqualFold(abbr[:1], expansion[:1]) {
+		return false
+	}
+
+	return true
+}
+
+// applyCorpusAbbreviations adds aliases to existing taxonomy terms based on
+// abbreviation pairs mined from the corpus. For each pair:
+//   - If a term matching the expansion exists, the abbreviation is added as alias
+//   - If a term matching the abbreviation exists, the expansion is added as alias
+//   - Both directions are applied (bidirectional aliasing)
+func applyCorpusAbbreviations(terms map[string]*Term, pairs []aliasPair) {
+	for _, pair := range pairs {
+		expKey := NormalizeKey(pair.Expansion)
+		abbrKey := NormalizeKey(pair.Abbreviation)
+
+		// Add abbreviation as alias to expansion term.
+		if term, ok := terms[expKey]; ok {
+			addAlias(term, strings.ToLower(pair.Abbreviation))
+		}
+
+		// Add expansion as alias to abbreviation term.
+		if term, ok := terms[abbrKey]; ok {
+			addAlias(term, strings.ToLower(pair.Expansion))
+		}
+	}
+}
+
+// addAlias appends an alias to a term if not already present.
+func addAlias(term *Term, alias string) {
+	for _, existing := range term.Aliases {
+		if existing == alias {
+			return
+		}
+	}
+	term.Aliases = append(term.Aliases, alias)
+}

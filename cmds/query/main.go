@@ -61,10 +61,9 @@ func run(_ context.Context, cmd *cli.Command) error {
 	queryStr := cmd.Args().First()
 
 	// --- Step 1: Discover and load the project ---
-	projectDir, cfg, err := project.DiscoverAndLoad(".")
+	projectDir, cfg, err := shared.DiscoverProject()
 	if err != nil {
-		fmt.Print(tui.ProjectNotFoundError())
-		return fmt.Errorf("project not found: %w", err)
+		return err
 	}
 
 	// --- Step 2: Resolve compiled directory ---

@@ -438,7 +438,7 @@ func DefaultPreferencesConfig() PreferencesConfig {
 			MinTermFrequency:   2,
 			MaxAliasCount:      10,
 			POSExtraction:      true,
-			LLMAliasGeneration: true,
+			LLMAliasGeneration: false,
 		},
 		Validation: ValidationConfig{
 			RequireReadme:   true,

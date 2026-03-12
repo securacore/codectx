@@ -73,10 +73,9 @@ Examples:
 // runStatus implements the plan status subcommand.
 func runStatus(_ context.Context, cmd *cli.Command) error {
 	// Discover project.
-	projectDir, cfg, err := project.DiscoverAndLoad(".")
+	projectDir, cfg, err := shared.DiscoverProject()
 	if err != nil {
-		fmt.Print(tui.ProjectNotFoundError())
-		return fmt.Errorf("project not found: %w", err)
+		return err
 	}
 
 	rootDir := project.RootDir(projectDir, cfg)
@@ -136,6 +135,9 @@ func runStatus(_ context.Context, cmd *cli.Command) error {
 				hashWarn,
 				"Dependency status will not be shown.",
 			},
+			Suggestions: []tui.Suggestion{
+				{Text: "Compile the project first:", Command: "codectx compile"},
+			},
 		}.Render())
 	}
 
@@ -146,10 +148,9 @@ func runStatus(_ context.Context, cmd *cli.Command) error {
 // runResume implements the plan resume subcommand.
 func runResume(_ context.Context, cmd *cli.Command) error {
 	// Discover project.
-	projectDir, cfg, err := project.DiscoverAndLoad(".")
+	projectDir, cfg, err := shared.DiscoverProject()
 	if err != nil {
-		fmt.Print(tui.ProjectNotFoundError())
-		return fmt.Errorf("project not found: %w", err)
+		return err
 	}
 
 	rootDir := project.RootDir(projectDir, cfg)

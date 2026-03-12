@@ -672,11 +672,13 @@ func (ps *pipelineState) stageLLM() error {
 		InstructionsDir: instructionsDir,
 	})
 
-	// Apply aliases to taxonomy and rewrite.
+	// Merge LLM aliases into taxonomy (preserving corpus + dictionary aliases).
+	// Priority: corpus-mined > dictionary > LLM. Existing aliases are kept;
+	// LLM aliases are appended with deduplication.
 	if !ps.augResult.Skipped && len(ps.augResult.Aliases) > 0 {
-		for key, aliases := range ps.augResult.Aliases {
+		for key, llmAliases := range ps.augResult.Aliases {
 			if term, ok := ps.taxResult.Taxonomy.Terms[key]; ok {
-				term.Aliases = aliases
+				mergeAliases(term, llmAliases)
 			}
 		}
 		ps.taxResult.Taxonomy.CompiledWith = ps.cfg.Model
@@ -693,6 +695,23 @@ func (ps *pipelineState) stageLLM() error {
 	ps.result.LLMSkipReason = ps.augResult.SkipReason
 
 	return nil
+}
+
+// mergeAliases appends new aliases to an existing term's alias list,
+// skipping any that already exist. This preserves the priority ordering:
+// corpus-mined and dictionary aliases (added first) appear before LLM
+// aliases in the final list.
+func mergeAliases(term *taxonomy.Term, newAliases []string) {
+	existing := make(map[string]bool, len(term.Aliases))
+	for _, a := range term.Aliases {
+		existing[a] = true
+	}
+	for _, a := range newAliases {
+		if !existing[a] {
+			term.Aliases = append(term.Aliases, a)
+			existing[a] = true
+		}
+	}
 }
 
 // stageManifests generates manifest, metadata, and hashes files.
@@ -840,19 +859,27 @@ func (ps *pipelineState) stageLink() {
 // and writes all manifest files. This must be called after all other stages.
 func (ps *pipelineState) stageFinalize(totalStart time.Time) error {
 	// Populate taxonomy heuristics.
+	// Count total aliases across all terms (corpus + dictionary + LLM).
+	totalAliases := 0
+	for _, term := range ps.taxResult.Taxonomy.Terms {
+		totalAliases += len(term.Aliases)
+	}
 	var avgAliases float64
 	if ps.taxResult.Stats.CanonicalTerms > 0 {
-		avgAliases = float64(ps.result.LLMAliasCount) / float64(ps.taxResult.Stats.CanonicalTerms)
+		avgAliases = float64(totalAliases) / float64(ps.taxResult.Stats.CanonicalTerms)
 	}
+
 	ps.heur.SetTaxonomyStats(&manifest.TaxonomySection{
 		CanonicalTerms:               ps.taxResult.Stats.CanonicalTerms,
-		TotalAliases:                 ps.result.LLMAliasCount,
+		TotalAliases:                 totalAliases,
 		AverageAliasesPerTerm:        avgAliases,
 		TermsFromHeadings:            ps.taxResult.Stats.TermsFromHeadings,
 		TermsFromCodeIdents:          ps.taxResult.Stats.TermsFromCodeIdents,
 		TermsFromBoldTerms:           ps.taxResult.Stats.TermsFromBoldTerms,
 		TermsFromStructuredPositions: ps.taxResult.Stats.TermsFromStructured,
 		TermsFromPOSExtraction:       ps.taxResult.Stats.TermsFromPOS,
+		CorpusAbbreviationPairs:      ps.taxResult.Stats.CorpusAbbreviationPairs,
+		TermsWithCorpusAliases:       ps.taxResult.Stats.TermsWithCorpusAliases,
 		AliasesFromLLM:               ps.result.LLMAliasCount,
 	})
 

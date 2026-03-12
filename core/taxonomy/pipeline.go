@@ -26,12 +26,14 @@ type Result struct {
 
 // Stats holds per-source extraction counts.
 type Stats struct {
-	CanonicalTerms      int
-	TermsFromHeadings   int
-	TermsFromCodeIdents int
-	TermsFromBoldTerms  int
-	TermsFromStructured int
-	TermsFromPOS        int
+	CanonicalTerms          int
+	TermsFromHeadings       int
+	TermsFromCodeIdents     int
+	TermsFromBoldTerms      int
+	TermsFromStructured     int
+	TermsFromPOS            int
+	CorpusAbbreviationPairs int
+	TermsWithCorpusAliases  int
 }
 
 // Extract runs the full taxonomy extraction pipeline:
@@ -57,6 +59,11 @@ func Extract(chunks []chunk.Chunk, cfg project.TaxonomyConfig, encoding, instruc
 		candidates = append(candidates, posCandidates...)
 	}
 
+	// Pass 1b: Corpus-mined abbreviation extraction.
+	// Runs alongside structural extraction — scans chunk content for
+	// patterns like "Full Name (ABBR)" and "ABBR (Full Name)".
+	abbrPairs := extractCorpusAbbreviations(chunks)
+
 	// Pass 4 (partial): Deduplication and frequency filtering.
 	// Runs before relationship inference so that only surviving terms
 	// get relationships assigned.
@@ -65,6 +72,12 @@ func Extract(chunks []chunk.Chunk, cfg project.TaxonomyConfig, encoding, instruc
 		minFreq = 2
 	}
 	terms := deduplicate(candidates, minFreq)
+
+	// Apply corpus-mined abbreviations as aliases to existing terms.
+	applyCorpusAbbreviations(terms, abbrPairs)
+
+	// Apply dictionary-sourced synonyms as aliases to existing terms.
+	applyDictionary(terms)
 
 	// Build the taxonomy structure.
 	tax := &Taxonomy{
@@ -82,7 +95,7 @@ func Extract(chunks []chunk.Chunk, cfg project.TaxonomyConfig, encoding, instruc
 	chunkTerms := buildChunkTermsMap(terms)
 
 	// Compute stats.
-	stats := computeStats(terms)
+	stats := computeStats(terms, len(abbrPairs))
 
 	return &Result{
 		Taxonomy:   tax,
@@ -92,10 +105,11 @@ func Extract(chunks []chunk.Chunk, cfg project.TaxonomyConfig, encoding, instruc
 	}
 }
 
-// computeStats counts terms by source type.
-func computeStats(terms map[string]*Term) Stats {
+// computeStats counts terms by source type and alias statistics.
+func computeStats(terms map[string]*Term, abbrPairCount int) Stats {
 	var s Stats
 	s.CanonicalTerms = len(terms)
+	s.CorpusAbbreviationPairs = abbrPairCount
 
 	for _, term := range terms {
 		switch term.Source {
@@ -109,6 +123,11 @@ func computeStats(terms map[string]*Term) Stats {
 			s.TermsFromStructured++
 		case SourcePOS:
 			s.TermsFromPOS++
+		}
+
+		// Count terms that received corpus-mined aliases.
+		if len(term.Aliases) > 0 {
+			s.TermsWithCorpusAliases++
 		}
 	}
 

@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/x/term"
+	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/compile"
 	"github.com/securacore/codectx/core/project"
 	"github.com/securacore/codectx/core/tui"
@@ -47,10 +48,9 @@ func run(_ context.Context, cmd *cli.Command) error {
 	interactive := term.IsTerminal(os.Stdin.Fd())
 
 	// --- Step 1: Discover and load the project ---
-	projectDir, cfg, err := project.DiscoverAndLoad(".")
+	projectDir, cfg, err := shared.DiscoverProject()
 	if err != nil {
-		fmt.Print(tui.ProjectNotFoundError())
-		return fmt.Errorf("project not found: %w", err)
+		return err
 	}
 
 	rootDir := project.RootDir(projectDir, cfg)
@@ -259,6 +259,9 @@ func renderWarnings(warnings []string) string {
 	return tui.WarnMsg{
 		Title:  fmt.Sprintf("%d validation warning(s)", len(warnings)),
 		Detail: detail,
+		Suggestions: []tui.Suggestion{
+			{Text: "Fix the warnings and recompile:", Command: "codectx compile"},
+		},
 	}.Render()
 }
 

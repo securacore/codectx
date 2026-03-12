@@ -33,10 +33,9 @@ lock file (fast). If dependencies changed, re-resolves and updates the lock.`,
 
 func run(ctx context.Context, _ *cli.Command) error {
 	// Step 1: Discover project.
-	projectDir, cfg, err := project.DiscoverAndLoad(".")
+	projectDir, cfg, err := shared.DiscoverProject()
 	if err != nil {
-		fmt.Print(tui.ProjectNotFoundError())
-		return fmt.Errorf("project not found: %w", err)
+		return err
 	}
 
 	if len(cfg.Dependencies) == 0 {

@@ -5,13 +5,16 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
+
+	"golang.org/x/sync/errgroup"
 )
 
 // defaultAliasBatchSize is the number of terms per API call.
 const defaultAliasBatchSize = 50
 
-// AliasRequest represents a single taxonomy term to generate aliases for.
-type AliasRequest struct {
+// aliasRequest represents a single taxonomy term to generate aliases for.
+type aliasRequest struct {
 	// Key is the normalized term key (e.g. "authentication").
 	Key string
 
@@ -31,8 +34,8 @@ type AliasRequest struct {
 	Related []string
 }
 
-// AliasResult holds the output of batched alias generation.
-type AliasResult struct {
+// aliasResult holds the output of batched alias generation.
+type aliasResult struct {
 	// Aliases maps normalized term keys to their generated aliases.
 	Aliases map[string][]string
 
@@ -43,76 +46,114 @@ type AliasResult struct {
 	Errors int
 }
 
-// GenerateAliases sends batched alias generation requests to the LLM.
+// aliasGenConfig holds parameters for batched alias generation.
+type aliasGenConfig struct {
+	sender       Sender
+	terms        []*aliasRequest
+	instructions string
+	maxAliases   int
+	batchSize    int
+	concurrency  int
+}
+
+// generateAliases sends batched alias generation requests to the LLM.
 //
 // Terms are first grouped by taxonomy branch (terms sharing a broader
 // parent appear together in the same batch) for better LLM context.
 // Each batch contains up to batchSize terms (default 50 if <= 0).
 //
-// The instructions parameter is the content of the taxonomy-generation
-// README.md file, used as the system prompt.
+// The concurrency parameter controls the maximum number of concurrent
+// LLM calls. If <= 0, batches are processed sequentially.
 //
 // Returns partial results if some batches fail (graceful degradation).
-func GenerateAliases(ctx context.Context, sender Sender, terms []*AliasRequest, instructions string, maxAliasCount, batchSize int) *AliasResult {
+func generateAliases(ctx context.Context, cfg aliasGenConfig) *aliasResult {
+	batchSize := cfg.batchSize
 	if batchSize <= 0 {
 		batchSize = defaultAliasBatchSize
 	}
+	maxAliasCount := cfg.maxAliases
 	if maxAliasCount <= 0 {
 		maxAliasCount = 10
 	}
 
-	result := &AliasResult{
+	result := &aliasResult{
 		Aliases: make(map[string][]string),
 	}
 
-	if len(terms) == 0 {
+	if len(cfg.terms) == 0 {
 		return result
 	}
 
 	// Group terms by taxonomy branch for better context.
-	grouped := groupByBranch(terms)
+	grouped := groupByBranch(cfg.terms)
 
 	// Split into batches.
+	type batchEntry struct {
+		batch []*aliasRequest
+	}
+	var batches []batchEntry
 	for i := 0; i < len(grouped); i += batchSize {
 		end := i + batchSize
 		if end > len(grouped) {
 			end = len(grouped)
 		}
-		batch := grouped[i:end]
-
-		prompt := buildAliasBatchPrompt(batch, maxAliasCount)
-
-		resp, err := sender.SendAliases(ctx, instructions, prompt)
-		if err != nil {
-			result.Errors++
-			continue
-		}
-
-		// Apply max alias limit and merge into result.
-		applyMaxAliases(resp, maxAliasCount)
-
-		// Build a set of valid keys for this batch.
-		validKeys := make(map[string]bool, len(batch))
-		for _, req := range batch {
-			validKeys[req.Key] = true
-		}
-
-		for _, term := range resp.Terms {
-			if !validKeys[term.Key] {
-				continue // Ignore unexpected keys from the LLM.
-			}
-			if len(term.Aliases) > 0 {
-				result.Aliases[term.Key] = term.Aliases
-				result.TotalAliases += len(term.Aliases)
-			}
-		}
+		batches = append(batches, batchEntry{batch: grouped[i:end]})
 	}
+
+	// Process batches concurrently with bounded parallelism.
+	// Sequential by default; callers opt-in to concurrency explicitly.
+	var mu sync.Mutex
+	g, gctx := errgroup.WithContext(ctx)
+	concurrency := cfg.concurrency
+	if concurrency <= 0 {
+		concurrency = 1
+	}
+	g.SetLimit(concurrency)
+
+	for _, entry := range batches {
+		batch := entry.batch // capture for goroutine
+		g.Go(func() error {
+			prompt := buildAliasBatchPrompt(batch, maxAliasCount)
+
+			resp, err := cfg.sender.SendAliases(gctx, cfg.instructions, prompt)
+			if err != nil {
+				mu.Lock()
+				result.Errors++
+				mu.Unlock()
+				return nil //nolint:nilerr // Graceful degradation: track in result.Errors, don't abort.
+			}
+
+			applyMaxAliases(resp, maxAliasCount)
+
+			// Build a set of valid keys for this batch.
+			validKeys := make(map[string]bool, len(batch))
+			for _, req := range batch {
+				validKeys[req.Key] = true
+			}
+
+			mu.Lock()
+			defer mu.Unlock()
+			for _, term := range resp.Terms {
+				if !validKeys[term.Key] {
+					continue
+				}
+				if len(term.Aliases) > 0 {
+					result.Aliases[term.Key] = term.Aliases
+					result.TotalAliases += len(term.Aliases)
+				}
+			}
+
+			return nil
+		})
+	}
+
+	_ = g.Wait() // Errors are tracked via result.Errors, not returned.
 
 	return result
 }
 
 // buildAliasBatchPrompt constructs the user message for a batch of terms.
-func buildAliasBatchPrompt(batch []*AliasRequest, maxAliasCount int) string {
+func buildAliasBatchPrompt(batch []*aliasRequest, maxAliasCount int) string {
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "Generate aliases for each term below. For each term, provide common "+
@@ -151,9 +192,9 @@ func buildAliasBatchPrompt(batch []*AliasRequest, maxAliasCount int) string {
 //
 // Within each group, terms are sorted alphabetically by key for determinism.
 // Top-level terms (no broader parent) form their own group, sorted last.
-func groupByBranch(terms []*AliasRequest) []*AliasRequest {
+func groupByBranch(terms []*aliasRequest) []*aliasRequest {
 	// Group by broader key.
-	groups := make(map[string][]*AliasRequest)
+	groups := make(map[string][]*aliasRequest)
 	for _, t := range terms {
 		key := t.Broader
 		if key == "" {
@@ -170,7 +211,7 @@ func groupByBranch(terms []*AliasRequest) []*AliasRequest {
 	sort.Strings(keys)
 
 	// Sort terms within each group by key.
-	result := make([]*AliasRequest, 0, len(terms))
+	result := make([]*aliasRequest, 0, len(terms))
 	for _, k := range keys {
 		group := groups[k]
 		sort.Slice(group, func(i, j int) bool {

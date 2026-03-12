@@ -131,13 +131,13 @@ func TestAugment_InstructionFromDisk(t *testing.T) {
 	}
 }
 
-func TestAugment_BuildBridgePairsFromChunks(t *testing.T) {
+func TestAugment_buildBridgePairsFromChunks(t *testing.T) {
 	chunks := []chunk.Chunk{
 		{ID: "obj:a.01", Type: chunk.ChunkObject, Source: "docs/auth.md", Sequence: 1, Content: "Content 1"},
 		{ID: "obj:a.02", Type: chunk.ChunkObject, Source: "docs/auth.md", Sequence: 2, Content: "Content 2"},
 	}
 
-	pairs := BuildBridgePairs(chunks)
+	pairs := buildBridgePairs(chunks)
 	if len(pairs) != 1 {
 		t.Fatalf("expected 1 pair, got %d", len(pairs))
 	}

@@ -210,7 +210,11 @@ func Init(opts Options) (*Result, error) {
 	}
 
 	// Write config files.
-	if err := writeConfigs(opts.ProjectDir, codectxDir, name, root, opts.Model, opts.Encoding, opts.Provider); err != nil {
+	if err := writeConfigs(configPaths{
+		projectDir: opts.ProjectDir, codectxDir: codectxDir,
+		name: name, root: root,
+		model: opts.Model, encoding: opts.Encoding, provider: opts.Provider,
+	}); err != nil {
 		return nil, err
 	}
 	result.FilesCreated += 3 // codectx.yml, ai.yml, preferences.yml
@@ -269,35 +273,46 @@ func directories(docsRoot, codectxDir string) []string {
 	return dirs
 }
 
+// configPaths holds the resolved paths and values for writing config files.
+type configPaths struct {
+	projectDir string
+	codectxDir string
+	name       string
+	root       string
+	model      string
+	encoding   string
+	provider   string
+}
+
 // writeConfigs creates the three configuration files.
-func writeConfigs(projectDir, codectxDir, name, root, model, encoding, provider string) error {
+func writeConfigs(cp configPaths) error {
 	// codectx.yml at project root.
-	cfg := project.DefaultConfig(name, root)
-	cfgPath := filepath.Join(projectDir, project.ConfigFileName)
+	cfg := project.DefaultConfig(cp.name, cp.root)
+	cfgPath := filepath.Join(cp.projectDir, project.ConfigFileName)
 	if err := cfg.WriteToFile(cfgPath); err != nil {
 		return fmt.Errorf("writing %s: %w", project.ConfigFileName, err)
 	}
 
 	// ai.yml in .codectx/.
 	aiCfg := project.DefaultAIConfig()
-	if model != "" {
-		aiCfg.Compilation.Model = model
-		aiCfg.Consumption.Model = model
+	if cp.model != "" {
+		aiCfg.Compilation.Model = cp.model
+		aiCfg.Consumption.Model = cp.model
 	}
-	if encoding != "" {
-		aiCfg.Compilation.Encoding = encoding
+	if cp.encoding != "" {
+		aiCfg.Compilation.Encoding = cp.encoding
 	}
-	if provider != "" {
-		aiCfg.Compilation.Provider = provider
+	if cp.provider != "" {
+		aiCfg.Compilation.Provider = cp.provider
 	}
-	aiPath := filepath.Join(codectxDir, project.AIConfigFile)
+	aiPath := filepath.Join(cp.codectxDir, project.AIConfigFile)
 	if err := aiCfg.WriteToFile(aiPath); err != nil {
 		return fmt.Errorf("writing %s: %w", project.AIConfigFile, err)
 	}
 
 	// preferences.yml in .codectx/.
 	prefsCfg := project.DefaultPreferencesConfig()
-	prefsPath := filepath.Join(codectxDir, project.PreferencesFile)
+	prefsPath := filepath.Join(cp.codectxDir, project.PreferencesFile)
 	if err := prefsCfg.WriteToFile(prefsPath); err != nil {
 		return fmt.Errorf("writing %s: %w", project.PreferencesFile, err)
 	}
