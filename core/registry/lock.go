@@ -58,9 +58,9 @@ type LockedPackage struct {
 	RequiredBy []string `yaml:"required_by,omitempty"`
 }
 
-// NewLockFile creates an empty lock file with the current schema version
-// and timestamp.
-func NewLockFile() *LockFile {
+// newLockFile creates an empty lock file with the current schema version
+// and timestamp. Used internally by tests.
+func newLockFile() *LockFile {
 	return &LockFile{
 		LockfileVersion: LockVersion,
 		ResolvedAt:      time.Now().UTC().Format(time.RFC3339),

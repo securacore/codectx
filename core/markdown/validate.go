@@ -1,12 +1,5 @@
 package markdown
 
-import (
-	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
-)
-
 // ValidationResult holds warnings and errors from structural validation.
 type ValidationResult struct {
 	// Warnings are non-fatal issues that should be reported but don't
@@ -36,58 +29,6 @@ func (v *ValidationResult) Merge(other *ValidationResult) {
 	v.Errors = append(v.Errors, other.Errors...)
 }
 
-// validateDir checks structural requirements for a documentation directory tree.
-//
-// Checks performed:
-//   - requireReadme: every subdirectory containing .md files must have a README.md
-//   - requireHeadings: every .md file must contain at least one heading
-//
-// The dir parameter should be the documentation root (e.g., "docs/").
-// Walks recursively through all subdirectories.
-func validateDir(dir string, requireReadme, requireHeadings bool) (*ValidationResult, error) {
-	result := &ValidationResult{}
-
-	absDir, err := filepath.Abs(dir)
-	if err != nil {
-		return nil, fmt.Errorf("resolving directory: %w", err)
-	}
-
-	// Walk the directory tree.
-	err = filepath.WalkDir(absDir, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-
-		// Skip hidden directories (like .codectx/).
-		if d.IsDir() && strings.HasPrefix(d.Name(), ".") && path != absDir {
-			return filepath.SkipDir
-		}
-
-		// For directories: check for README.md if required.
-		if d.IsDir() && requireReadme && path != absDir {
-			if err := checkReadme(path, absDir, result); err != nil {
-				return err
-			}
-			return nil
-		}
-
-		// For files: validate .md files.
-		if !d.IsDir() && strings.HasSuffix(d.Name(), ".md") && requireHeadings {
-			if err := checkHeadings(path, absDir, result); err != nil {
-				return err
-			}
-		}
-
-		return nil
-	})
-
-	if err != nil {
-		return nil, fmt.Errorf("walking directory %s: %w", dir, err)
-	}
-
-	return result, nil
-}
-
 // ValidateFile checks a single parsed document for structural issues.
 //
 // Currently checks:
@@ -109,63 +50,4 @@ func ValidateFile(doc *Document, requireHeadings bool) *ValidationResult {
 	}
 
 	return result
-}
-
-// checkReadme verifies that a directory containing .md files has a README.md.
-func checkReadme(dir, rootDir string, result *ValidationResult) error {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return err
-	}
-
-	hasMD := false
-	hasReadme := false
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		name := entry.Name()
-		if strings.HasSuffix(name, ".md") {
-			hasMD = true
-		}
-		if strings.EqualFold(name, "readme.md") {
-			hasReadme = true
-		}
-	}
-
-	if hasMD && !hasReadme {
-		relPath, err := filepath.Rel(rootDir, dir)
-		if err != nil || relPath == "" {
-			relPath = dir
-		}
-		result.Warnings = append(result.Warnings,
-			fmt.Sprintf("directory %s has .md files but no README.md", relPath))
-	}
-
-	return nil
-}
-
-// checkHeadings reads and parses a markdown file, checking for at least one heading.
-func checkHeadings(path, rootDir string, result *ValidationResult) error {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-
-	doc := Parse(data)
-	fileResult := ValidateFile(doc, true)
-
-	if fileResult.HasWarnings() {
-		relPath, err := filepath.Rel(rootDir, path)
-		if err != nil {
-			relPath = path
-		}
-		for _, w := range fileResult.Warnings {
-			result.Warnings = append(result.Warnings,
-				fmt.Sprintf("%s: %s", relPath, w))
-		}
-	}
-
-	return nil
 }

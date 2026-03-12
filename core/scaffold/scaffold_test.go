@@ -695,6 +695,55 @@ func TestCheck_NoRootConflictNonexistent(t *testing.T) {
 	}
 }
 
+func TestInit_ProviderPassthrough(t *testing.T) {
+	dir := t.TempDir()
+
+	_, err := scaffold.Init(scaffold.Options{
+		ProjectDir: dir,
+		Name:       "provider-test",
+		Provider:   "cli",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	aiPath := filepath.Join(dir, "docs", ".codectx", "ai.yml")
+	data, err := os.ReadFile(aiPath)
+	if err != nil {
+		t.Fatalf("reading ai.yml: %v", err)
+	}
+
+	content := string(data)
+	if !strings.Contains(content, "provider: cli") {
+		t.Error("expected ai.yml to contain provider: cli")
+	}
+}
+
+func TestInit_NonWritableDir(t *testing.T) {
+	// Use a non-existent subdirectory of /dev/null (on macOS/Linux) or
+	// a read-only directory to trigger directory creation failure.
+	dir := t.TempDir()
+	targetDir := filepath.Join(dir, "readonly-parent", "child")
+
+	// Create parent and make it read-only.
+	parent := filepath.Join(dir, "readonly-parent")
+	if err := os.MkdirAll(parent, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(parent, 0o444); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(parent, 0o755) })
+
+	_, err := scaffold.Init(scaffold.Options{
+		ProjectDir: targetDir,
+		Name:       "fail-test",
+	})
+	if err == nil {
+		t.Error("expected error when directory creation fails")
+	}
+}
+
 func TestCheck_NestedSkippedWhenAlreadyInitialized(t *testing.T) {
 	// When AlreadyInitialized is true, the nested check should be skipped.
 	// This tests the optimization in Check() that avoids unnecessary Discover calls.

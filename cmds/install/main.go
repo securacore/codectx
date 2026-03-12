@@ -48,10 +48,7 @@ func run(ctx context.Context, _ *cli.Command) error {
 	lockPath := filepath.Join(rootDir, registry.LockFileName)
 	packagesDir := project.PackagesPath(rootDir)
 
-	reg := cfg.Registry
-	if reg == "" {
-		reg = project.DefaultRegistry
-	}
+	reg := cfg.EffectiveRegistry()
 
 	// Step 2: Check if lock is current.
 	lf, lockErr := registry.LoadLock(lockPath)
@@ -67,9 +64,9 @@ func run(ctx context.Context, _ *cli.Command) error {
 // installFromLock installs packages using pinned versions from the lock file.
 func installFromLock(ctx context.Context, lf *registry.LockFile, packagesDir string) error {
 	fmt.Printf("\n%s Installing from lock file (%d packages)\n\n",
-		tui.StyleAccent.Render("->"), len(lf.Packages))
+		tui.Arrow(), len(lf.Packages))
 
-	gc := registry.NewGitClient()
+	gc := registry.NewGitClient(registry.GitHubToken())
 	refs := lf.SortedPackageRefs()
 
 	for _, ref := range refs {
@@ -118,7 +115,7 @@ func resolveAndInstall(
 	cfg *project.Config,
 	reg, rootDir, packagesDir, lockPath string,
 ) error {
-	gc := registry.NewGitClient()
+	gc := registry.NewGitClient(registry.GitHubToken())
 
 	// Create temp dir for transitive dep resolution cache.
 	cacheDir, err := os.MkdirTemp("", "codectx-resolve-*")
@@ -166,7 +163,7 @@ func resolveAndInstall(
 
 	// Step 4: Download resolved packages.
 	fmt.Printf("\n%s Installing %d packages\n\n",
-		tui.StyleAccent.Render("->"), len(result.Packages))
+		tui.Arrow(), len(result.Packages))
 
 	commitSHAs := make(map[string]string)
 	installed := 0
@@ -212,7 +209,7 @@ func resolveAndInstall(
 		}
 
 		fmt.Printf("  %s %s v%s%s\n", tui.Success(), ref, pkg.ResolvedVersion, source)
-		fmt.Printf("    %s %s\n", tui.StyleMuted.Render("->"), tui.StyleMuted.Render(url+"@"+pkg.ResolvedTag))
+		fmt.Printf("    %s %s\n", tui.StyleMuted.Render(tui.IconArrow), tui.StyleMuted.Render(url+"@"+pkg.ResolvedTag))
 	}
 
 	// Step 5: Write lock file.

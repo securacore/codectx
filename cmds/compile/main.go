@@ -20,9 +20,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"charm.land/huh/v2/spinner"
 	"github.com/charmbracelet/x/term"
-	"github.com/securacore/codectx/cmds/version"
 	"github.com/securacore/codectx/core/compile"
 	"github.com/securacore/codectx/core/project"
 	"github.com/securacore/codectx/core/tui"
@@ -69,32 +67,24 @@ func run(_ context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("loading preferences: %w", err)
 	}
 
-	compileCfg := buildCompileConfig(projectDir, rootDir, cfg, aiCfg, prefsCfg)
+	compileCfg := compile.BuildConfig(projectDir, rootDir, cfg, aiCfg, prefsCfg)
 	compileCfg.Incremental = cmd.Bool("incremental")
 
 	// --- Step 3: Run compilation pipeline ---
 	var result *compile.Result
 
-	if interactive {
-		var compileErr error
+	progress := func(stage, detail string) {
+		fmt.Printf("%s %s\n", tui.StyleMuted.Render("["+stage+"]"), detail)
+	}
 
-		err = spinner.New().
-			Title("Compiling documentation...").
-			ActionWithErr(func(_ context.Context) error {
-				result, compileErr = compile.Run(compileCfg, nil)
-				return compileErr
-			}).
-			Run()
-		if err != nil {
-			return renderCompileError(err)
-		}
-	} else {
-		result, err = compile.Run(compileCfg, func(stage, detail string) {
-			fmt.Printf("%s %s\n", tui.StyleMuted.Render("["+stage+"]"), detail)
-		})
-		if err != nil {
-			return renderCompileError(err)
-		}
+	if interactive {
+		// Print a header before per-stage progress lines.
+		fmt.Printf("\n%s Compiling documentation...\n\n", tui.Arrow())
+	}
+
+	result, err = compile.Run(compileCfg, progress)
+	if err != nil {
+		return renderCompileError(err)
 	}
 
 	// --- Step 4: Display summary ---
@@ -120,44 +110,6 @@ func renderConfigError(configName, fileName string, err error) string {
 			{Text: "Reinitialize the project:", Command: "codectx init"},
 		},
 	}.Render()
-}
-
-// buildCompileConfig assembles a compile.Config from the project, AI, and
-// preferences configurations. This is a pure data-mapping function that
-// is easily testable.
-func buildCompileConfig(
-	projectDir, rootDir string,
-	cfg *project.Config,
-	aiCfg *project.AIConfig,
-	prefsCfg *project.PreferencesConfig,
-) compile.Config {
-	activeDeps := make(map[string]bool)
-	for name, dep := range cfg.Dependencies {
-		if dep != nil && dep.Active {
-			activeDeps[name] = true
-		}
-	}
-
-	codectxDir := filepath.Join(rootDir, project.CodectxDir)
-	compiledDir := filepath.Join(codectxDir, project.CompiledDir)
-
-	return compile.Config{
-		ProjectDir:  projectDir,
-		RootDir:     rootDir,
-		CompiledDir: compiledDir,
-		SystemDir:   project.SystemDir,
-		Encoding:    aiCfg.Compilation.Encoding,
-		Version:     version.Version,
-		Chunking:    prefsCfg.Chunking,
-		BM25:        prefsCfg.BM25,
-		Validation:  prefsCfg.Validation,
-		Taxonomy:    prefsCfg.Taxonomy,
-		Model:       aiCfg.Compilation.Model,
-		Provider:    aiCfg.Compilation.Provider,
-		APIKey:      os.Getenv("ANTHROPIC_API_KEY"),
-		ActiveDeps:  activeDeps,
-		Session:     cfg.Session,
-	}
 }
 
 // renderCompileError formats a compilation error for terminal display.

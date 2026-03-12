@@ -273,7 +273,7 @@ func runList(_ context.Context, _ *cli.Command) error {
 	if cfg.Session == nil || len(cfg.Session.AlwaysLoaded) == 0 {
 		if interactive {
 			fmt.Printf("\n%s No always-loaded session context configured.\n\n",
-				tui.StyleMuted.Render("->"))
+				tui.StyleMuted.Render(tui.IconArrow))
 			fmt.Printf("%s%s\n\n",
 				tui.Indent(1),
 				tui.StyleMuted.Render(fmt.Sprintf("Add entries with: %s",

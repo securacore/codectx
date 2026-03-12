@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 
+	"charm.land/huh/v2/spinner"
 	"github.com/securacore/codectx/core/project"
 	corequery "github.com/securacore/codectx/core/query"
 	"github.com/securacore/codectx/core/tui"
@@ -81,19 +82,30 @@ func run(_ context.Context, cmd *cli.Command) error {
 	encoding := project.ResolveEncoding(projectDir, cfg)
 
 	// --- Step 3: Run generate ---
-	result, err := corequery.RunGenerate(compiledDir, encoding, chunkIDs)
+	var result *corequery.GenerateResult
+	var genErr error
+
+	err = spinner.New().
+		Title("Assembling reading document...").
+		Action(func() {
+			result, genErr = corequery.RunGenerate(compiledDir, encoding, chunkIDs)
+		}).
+		Run()
 	if err != nil {
+		return fmt.Errorf("spinner: %w", err)
+	}
+	if genErr != nil {
 		fmt.Print(tui.ErrorMsg{
 			Title: "Generate failed",
 			Detail: []string{
-				err.Error(),
+				genErr.Error(),
 			},
 			Suggestions: []tui.Suggestion{
 				{Text: "Verify chunk IDs exist:", Command: "codectx query \"search terms\""},
 				{Text: "Compile documentation first:", Command: "codectx compile"},
 			},
 		}.Render())
-		return fmt.Errorf("generate failed: %w", err)
+		return fmt.Errorf("generate failed: %w", genErr)
 	}
 
 	// --- Step 4: Display summary ---

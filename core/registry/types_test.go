@@ -119,24 +119,6 @@ func TestDepKeyRepoURL(t *testing.T) {
 	}
 }
 
-func TestDepKeyRepoPath(t *testing.T) {
-	t.Parallel()
-
-	dk := DepKey{Name: "react-patterns", Org: "community", Version: "latest"}
-	if got := dk.RepoPath(); got != "community/codectx-react-patterns" {
-		t.Errorf("RepoPath() = %q, want %q", got, "community/codectx-react-patterns")
-	}
-}
-
-func TestDepKeyDirName(t *testing.T) {
-	t.Parallel()
-
-	dk := DepKey{Name: "react-patterns", Org: "community", Version: "2.3.1"}
-	if got := dk.DirName(); got != "react-patterns@community:2.3.1" {
-		t.Errorf("DirName() = %q, want %q", got, "react-patterns@community:2.3.1")
-	}
-}
-
 func TestParsePackageRef(t *testing.T) {
 	t.Parallel()
 

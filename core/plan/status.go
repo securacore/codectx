@@ -7,27 +7,27 @@ import (
 	"github.com/securacore/codectx/core/tui"
 )
 
-// FormatStatus renders the plan status output matching the spec format:
+// FormatStatus renders the plan status output with full TUI styling:
 //
-//	Plan: Authentication System Migration
-//	Status: in-progress (step 3 of 5)
-//	Progress: 2 steps completed, 1 in progress, 2 pending
+//	-> Plan: Authentication System Migration
+//	   Status: in-progress (step 3 of 5)
+//	   Progress: 2 steps completed, 1 in progress, 2 pending
 //
-//	Current step: Implement token service refactor
-//	  Started: 2025-03-07T09:00:00Z
-//	  Notes: User service and payment service updated. Order service remaining.
-//	  Stored queries:
-//	    - "token service refactor implementation"
-//	    - "order service authentication"
+//	   Current step: Implement token service refactor
+//	     Started: 2025-03-07T09:00:00Z
+//	     Notes: User service and payment service updated. Order service remaining.
+//	     Stored queries:
+//	       - "token service refactor implementation"
+//	       - "order service authentication"
 //
-//	Dependencies:
-//	  ✓ foundation/architecture-principles — unchanged
-//	  ⚠ topics/authentication/jwt-tokens — content changed since last update
-//	  ✓ topics/authentication/oauth — unchanged
+//	   Dependencies:
+//	     ✓ foundation/architecture-principles — unchanged
+//	     ⚠ topics/authentication/jwt-tokens — content changed since last update
+//	     ✓ topics/authentication/oauth — unchanged
 //
-//	Blocked steps:
-//	  Step 4 (Migration testing) — blocked by step 3
-//	  Step 5 (Production rollout) — blocked by step 4
+//	   Blocked steps:
+//	     Step 4 (Migration testing) — blocked by step 3
+//	     Step 5 (Production rollout) — blocked by step 4
 func FormatStatus(p *Plan, check *CheckResult) string {
 	var b strings.Builder
 
@@ -37,126 +37,176 @@ func FormatStatus(p *Plan, check *CheckResult) string {
 	writePlanHeader(&b, p)
 
 	// Progress.
-	fmt.Fprintf(&b, "Progress: %s\n", formatProgress(completed, inProgress, pending))
+	fmt.Fprintf(&b, "%s%s\n",
+		tui.Indent(1),
+		tui.KeyValue("Progress", formatProgress(completed, inProgress, pending)),
+	)
 
 	// Current step details.
 	if current := p.CurrentStepEntry(); current != nil {
-		b.WriteString("\n")
-		fmt.Fprintf(&b, "Current step: %s\n", current.Title)
+		fmt.Fprintf(&b, "\n%s%s %s\n",
+			tui.Indent(1),
+			tui.StyleMuted.Render("Current step:"),
+			tui.StyleBold.Render(current.Title),
+		)
 		if current.StartedAt != "" {
-			fmt.Fprintf(&b, "  Started: %s\n", current.StartedAt)
+			fmt.Fprintf(&b, "%s%s\n", tui.Indent(2), tui.KeyValue("Started", current.StartedAt))
 		}
 		if current.Notes != "" {
-			fmt.Fprintf(&b, "  Notes: %s\n", current.Notes)
+			fmt.Fprintf(&b, "%s%s\n", tui.Indent(2), tui.KeyValue("Notes", current.Notes))
 		}
 		if len(current.Queries) > 0 {
-			b.WriteString("  Stored queries:\n")
+			fmt.Fprintf(&b, "%s%s\n", tui.Indent(2), tui.StyleMuted.Render("Stored queries:"))
 			for _, q := range current.Queries {
-				fmt.Fprintf(&b, "    - %q\n", q)
+				fmt.Fprintf(&b, "%s%s %q\n",
+					tui.Indent(3),
+					tui.StyleMuted.Render("-"),
+					q,
+				)
 			}
 		}
 	}
 
 	// Dependencies.
 	if check != nil && len(check.Statuses) > 0 {
-		b.WriteString("\nDependencies:\n")
+		fmt.Fprintf(&b, "\n%s%s\n", tui.Indent(1), tui.StyleMuted.Render("Dependencies:"))
 		writeDependencyStatuses(&b, check.Statuses, "content changed since last update")
 	}
 
 	// Blocked steps.
 	blocked := p.BlockedSteps()
 	if len(blocked) > 0 {
-		b.WriteString("\nBlocked steps:\n")
+		fmt.Fprintf(&b, "\n%s%s\n", tui.Indent(1), tui.StyleMuted.Render("Blocked steps:"))
 		for _, s := range blocked {
 			blockerNames := formatBlockers(p, s.BlockedBy)
-			fmt.Fprintf(&b, "  Step %d (%s) — blocked by %s\n", s.ID, s.Title, blockerNames)
+			fmt.Fprintf(&b, "%sStep %d (%s) \u2014 %s\n",
+				tui.Indent(2),
+				s.ID,
+				tui.StyleBold.Render(s.Title),
+				tui.StyleWarning.Render("blocked by "+blockerNames),
+			)
 		}
 	}
 
+	b.WriteString("\n")
 	return b.String()
 }
 
 // FormatResumeMatch renders the output for plan resume when all hashes match.
 //
-//	Plan: Authentication System Migration
-//	Status: in-progress (step 3 of 5)
-//	Dependencies: all unchanged ✓
+//	-> Plan: Authentication System Migration
+//	   Status: in-progress (step 3 of 5)
+//	   Dependencies: all unchanged ✓
 //
-//	Replaying context for step 3...
-//	Generated: /tmp/codectx/auth-migration-step3.1741532400.md (1,847 tokens)
-//	Contains: obj:a1b2c3.04, obj:d4e5f6.02, obj:d4e5f6.03, obj:x9y8z7.01, spec:x9y8z7.01
+//	   Replaying context for step 3...
+//	   Generated: /tmp/codectx/auth-migration-step3.1741532400.md (1,847 tokens)
+//	   Contains: obj:a1b2c3.04, obj:d4e5f6.02, ...
 //
-//	Current step: Implement token service refactor
-//	Notes: User service and payment service updated. Order service remaining.
+//	   Current step: Implement token service refactor
+//	   Notes: User service and payment service updated. Order service remaining.
 func FormatResumeMatch(p *Plan, generateOutputs []string) string {
 	var b strings.Builder
 
 	writePlanHeader(&b, p)
-	fmt.Fprintf(&b, "Dependencies: all unchanged %s\n", tui.Success())
+	fmt.Fprintf(&b, "%s%s %s\n",
+		tui.Indent(1),
+		tui.KeyValue("Dependencies", "all unchanged"),
+		tui.Success(),
+	)
 
 	if len(generateOutputs) > 0 {
-		fmt.Fprintf(&b, "\nReplaying context for step %d...\n", p.CurrentStep)
+		fmt.Fprintf(&b, "\n%s%s\n",
+			tui.Indent(1),
+			tui.StyleMuted.Render(fmt.Sprintf("Replaying context for step %d...", p.CurrentStep)),
+		)
 		for _, out := range generateOutputs {
 			b.WriteString(out)
 		}
 	}
 
 	if current := p.CurrentStepEntry(); current != nil {
-		fmt.Fprintf(&b, "\nCurrent step: %s\n", current.Title)
+		fmt.Fprintf(&b, "\n%s%s %s\n",
+			tui.Indent(1),
+			tui.StyleMuted.Render("Current step:"),
+			tui.StyleBold.Render(current.Title),
+		)
 		if current.Notes != "" {
-			fmt.Fprintf(&b, "Notes: %s\n", current.Notes)
+			fmt.Fprintf(&b, "%s%s\n", tui.Indent(2), tui.KeyValue("Notes", current.Notes))
 		}
 	}
 
+	b.WriteString("\n")
 	return b.String()
 }
 
 // FormatResumeDrift renders the output for plan resume when hashes have changed.
 //
-//	Plan: Authentication System Migration
-//	Status: in-progress (step 3 of 5)
+//	-> Plan: Authentication System Migration
+//	   Status: in-progress (step 3 of 5)
 //
-//	Documentation changes since last update:
-//	  ⚠ topics/authentication/jwt-tokens — content changed
-//	  ✓ foundation/architecture-principles — unchanged
-//	  ✓ topics/authentication/oauth — unchanged
+//	   Documentation changes since last update:
+//	     ⚠ topics/authentication/jwt-tokens — content changed
+//	     ✓ foundation/architecture-principles — unchanged
+//	     ✓ topics/authentication/oauth — unchanged
 //
-//	Stored chunks may be stale. Stored queries for current step:
-//	  - "token service refactor implementation"
-//	  - "order service authentication"
+//	   Stored chunks may be stale. Stored queries for current step:
+//	     - "token service refactor implementation"
+//	     - "order service authentication"
 //
-//	Recommendation: Re-run stored queries to refresh context with updated documentation.
+//	   Recommendation: Re-run stored queries to refresh context with updated documentation.
 func FormatResumeDrift(p *Plan, check *CheckResult) string {
 	var b strings.Builder
 
 	writePlanHeader(&b, p)
 
 	// Documentation changes.
-	b.WriteString("\nDocumentation changes since last update:\n")
+	fmt.Fprintf(&b, "\n%s%s\n",
+		tui.Indent(1),
+		tui.StyleWarning.Render("Documentation changes since last update:"),
+	)
 	writeDependencyStatuses(&b, check.Statuses, "content changed")
 
 	// Stored queries.
 	if current := p.CurrentStepEntry(); current != nil && len(current.Queries) > 0 {
-		b.WriteString("\nStored chunks may be stale. Stored queries for current step:\n")
+		fmt.Fprintf(&b, "\n%s%s\n",
+			tui.Indent(1),
+			tui.StyleWarning.Render("Stored chunks may be stale. Stored queries for current step:"),
+		)
 		for _, q := range current.Queries {
-			fmt.Fprintf(&b, "  - %q\n", q)
+			fmt.Fprintf(&b, "%s%s %q\n",
+				tui.Indent(2),
+				tui.StyleMuted.Render("-"),
+				q,
+			)
 		}
 	}
 
-	b.WriteString("\nRecommendation: Re-run stored queries to refresh context with updated documentation.\n")
+	fmt.Fprintf(&b, "\n%s%s %s\n\n",
+		tui.Indent(1),
+		tui.StyleBold.Render("Recommendation:"),
+		"Re-run stored queries to refresh context with updated documentation.",
+	)
 
 	return b.String()
 }
 
-// writePlanHeader writes the common plan name and status line to the builder.
+// writePlanHeader writes the styled plan name and status line to the builder.
 func writePlanHeader(b *strings.Builder, p *Plan) {
 	total := len(p.Steps)
-	fmt.Fprintf(b, "Plan: %s\n", p.Name)
-	fmt.Fprintf(b, "Status: %s", p.Status)
+
+	fmt.Fprintf(b, "\n%s %s\n",
+		tui.Arrow(),
+		tui.KeyValue("Plan", tui.StyleBold.Render(p.Name)),
+	)
+
+	statusText := string(p.Status)
 	if p.CurrentStep > 0 {
-		fmt.Fprintf(b, " (step %d of %d)", p.CurrentStep, total)
+		statusText += fmt.Sprintf(" (step %d of %d)", p.CurrentStep, total)
 	}
-	b.WriteString("\n")
+	fmt.Fprintf(b, "%s%s\n",
+		tui.Indent(1),
+		tui.KeyValue("Status", statusText),
+	)
 }
 
 // writeDependencyStatuses writes dependency status lines to the builder.
@@ -169,9 +219,19 @@ func writeDependencyStatuses(b *strings.Builder, statuses []DependencyStatus, ch
 			if ds.Missing {
 				suffix = "not found in compiled output"
 			}
-			fmt.Fprintf(b, "  %s %s — %s\n", tui.Warning(), ds.Dependency.Path, suffix)
+			fmt.Fprintf(b, "%s%s %s \u2014 %s\n",
+				tui.Indent(2),
+				tui.Warning(),
+				tui.StylePath.Render(ds.Dependency.Path),
+				tui.StyleWarning.Render(suffix),
+			)
 		} else {
-			fmt.Fprintf(b, "  %s %s — unchanged\n", tui.Success(), ds.Dependency.Path)
+			fmt.Fprintf(b, "%s%s %s \u2014 %s\n",
+				tui.Indent(2),
+				tui.Success(),
+				tui.StylePath.Render(ds.Dependency.Path),
+				tui.StyleMuted.Render("unchanged"),
+			)
 		}
 	}
 }

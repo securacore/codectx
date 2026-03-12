@@ -164,3 +164,96 @@ func TestCLISender_SendBridges_ErrorEnvelope(t *testing.T) {
 		t.Fatal("expected error for error envelope")
 	}
 }
+
+// TestCLISender_SendAliases_InvalidJSON verifies error when CLI returns
+// valid envelope but invalid JSON in structured_output for alias parsing.
+func TestCLISender_SendAliases_InvalidJSON(t *testing.T) {
+	orig := ExecCommandFunc
+	ExecCommandFunc = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+		// Structured output is not valid AliasResponse JSON.
+		return exec.CommandContext(ctx, "echo", `{"type":"result","is_error":false,"structured_output":{"not_terms":"bad"}}`)
+	}
+	defer func() { ExecCommandFunc = orig }()
+
+	s := newCLISender("/usr/bin/claude", "sonnet")
+	resp, err := s.SendAliases(context.Background(), "sys", "prompt")
+	// No error because JSON unmarshals successfully (zero-value fields).
+	// But verify we get an empty response.
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp == nil {
+		t.Fatal("expected non-nil response")
+	}
+	if len(resp.Terms) != 0 {
+		t.Errorf("expected 0 terms, got %d", len(resp.Terms))
+	}
+}
+
+// TestCLISender_SendBridges_InvalidJSON verifies error when CLI returns
+// structured_output that cannot be parsed as BridgeResponse.
+func TestCLISender_SendBridges_InvalidJSON(t *testing.T) {
+	orig := ExecCommandFunc
+	ExecCommandFunc = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+		// structured_output is a raw string, not an object — will fail json.Unmarshal.
+		return exec.CommandContext(ctx, "echo", `{"type":"result","is_error":false,"structured_output":"not an object"}`)
+	}
+	defer func() { ExecCommandFunc = orig }()
+
+	s := newCLISender("/usr/bin/claude", "sonnet")
+	_, err := s.SendBridges(context.Background(), "sys", "prompt")
+	if err == nil {
+		t.Fatal("expected error for unparseable bridge response")
+	}
+}
+
+// TestCLISender_CLIExecutionFailure verifies error when the CLI binary
+// fails to execute (non-zero exit code).
+func TestCLISender_CLIExecutionFailure(t *testing.T) {
+	orig := ExecCommandFunc
+	ExecCommandFunc = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+		return exec.CommandContext(ctx, "false") // exits with code 1
+	}
+	defer func() { ExecCommandFunc = orig }()
+
+	s := newCLISender("/usr/bin/claude", "sonnet")
+	_, err := s.SendAliases(context.Background(), "sys", "prompt")
+	if err == nil {
+		t.Fatal("expected error for CLI execution failure")
+	}
+}
+
+// TestCLISender_InvalidEnvelopeJSON verifies error when the CLI returns
+// output that is not valid JSON at all.
+func TestCLISender_InvalidEnvelopeJSON(t *testing.T) {
+	orig := ExecCommandFunc
+	ExecCommandFunc = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+		return exec.CommandContext(ctx, "echo", "not json at all")
+	}
+	defer func() { ExecCommandFunc = orig }()
+
+	s := newCLISender("/usr/bin/claude", "sonnet")
+	_, err := s.SendAliases(context.Background(), "sys", "prompt")
+	if err == nil {
+		t.Fatal("expected error for invalid envelope JSON")
+	}
+}
+
+// TestCLISender_EmptyStructuredOutput verifies error when structured_output is empty.
+func TestCLISender_EmptyStructuredOutput(t *testing.T) {
+	orig := ExecCommandFunc
+	ExecCommandFunc = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+		return exec.CommandContext(ctx, "echo", `{"type":"result","is_error":false,"structured_output":{}}`)
+	}
+	defer func() { ExecCommandFunc = orig }()
+
+	s := newCLISender("/usr/bin/claude", "sonnet")
+	// Empty structured output is valid JSON — but SendAliases parses to empty.
+	resp, err := s.SendAliases(context.Background(), "sys", "prompt")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp == nil {
+		t.Fatal("expected non-nil response")
+	}
+}

@@ -7,7 +7,7 @@ builds:
       - CGO_ENABLED=0
     ldflags:
       - -s -w
-      - -X github.com/securacore/codectx/cmds/version.Version={{.Version}}
+      - -X github.com/securacore/codectx/core/project.Version={{.Version}}
     goos:
       - linux
       - darwin

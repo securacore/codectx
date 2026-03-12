@@ -12,6 +12,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Version is the codectx version string, set at build time via ldflags.
+// Defaults to "dev" for local development builds.
+var Version = "dev"
+
 // ConfigFileName is the expected name of the project configuration file.
 const ConfigFileName = "codectx.yml"
 
@@ -108,6 +112,15 @@ type Config struct {
 
 	// Registry is where to resolve packages. Defaults to "github.com".
 	Registry string `yaml:"registry,omitempty"`
+}
+
+// EffectiveRegistry returns the registry URL, falling back to
+// DefaultRegistry ("github.com") if the config value is empty.
+func (c *Config) EffectiveRegistry() string {
+	if c.Registry != "" {
+		return c.Registry
+	}
+	return DefaultRegistry
 }
 
 // SessionConfig defines always-loaded session context.
@@ -277,6 +290,12 @@ func ResolveEncoding(projectDir string, cfg *Config) string {
 // PreferencesConfig represents the .codectx/preferences.yml file.
 // Compiler and pipeline configuration. Checked into version control.
 type PreferencesConfig struct {
+	// AutoCompile controls whether commands that change project state
+	// (init, update) automatically run the compilation pipeline.
+	// Defaults to true when absent. Uses a pointer to distinguish
+	// "not set" (nil → default true) from "explicitly set to false".
+	AutoCompile *bool `yaml:"auto_compile,omitempty"`
+
 	// Chunking configures chunk compilation settings.
 	Chunking ChunkingConfig `yaml:"chunking"`
 
@@ -376,9 +395,34 @@ type ValidationConfig struct {
 	RequireHeadings bool `yaml:"require_headings"`
 }
 
+// EffectiveAutoCompile returns whether auto-compilation is enabled.
+// Returns true when AutoCompile is nil (field absent from config file),
+// preserving backwards compatibility for existing preferences.yml files.
+func (c *PreferencesConfig) EffectiveAutoCompile() bool {
+	if c.AutoCompile == nil {
+		return true
+	}
+	return *c.AutoCompile
+}
+
+// AutoCompileIsDefault reports whether the auto_compile setting is
+// unset (nil), meaning the effective value comes from the default.
+// Commands use this to print an informational message when the
+// default behavior is applied implicitly.
+func (c *PreferencesConfig) AutoCompileIsDefault() bool {
+	return c.AutoCompile == nil
+}
+
+// BoolPtr returns a pointer to the given bool value.
+// Used when setting *bool fields like AutoCompile in config structs.
+func BoolPtr(v bool) *bool {
+	return &v
+}
+
 // DefaultPreferencesConfig returns a PreferencesConfig with sensible defaults.
 func DefaultPreferencesConfig() PreferencesConfig {
 	return PreferencesConfig{
+		AutoCompile: BoolPtr(true),
 		Chunking: ChunkingConfig{
 			TargetTokens:      450,
 			MinTokens:         200,

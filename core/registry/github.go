@@ -3,21 +3,37 @@ package registry
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/google/go-github/v68/github"
 )
 
+// GitHubToken returns a GitHub personal access token from the environment.
+// It checks GITHUB_TOKEN first, then falls back to GH_TOKEN (used by the
+// GitHub CLI). Returns an empty string if neither is set.
+func GitHubToken() string {
+	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+		return token
+	}
+	return os.Getenv("GH_TOKEN")
+}
+
 // GitHubClient wraps the go-github client for package discovery and metadata.
-// All operations use unauthenticated API access (60 requests/hour rate limit).
+// When created without a token, uses unauthenticated access (60 requests/hour).
+// With a token (GITHUB_TOKEN), the rate limit increases to 5,000 requests/hour.
 type GitHubClient struct {
 	client *github.Client
 }
 
-// NewGitHubClient creates a new unauthenticated GitHub API client.
-func NewGitHubClient() *GitHubClient {
-	return &GitHubClient{
-		client: github.NewClient(nil),
+// NewGitHubClient creates a GitHub API client. If token is non-empty, the
+// client authenticates with it (raising the rate limit to 5,000 req/hr).
+// If token is empty, the client is unauthenticated (60 req/hr).
+func NewGitHubClient(token string) *GitHubClient {
+	client := github.NewClient(nil)
+	if token != "" {
+		client = client.WithAuthToken(token)
 	}
+	return &GitHubClient{client: client}
 }
 
 // SearchResult represents a single package found via GitHub search.

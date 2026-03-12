@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"charm.land/huh/v2/spinner"
 	"github.com/securacore/codectx/core/project"
 	corequery "github.com/securacore/codectx/core/query"
 	"github.com/securacore/codectx/core/tui"
@@ -73,18 +74,29 @@ func run(_ context.Context, cmd *cli.Command) error {
 	topN := resolveTopN(int(cmd.Int("top")), projectDir, cfg)
 
 	// --- Step 4: Run the query ---
-	result, err := corequery.RunQuery(compiledDir, queryStr, topN)
+	var result *corequery.QueryResult
+	var queryErr error
+
+	err = spinner.New().
+		Title("Searching compiled documentation...").
+		Action(func() {
+			result, queryErr = corequery.RunQuery(compiledDir, queryStr, topN)
+		}).
+		Run()
 	if err != nil {
+		return fmt.Errorf("spinner: %w", err)
+	}
+	if queryErr != nil {
 		fmt.Print(tui.ErrorMsg{
 			Title: "Query failed",
 			Detail: []string{
-				err.Error(),
+				queryErr.Error(),
 			},
 			Suggestions: []tui.Suggestion{
 				{Text: "Compile documentation first:", Command: "codectx compile"},
 			},
 		}.Render())
-		return fmt.Errorf("query failed: %w", err)
+		return fmt.Errorf("query failed: %w", queryErr)
 	}
 
 	// --- Step 5: Display results ---

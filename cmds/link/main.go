@@ -70,7 +70,7 @@ func run(_ context.Context, cmd *cli.Command) error {
 			return err
 		}
 		if len(selected) == 0 {
-			fmt.Printf("\n%s No integrations selected.\n\n", tui.StyleMuted.Render("->"))
+			fmt.Printf("\n%s No integrations selected.\n\n", tui.StyleMuted.Render(tui.IconArrow))
 			return nil
 		}
 	default:

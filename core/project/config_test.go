@@ -674,3 +674,160 @@ func TestEffectiveBudget_CustomBudget(t *testing.T) {
 		t.Errorf("EffectiveBudget() = %d, want 50000", got)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Config.EffectiveRegistry
+// ---------------------------------------------------------------------------
+
+func TestEffectiveRegistry_EmptyFallsBack(t *testing.T) {
+	cfg := &project.Config{Registry: ""}
+	if got := cfg.EffectiveRegistry(); got != project.DefaultRegistry {
+		t.Errorf("EffectiveRegistry() = %q, want %q", got, project.DefaultRegistry)
+	}
+}
+
+func TestEffectiveRegistry_CustomValue(t *testing.T) {
+	cfg := &project.Config{Registry: "gitlab.com"}
+	if got := cfg.EffectiveRegistry(); got != "gitlab.com" {
+		t.Errorf("EffectiveRegistry() = %q, want %q", got, "gitlab.com")
+	}
+}
+
+func TestEffectiveRegistry_DefaultRegistryPassthrough(t *testing.T) {
+	cfg := &project.Config{Registry: project.DefaultRegistry}
+	if got := cfg.EffectiveRegistry(); got != project.DefaultRegistry {
+		t.Errorf("EffectiveRegistry() = %q, want %q", got, project.DefaultRegistry)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// PreferencesConfig.EffectiveAutoCompile / AutoCompileIsDefault
+// ---------------------------------------------------------------------------
+
+func TestEffectiveAutoCompile_NilDefaultsTrue(t *testing.T) {
+	cfg := &project.PreferencesConfig{AutoCompile: nil}
+	if got := cfg.EffectiveAutoCompile(); !got {
+		t.Error("EffectiveAutoCompile() with nil should return true")
+	}
+}
+
+func TestEffectiveAutoCompile_ExplicitTrue(t *testing.T) {
+	cfg := &project.PreferencesConfig{AutoCompile: project.BoolPtr(true)}
+	if got := cfg.EffectiveAutoCompile(); !got {
+		t.Error("EffectiveAutoCompile() with explicit true should return true")
+	}
+}
+
+func TestEffectiveAutoCompile_ExplicitFalse(t *testing.T) {
+	cfg := &project.PreferencesConfig{AutoCompile: project.BoolPtr(false)}
+	if got := cfg.EffectiveAutoCompile(); got {
+		t.Error("EffectiveAutoCompile() with explicit false should return false")
+	}
+}
+
+func TestAutoCompileIsDefault_Nil(t *testing.T) {
+	cfg := &project.PreferencesConfig{AutoCompile: nil}
+	if !cfg.AutoCompileIsDefault() {
+		t.Error("AutoCompileIsDefault() with nil should return true")
+	}
+}
+
+func TestAutoCompileIsDefault_ExplicitTrue(t *testing.T) {
+	cfg := &project.PreferencesConfig{AutoCompile: project.BoolPtr(true)}
+	if cfg.AutoCompileIsDefault() {
+		t.Error("AutoCompileIsDefault() with explicit true should return false")
+	}
+}
+
+func TestAutoCompileIsDefault_ExplicitFalse(t *testing.T) {
+	cfg := &project.PreferencesConfig{AutoCompile: project.BoolPtr(false)}
+	if cfg.AutoCompileIsDefault() {
+		t.Error("AutoCompileIsDefault() with explicit false should return false")
+	}
+}
+
+func TestAutoCompile_Roundtrip_ExplicitFalse(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "preferences.yml")
+
+	original := project.DefaultPreferencesConfig()
+	original.AutoCompile = project.BoolPtr(false)
+
+	if err := original.WriteToFile(path); err != nil {
+		t.Fatalf("writing preferences config: %v", err)
+	}
+
+	loaded, err := project.LoadPreferencesConfig(path)
+	if err != nil {
+		t.Fatalf("loading preferences config: %v", err)
+	}
+
+	if loaded.AutoCompile == nil {
+		t.Fatal("expected AutoCompile to be non-nil after roundtrip")
+	}
+	if *loaded.AutoCompile {
+		t.Error("expected AutoCompile to be false after roundtrip")
+	}
+}
+
+func TestAutoCompile_Roundtrip_ExplicitTrue(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "preferences.yml")
+
+	original := project.DefaultPreferencesConfig()
+	// DefaultPreferencesConfig already sets AutoCompile to &true.
+
+	if err := original.WriteToFile(path); err != nil {
+		t.Fatalf("writing preferences config: %v", err)
+	}
+
+	loaded, err := project.LoadPreferencesConfig(path)
+	if err != nil {
+		t.Fatalf("loading preferences config: %v", err)
+	}
+
+	if loaded.AutoCompile == nil {
+		t.Fatal("expected AutoCompile to be non-nil after roundtrip")
+	}
+	if !*loaded.AutoCompile {
+		t.Error("expected AutoCompile to be true after roundtrip")
+	}
+}
+
+func TestAutoCompile_MissingField_DefaultsTrue(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "preferences.yml")
+
+	// Write a preferences file WITHOUT auto_compile field.
+	content := "chunking:\n  target_tokens: 450\n"
+	if err := os.WriteFile(path, []byte(content), project.FilePerm); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := project.LoadPreferencesConfig(path)
+	if err != nil {
+		t.Fatalf("loading preferences config: %v", err)
+	}
+
+	if loaded.AutoCompile != nil {
+		t.Error("expected AutoCompile to be nil when field is absent")
+	}
+	if !loaded.EffectiveAutoCompile() {
+		t.Error("expected EffectiveAutoCompile() to return true when field is absent")
+	}
+	if !loaded.AutoCompileIsDefault() {
+		t.Error("expected AutoCompileIsDefault() to return true when field is absent")
+	}
+}
+
+func TestBoolPtr(t *testing.T) {
+	truePtr := project.BoolPtr(true)
+	if truePtr == nil || !*truePtr {
+		t.Error("BoolPtr(true) should return pointer to true")
+	}
+
+	falsePtr := project.BoolPtr(false)
+	if falsePtr == nil || *falsePtr {
+		t.Error("BoolPtr(false) should return pointer to false")
+	}
+}

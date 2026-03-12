@@ -240,6 +240,82 @@ func TestAugment_FullPath_WithMockSender(t *testing.T) {
 	}
 }
 
+func TestReadInstructions_EmptyDir(t *testing.T) {
+	// Empty instructionsDir should fall back to embedded.
+	instructions := readInstructions("", "taxonomy-generation", "defaults/taxonomy-generation.md")
+	if instructions == "" {
+		t.Fatal("expected non-empty instructions from embedded fallback when dir is empty")
+	}
+}
+
+func TestReadInstructions_EmptyFileOnDisk(t *testing.T) {
+	dir := t.TempDir()
+
+	// Write an empty instruction file — should fall back to embedded.
+	topicDir := filepath.Join(dir, "taxonomy-generation")
+	if err := os.MkdirAll(topicDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(topicDir, "README.md"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	instructions := readInstructions(dir, "taxonomy-generation", "defaults/taxonomy-generation.md")
+	if instructions == "" {
+		t.Fatal("expected non-empty instructions from embedded fallback when file is empty")
+	}
+	// Should not be the empty string — should be the embedded content.
+	if len(instructions) < 50 {
+		t.Errorf("expected substantial embedded fallback content, got %d bytes", len(instructions))
+	}
+}
+
+func TestAugment_TaxonomyOnly_NoBridges(t *testing.T) {
+	// Test Augment with taxonomy terms but no chunks.
+	origLookPath := LookPathFunc
+	LookPathFunc = func(name string) (string, error) {
+		if name == "claude" {
+			return "/usr/bin/claude", nil
+		}
+		return "", &lookPathError{}
+	}
+	defer func() { LookPathFunc = origLookPath }()
+
+	origExec := ExecCommandFunc
+	ExecCommandFunc = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+		return exec.CommandContext(ctx, "echo", `{"type":"result","is_error":false,"structured_output":{"terms":[{"key":"auth","aliases":["authentication"]}]}}`)
+	}
+	defer func() { ExecCommandFunc = origExec }()
+
+	cfg := AugmentConfig{
+		Provider:     "cli",
+		Model:        "sonnet",
+		ClaudeBinary: "claude",
+		Taxonomy: &taxonomy.Taxonomy{
+			Terms: map[string]*taxonomy.Term{
+				"auth": {Canonical: "Auth", Source: "heading"},
+			},
+		},
+		Chunks: nil, // No chunks
+		TaxonomyConfig: project.TaxonomyConfig{
+			LLMAliasGeneration: true,
+			MaxAliasCount:      5,
+		},
+	}
+
+	result := Augment(context.Background(), cfg)
+
+	if result.Skipped {
+		t.Fatalf("expected not skipped, got reason: %q", result.SkipReason)
+	}
+	if result.AliasCount == 0 {
+		t.Error("expected aliases to be generated")
+	}
+	if result.BridgeCount != 0 {
+		t.Errorf("expected 0 bridges with no chunks, got %d", result.BridgeCount)
+	}
+}
+
 func TestAugment_NoSenderAvailable(t *testing.T) {
 	cfg := AugmentConfig{
 		Provider: "api",

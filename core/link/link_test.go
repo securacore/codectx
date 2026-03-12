@@ -337,45 +337,6 @@ func TestNeedsUpdate_NoFiles(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// LinkedIntegrations
-// ---------------------------------------------------------------------------
-
-func TestLinkedIntegrations_DetectsCodectxFiles(t *testing.T) {
-	dir := t.TempDir()
-	contextPath := "docs/.codectx/compiled/context.md"
-
-	_, err := link.Write(dir, contextPath, []link.Integration{link.Claude, link.Agents})
-	if err != nil {
-		t.Fatalf("Write: %v", err)
-	}
-
-	linked := link.LinkedIntegrations(dir)
-	if !containsIntegration(linked, link.Claude) {
-		t.Error("expected Claude to be linked")
-	}
-	if !containsIntegration(linked, link.Agents) {
-		t.Error("expected Agents to be linked")
-	}
-	if containsIntegration(linked, link.Cursor) {
-		t.Error("expected Cursor to not be linked")
-	}
-}
-
-func TestLinkedIntegrations_IgnoresNonCodectxFiles(t *testing.T) {
-	dir := t.TempDir()
-
-	// Write a non-codectx CLAUDE.md.
-	if err := os.WriteFile(filepath.Join(dir, "CLAUDE.md"), []byte("# Custom\n"), project.FilePerm); err != nil {
-		t.Fatal(err)
-	}
-
-	linked := link.LinkedIntegrations(dir)
-	if containsIntegration(linked, link.Claude) {
-		t.Error("should not detect non-codectx file as linked")
-	}
-}
-
-// ---------------------------------------------------------------------------
 // NeedsUpdate — nonexistent entry point file
 // ---------------------------------------------------------------------------
 
@@ -452,6 +413,100 @@ func TestRenderLinkResults_MultipleResults(t *testing.T) {
 	}
 	if !strings.Contains(got, ".cursorrules") {
 		t.Error("expected .cursorrules")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// InfoByType — unknown type
+// ---------------------------------------------------------------------------
+
+func TestInfoByType_UnknownType(t *testing.T) {
+	info := link.InfoByType(link.Integration(999))
+	if info.Name != "" {
+		t.Errorf("expected empty Name for unknown type, got %q", info.Name)
+	}
+	if info.FilePath != "" {
+		t.Errorf("expected empty FilePath for unknown type, got %q", info.FilePath)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Write — unknown integration (skipped)
+// ---------------------------------------------------------------------------
+
+func TestWrite_UnknownIntegration_Skipped(t *testing.T) {
+	dir := t.TempDir()
+
+	// An unknown integration type should be silently skipped.
+	results, err := link.Write(dir, "context.md", []link.Integration{link.Integration(999)})
+	if err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("expected 0 results for unknown integration, got %d", len(results))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Write — error: non-writable parent directory
+// ---------------------------------------------------------------------------
+
+func TestWrite_NonWritableParentDir(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a read-only directory to force MkdirAll failure for Copilot
+	// (.github/copilot-instructions.md needs .github/ created).
+	githubDir := filepath.Join(dir, ".github")
+	// Create .github as a file (not a directory) to cause MkdirAll to fail.
+	if err := os.WriteFile(githubDir, []byte("not a directory"), project.FilePerm); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := link.Write(dir, "context.md", []link.Integration{link.Copilot})
+	if err == nil {
+		t.Error("expected error when parent directory creation fails")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Write — error: write to non-writable location
+// ---------------------------------------------------------------------------
+
+func TestWrite_WriteFileError(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create CLAUDE.md as a directory to cause WriteFile to fail.
+	claudeDir := filepath.Join(dir, "CLAUDE.md")
+	if err := os.MkdirAll(claudeDir, project.DirPerm); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := link.Write(dir, "context.md", []link.Integration{link.Claude})
+	if err == nil {
+		t.Error("expected error when file write fails")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Write — backup error: unreadable existing file
+// ---------------------------------------------------------------------------
+
+func TestWrite_BackupError_UnreadableFile(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create an existing CLAUDE.md that is not readable.
+	claudePath := filepath.Join(dir, "CLAUDE.md")
+	if err := os.WriteFile(claudePath, []byte("existing"), project.FilePerm); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(claudePath, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(claudePath, project.FilePerm) })
+
+	_, err := link.Write(dir, "context.md", []link.Integration{link.Claude})
+	if err == nil {
+		t.Error("expected error when backup cannot read existing file")
 	}
 }
 

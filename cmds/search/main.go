@@ -50,8 +50,9 @@ func run(ctx context.Context, cmd *cli.Command) error {
 
 	limit := int(cmd.Int("limit"))
 
-	gh := registry.NewGitHubClient()
-	gitClient := registry.NewGitClient()
+	token := registry.GitHubToken()
+	gh := registry.NewGitHubClient(token)
+	gitClient := registry.NewGitClient(token)
 
 	var results []registry.SearchResult
 	var searchErr error
@@ -106,45 +107,62 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	// Render results.
-	fmt.Printf("\nSearch results for: %q\n\n", query)
+	fmt.Print(renderSearchResults(query, results))
+
+	return nil
+}
+
+// renderSearchResults formats the search results for terminal display.
+func renderSearchResults(query string, results []registry.SearchResult) string {
+	var b strings.Builder
+
+	fmt.Fprintf(&b, "\n%s Results for: %s\n\n",
+		tui.Arrow(),
+		tui.StyleBold.Render(fmt.Sprintf("%q", query)),
+	)
 
 	for i, r := range results {
-		version := r.LatestVersion
-		if version == "" {
-			version = "no tags"
-		}
-
-		// 1. react-patterns@community (v2.4.0) ★ 342
-		fmt.Printf("%s%d. %s (v%s)",
-			tui.Indent(1),
-			i+1,
-			tui.StyleAccent.Render(r.Name+"@"+r.Org),
-			version,
-		)
-		if r.Stars > 0 {
-			fmt.Printf(" %s %d", tui.StyleMuted.Render("*"), r.Stars)
-		}
-		fmt.Println()
-
-		// github.com/community/codectx-react-patterns
-		fmt.Printf("%s%s\n", tui.Indent(2), tui.StyleMuted.Render(r.FullName))
-
-		// Description
-		if r.Description != "" {
-			fmt.Printf("%s%s\n", tui.Indent(2), r.Description)
-		}
-
-		fmt.Println()
+		b.WriteString(formatResult(i+1, r))
 	}
 
 	if len(results) > 0 {
 		example := results[0]
-		fmt.Printf("Install with: %s\n\n",
+		fmt.Fprintf(&b, "Install with: %s\n\n",
 			tui.StyleCommand.Render(
 				fmt.Sprintf("codectx install %s@%s:latest", example.Name, example.Org),
 			),
 		)
 	}
 
-	return nil
+	return b.String()
+}
+
+// formatResult formats a single search result entry.
+func formatResult(index int, r registry.SearchResult) string {
+	var b strings.Builder
+
+	version := r.LatestVersion
+	if version == "" {
+		version = "no tags"
+	}
+
+	fmt.Fprintf(&b, "%s%d. %s (v%s)",
+		tui.Indent(1),
+		index,
+		tui.StyleAccent.Render(r.Name+"@"+r.Org),
+		version,
+	)
+	if r.Stars > 0 {
+		fmt.Fprintf(&b, " %s %d", tui.StyleMuted.Render("*"), r.Stars)
+	}
+	b.WriteString("\n")
+
+	fmt.Fprintf(&b, "%s%s\n", tui.Indent(2), tui.StyleMuted.Render(r.FullName))
+
+	if r.Description != "" {
+		fmt.Fprintf(&b, "%s%s\n", tui.Indent(2), r.Description)
+	}
+
+	b.WriteString("\n")
+	return b.String()
 }

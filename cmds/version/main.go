@@ -5,18 +5,16 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/securacore/codectx/core/project"
 	"github.com/urfave/cli/v3"
 )
-
-// Version is set at build time via ldflags by goreleaser.
-var Version = "dev"
 
 // Command is the CLI definition for `codectx version`.
 var Command = &cli.Command{
 	Name:  "version",
 	Usage: "Print the codectx version",
 	Action: func(_ context.Context, _ *cli.Command) error {
-		fmt.Println(Version)
+		fmt.Println(project.Version)
 		return nil
 	},
 }

@@ -102,6 +102,27 @@ func TestLoadLockInvalidYAML(t *testing.T) {
 	}
 }
 
+func TestLoadLock_NilPackages(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, LockFileName)
+	// YAML with no packages key — should initialize Packages map.
+	testutil.MustWriteFile(t, path, "lockfile_version: 1\nresolved_at: \"2025-03-09T12:00:00Z\"\n")
+
+	lf, err := LoadLock(path)
+	if err != nil {
+		t.Fatalf("LoadLock: %v", err)
+	}
+
+	if lf.Packages == nil {
+		t.Error("expected Packages to be initialized (non-nil)")
+	}
+	if len(lf.Packages) != 0 {
+		t.Errorf("expected 0 packages, got %d", len(lf.Packages))
+	}
+}
+
 func TestSaveLockRoundTrip(t *testing.T) {
 	t.Parallel()
 
@@ -148,10 +169,10 @@ func TestSaveLockRoundTrip(t *testing.T) {
 	}
 }
 
-func TestNewLockFile(t *testing.T) {
+func Test_newLockFile(t *testing.T) {
 	t.Parallel()
 
-	lf := NewLockFile()
+	lf := newLockFile()
 	if lf.LockfileVersion != LockVersion {
 		t.Errorf("LockfileVersion = %d, want %d", lf.LockfileVersion, LockVersion)
 	}

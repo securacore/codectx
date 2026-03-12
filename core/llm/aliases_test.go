@@ -240,6 +240,25 @@ func TestGroupByBranch(t *testing.T) {
 	}
 }
 
+func TestGenerateAliases_DefaultBatchAndMaxAlias(t *testing.T) {
+	// Pass 0 for both batchSize and maxAliasCount to trigger defaults.
+	sender := &mockSender{
+		aliasResponses: []*AliasResponse{
+			{Terms: []AliasTermResponse{{Key: "auth", Aliases: []string{"login"}}}},
+		},
+	}
+
+	terms := []*AliasRequest{
+		{Key: "auth", Canonical: "Auth", Source: "heading"},
+	}
+
+	result := GenerateAliases(context.Background(), sender, terms, "instructions", 0, 0)
+
+	if result.TotalAliases != 1 {
+		t.Errorf("expected 1 alias, got %d", result.TotalAliases)
+	}
+}
+
 func TestApplyMaxAliases(t *testing.T) {
 	resp := &AliasResponse{
 		Terms: []AliasTermResponse{

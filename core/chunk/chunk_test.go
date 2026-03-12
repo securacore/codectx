@@ -941,25 +941,6 @@ func TestOutputFilename(t *testing.T) {
 	}
 }
 
-func TestOutputPath(t *testing.T) {
-	tests := []struct {
-		id       string
-		typ      chunk.ChunkType
-		expected string
-	}{
-		{"obj:abc123.1", chunk.ChunkObject, "compiled/objects/abc123.1.md"},
-		{"spec:def456.2", chunk.ChunkSpec, "compiled/specs/def456.2.md"},
-		{"sys:ghi789.3", chunk.ChunkSystem, "compiled/system/ghi789.3.md"},
-	}
-	for _, tt := range tests {
-		c := &chunk.Chunk{ID: tt.id, Type: tt.typ}
-		got := chunk.OutputPath(c)
-		if got != tt.expected {
-			t.Errorf("OutputPath({ID: %q, Type: %s}) = %q, want %q", tt.id, tt.typ, got, tt.expected)
-		}
-	}
-}
-
 // ---------------------------------------------------------------------------
 // Edge case tests
 // ---------------------------------------------------------------------------
@@ -1292,13 +1273,6 @@ func TestRender_NilChunk(t *testing.T) {
 
 func TestOutputFilename_NilChunk(t *testing.T) {
 	got := chunk.OutputFilename(nil)
-	if got != "" {
-		t.Errorf("expected empty string for nil chunk, got %q", got)
-	}
-}
-
-func TestOutputPath_NilChunk(t *testing.T) {
-	got := chunk.OutputPath(nil)
 	if got != "" {
 		t.Errorf("expected empty string for nil chunk, got %q", got)
 	}

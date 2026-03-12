@@ -5,11 +5,12 @@ import (
 	"testing"
 
 	"github.com/securacore/codectx/cmds/version"
+	"github.com/securacore/codectx/core/project"
 )
 
 func TestVersion_DefaultIsDev(t *testing.T) {
-	if version.Version != "dev" {
-		t.Errorf("expected default version %q, got %q", "dev", version.Version)
+	if project.Version != "dev" {
+		t.Errorf("expected default version %q, got %q", "dev", project.Version)
 	}
 }
 
@@ -35,11 +36,11 @@ func TestVersion_ActionReturnsNil(t *testing.T) {
 }
 
 func TestVersion_CanOverride(t *testing.T) {
-	original := version.Version
-	defer func() { version.Version = original }()
+	original := project.Version
+	defer func() { project.Version = original }()
 
-	version.Version = "1.2.3"
-	if version.Version != "1.2.3" {
-		t.Errorf("expected overridden version %q, got %q", "1.2.3", version.Version)
+	project.Version = "1.2.3"
+	if project.Version != "1.2.3" {
+		t.Errorf("expected overridden version %q, got %q", "1.2.3", project.Version)
 	}
 }

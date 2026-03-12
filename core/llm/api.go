@@ -26,8 +26,9 @@ type apiSender struct {
 }
 
 // newAPISender creates an API sender from an API key and model name.
-func newAPISender(apiKey, model string) (*apiSender, error) {
-	client := anthropic.NewClient(option.WithAPIKey(apiKey))
+func newAPISender(apiKey, model string, opts ...option.RequestOption) (*apiSender, error) {
+	allOpts := append([]option.RequestOption{option.WithAPIKey(apiKey)}, opts...)
+	client := anthropic.NewClient(allOpts...)
 	return &apiSender{
 		client: &client,
 		model:  model,

@@ -12,6 +12,7 @@ func TestIcons_AreNotEmpty(t *testing.T) {
 		"IconSuccess": tui.IconSuccess,
 		"IconWarning": tui.IconWarning,
 		"IconError":   tui.IconError,
+		"IconArrow":   tui.IconArrow,
 		"IconIndent":  tui.IconIndent,
 	}
 	for name, icon := range icons {
@@ -53,6 +54,20 @@ func TestErrorIcon_RendersNonEmpty(t *testing.T) {
 	result := tui.ErrorIcon()
 	if result == "" {
 		t.Error("ErrorIcon() should render non-empty string")
+	}
+}
+
+func TestArrow_RendersNonEmpty(t *testing.T) {
+	result := tui.Arrow()
+	if result == "" {
+		t.Error("Arrow() should render non-empty string")
+	}
+}
+
+func TestArrow_ContainsIcon(t *testing.T) {
+	result := tui.Arrow()
+	if !strings.Contains(result, tui.IconArrow) {
+		t.Errorf("Arrow() should contain IconArrow %q, got %q", tui.IconArrow, result)
 	}
 }
 

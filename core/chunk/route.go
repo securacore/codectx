@@ -30,16 +30,6 @@ func OutputFilename(c *Chunk) string {
 	return parts[1] + ".md"
 }
 
-// OutputPath returns the full relative path under compiled/ for a chunk.
-// E.g. "compiled/objects/a1b2c3d4e5f67890.3.md"
-// Returns an empty string for nil chunks.
-func OutputPath(c *Chunk) string {
-	if c == nil {
-		return ""
-	}
-	return filepath.Join(project.CompiledDir, OutputDir(c.Type), OutputFilename(c))
-}
-
 // CompiledOutputDirs returns the list of all compiled output subdirectory
 // paths (chunk dirs + BM25 dirs) relative to the compiled directory.
 // Used by both scaffold (to create dirs) and compile (to clean/recreate).

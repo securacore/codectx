@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"charm.land/huh/v2/spinner"
 	"github.com/securacore/codectx/core/manifest"
 	coreplan "github.com/securacore/codectx/core/plan"
 	"github.com/securacore/codectx/core/project"
@@ -84,47 +85,62 @@ func runStatus(_ context.Context, cmd *cli.Command) error {
 		planName = cmd.Args().First()
 	}
 
-	// Find the plan.
-	_, planPath, err := coreplan.FindPlan(rootDir, planName)
+	// Find, load, and check the plan inside a spinner.
+	var p *coreplan.Plan
+	var check *coreplan.CheckResult
+	var statusErr error
+	var hashWarn string
+
+	err = spinner.New().
+		Title("Loading plan status...").
+		Action(func() {
+			_, planPath, findErr := coreplan.FindPlan(rootDir, planName)
+			if findErr != nil {
+				statusErr = fmt.Errorf("finding plan: %w", findErr)
+				return
+			}
+
+			var loadErr error
+			p, loadErr = coreplan.Load(planPath)
+			if loadErr != nil {
+				statusErr = fmt.Errorf("loading plan: %w", loadErr)
+				return
+			}
+
+			if len(p.Dependencies) > 0 {
+				compiledDir := corequery.CompiledDir(projectDir, cfg)
+				hashesPath := manifest.HashesPath(compiledDir)
+				hashes, hashErr := manifest.LoadHashes(hashesPath)
+				if hashErr != nil {
+					hashWarn = hashErr.Error()
+				} else {
+					check = coreplan.CheckDependencies(p.Dependencies, hashes)
+				}
+			}
+		}).
+		Run()
 	if err != nil {
+		return fmt.Errorf("spinner: %w", err)
+	}
+	if statusErr != nil {
 		fmt.Print(tui.ErrorMsg{
 			Title:  "Plan not found",
-			Detail: []string{err.Error()},
+			Detail: []string{statusErr.Error()},
 			Suggestions: []tui.Suggestion{
 				{Text: "List plans in:", Command: fmt.Sprintf("ls %s/plans/", rootDir)},
 			},
 		}.Render())
-		return fmt.Errorf("finding plan: %w", err)
+		return statusErr
 	}
 
-	// Load the plan.
-	p, err := coreplan.Load(planPath)
-	if err != nil {
-		fmt.Print(tui.ErrorMsg{
-			Title:  "Failed to load plan",
-			Detail: []string{err.Error()},
+	if hashWarn != "" {
+		fmt.Print(tui.WarnMsg{
+			Title: "Could not load compiled hashes for dependency checking",
+			Detail: []string{
+				hashWarn,
+				"Dependency status will not be shown.",
+			},
 		}.Render())
-		return fmt.Errorf("loading plan: %w", err)
-	}
-
-	// Check dependency hashes if plan has dependencies.
-	var check *coreplan.CheckResult
-	if len(p.Dependencies) > 0 {
-		compiledDir := corequery.CompiledDir(projectDir, cfg)
-		hashesPath := manifest.HashesPath(compiledDir)
-		hashes, hashErr := manifest.LoadHashes(hashesPath)
-		if hashErr != nil {
-			// Hashes not available — show status without dependency check.
-			fmt.Print(tui.WarnMsg{
-				Title: "Could not load compiled hashes for dependency checking",
-				Detail: []string{
-					hashErr.Error(),
-					"Dependency status will not be shown.",
-				},
-			}.Render())
-		} else {
-			check = coreplan.CheckDependencies(p.Dependencies, hashes)
-		}
 	}
 
 	fmt.Print(coreplan.FormatStatus(p, check))
@@ -163,18 +179,29 @@ func runResume(_ context.Context, cmd *cli.Command) error {
 	compiledDir := corequery.CompiledDir(projectDir, cfg)
 	encoding := project.ResolveEncoding(projectDir, cfg)
 
-	// Run resume.
-	result, err := coreplan.Resume(planPath, compiledDir, encoding)
+	// Run resume inside a spinner.
+	var result *coreplan.ResumeResult
+	var resumeErr error
+
+	err = spinner.New().
+		Title("Resuming plan...").
+		Action(func() {
+			result, resumeErr = coreplan.Resume(planPath, compiledDir, encoding)
+		}).
+		Run()
 	if err != nil {
+		return fmt.Errorf("spinner: %w", err)
+	}
+	if resumeErr != nil {
 		fmt.Print(tui.ErrorMsg{
 			Title:  "Resume failed",
-			Detail: []string{err.Error()},
+			Detail: []string{resumeErr.Error()},
 			Suggestions: []tui.Suggestion{
 				{Text: "Check plan file:", Command: fmt.Sprintf("cat %s", planPath)},
 				{Text: "Compile documentation first:", Command: "codectx compile"},
 			},
 		}.Render())
-		return fmt.Errorf("resume failed: %w", err)
+		return fmt.Errorf("resume failed: %w", resumeErr)
 	}
 
 	fmt.Print(result.Output)

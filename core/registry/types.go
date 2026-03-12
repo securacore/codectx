@@ -107,18 +107,6 @@ func (dk DepKey) RepoURL(registry string) string {
 	return "https://" + registry + "/" + dk.Org + "/" + dk.RepoName()
 }
 
-// RepoPath returns the GitHub owner/repo path without protocol.
-// Example: "community/codectx-react-patterns"
-func (dk DepKey) RepoPath() string {
-	return dk.Org + "/" + dk.RepoName()
-}
-
-// DirName returns the directory name for this package under .codectx/packages/.
-// Uses the full key format "name@org:version" to match the dependency map key.
-func (dk DepKey) DirName() string {
-	return dk.String()
-}
-
 // ParsePackageRef parses a short package reference "name@org" into name and org.
 // This format is used in lock file keys and session context references.
 func ParsePackageRef(ref string) (name, org string, err error) {

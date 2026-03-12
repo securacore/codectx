@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -116,11 +117,11 @@ func makeCommit(t *testing.T, repo *git.Repository, dir, filename, content strin
 	return hash
 }
 
-func TestListTags_Empty(t *testing.T) {
+func Test_listTags_Empty(t *testing.T) {
 	repo, _ := initTestRepo(t)
-	gc := NewGitClient()
+	gc := NewGitClient("")
 
-	tags, err := gc.ListTags(repo)
+	tags, err := gc.listTags(repo)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -129,15 +130,15 @@ func TestListTags_Empty(t *testing.T) {
 	}
 }
 
-func TestListTags_MultipleTags(t *testing.T) {
+func Test_listTags_MultipleTags(t *testing.T) {
 	repo, _ := initTestRepo(t)
-	gc := NewGitClient()
+	gc := NewGitClient("")
 
 	addTagToRepo(t, repo, "v1.0.0")
 	addTagToRepo(t, repo, "v1.1.0")
 	addTagToRepo(t, repo, "v2.0.0")
 
-	tags, err := gc.ListTags(repo)
+	tags, err := gc.listTags(repo)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -159,7 +160,7 @@ func TestListTags_MultipleTags(t *testing.T) {
 
 func TestTagCommitSHA_LightweightTag(t *testing.T) {
 	repo, _ := initTestRepo(t)
-	gc := NewGitClient()
+	gc := NewGitClient("")
 
 	head, err := repo.Head()
 	if err != nil {
@@ -180,7 +181,7 @@ func TestTagCommitSHA_LightweightTag(t *testing.T) {
 
 func TestTagCommitSHA_AnnotatedTag(t *testing.T) {
 	repo, _ := initTestRepo(t)
-	gc := NewGitClient()
+	gc := NewGitClient("")
 
 	head, err := repo.Head()
 	if err != nil {
@@ -201,7 +202,7 @@ func TestTagCommitSHA_AnnotatedTag(t *testing.T) {
 
 func TestTagCommitSHA_NotFound(t *testing.T) {
 	repo, _ := initTestRepo(t)
-	gc := NewGitClient()
+	gc := NewGitClient("")
 
 	_, err := gc.TagCommitSHA(repo, "v99.99.99")
 	if err == nil {
@@ -211,7 +212,7 @@ func TestTagCommitSHA_NotFound(t *testing.T) {
 
 func TestCheckoutTag(t *testing.T) {
 	repo, dir := initTestRepo(t)
-	gc := NewGitClient()
+	gc := NewGitClient("")
 
 	// Create a second commit with a new file.
 	makeCommit(t, repo, dir, "second.md", "# Second\n")
@@ -245,7 +246,7 @@ func TestCheckoutTag(t *testing.T) {
 
 func TestCreateLightweightTag(t *testing.T) {
 	repo, _ := initTestRepo(t)
-	gc := NewGitClient()
+	gc := NewGitClient("")
 
 	err := gc.CreateLightweightTag(repo, "v1.0.0")
 	if err != nil {
@@ -253,7 +254,7 @@ func TestCreateLightweightTag(t *testing.T) {
 	}
 
 	// Verify the tag exists.
-	tags, err := gc.ListTags(repo)
+	tags, err := gc.listTags(repo)
 	if err != nil {
 		t.Fatalf("list tags: %v", err)
 	}
@@ -271,7 +272,7 @@ func TestCreateLightweightTag(t *testing.T) {
 
 func TestCreateLightweightTag_Duplicate(t *testing.T) {
 	repo, _ := initTestRepo(t)
-	gc := NewGitClient()
+	gc := NewGitClient("")
 
 	if err := gc.CreateLightweightTag(repo, "v1.0.0"); err != nil {
 		t.Fatalf("first tag: %v", err)
@@ -285,7 +286,7 @@ func TestCreateLightweightTag_Duplicate(t *testing.T) {
 
 func TestTagExists(t *testing.T) {
 	repo, _ := initTestRepo(t)
-	gc := NewGitClient()
+	gc := NewGitClient("")
 
 	if gc.TagExists(repo, "v1.0.0") {
 		t.Error("tag should not exist yet")
@@ -300,7 +301,7 @@ func TestTagExists(t *testing.T) {
 
 func TestHeadCommitSHA(t *testing.T) {
 	repo, _ := initTestRepo(t)
-	gc := NewGitClient()
+	gc := NewGitClient("")
 
 	sha, err := gc.HeadCommitSHA(repo)
 	if err != nil {
@@ -326,7 +327,7 @@ func TestClone_LocalRepo(t *testing.T) {
 
 	// Clone it to a new directory.
 	destDir := filepath.Join(t.TempDir(), "clone")
-	gc := NewGitClient()
+	gc := NewGitClient("")
 
 	repo, err := gc.Clone(context.Background(), sourceDir, destDir)
 	if err != nil {
@@ -334,7 +335,7 @@ func TestClone_LocalRepo(t *testing.T) {
 	}
 
 	// Verify the clone has the tag.
-	tags, err := gc.ListTags(repo)
+	tags, err := gc.listTags(repo)
 	if err != nil {
 		t.Fatalf("list tags: %v", err)
 	}
@@ -362,7 +363,7 @@ func TestClone_ExistingRepo_Fetches(t *testing.T) {
 
 	// Clone it.
 	destDir := filepath.Join(t.TempDir(), "clone")
-	gc := NewGitClient()
+	gc := NewGitClient("")
 
 	_, err := gc.Clone(context.Background(), sourceDir, destDir)
 	if err != nil {
@@ -379,7 +380,7 @@ func TestClone_ExistingRepo_Fetches(t *testing.T) {
 		t.Fatalf("second clone (fetch): %v", err)
 	}
 
-	tags, err := gc.ListTags(repo)
+	tags, err := gc.listTags(repo)
 	if err != nil {
 		t.Fatalf("list tags: %v", err)
 	}
@@ -394,7 +395,7 @@ func TestClone_ExistingRepo_Fetches(t *testing.T) {
 
 func TestReadPackageConfig(t *testing.T) {
 	repo, dir := initTestRepo(t)
-	gc := NewGitClient()
+	gc := NewGitClient("")
 
 	// Write a codectx.yml into the repo and commit it.
 	configContent := `name: test-package
@@ -454,7 +455,7 @@ dependencies:
 
 func TestReadPackageConfig_NoConfig(t *testing.T) {
 	repo, _ := initTestRepo(t)
-	gc := NewGitClient()
+	gc := NewGitClient("")
 
 	_, err := gc.ReadPackageConfig(repo)
 	if err == nil {
@@ -527,7 +528,7 @@ func TestListRemoteTags(t *testing.T) {
 	}
 
 	// Now list remote tags.
-	gc := NewGitClient()
+	gc := NewGitClient("")
 	tags, err := gc.ListRemoteTags(context.Background(), remoteDir)
 	if err != nil {
 		t.Fatalf("list remote tags: %v", err)
@@ -553,7 +554,7 @@ func TestListRemoteTags(t *testing.T) {
 func TestPushTag_NoRemote(t *testing.T) {
 	// PushTag should error when there is no remote configured.
 	repo, _ := initTestRepo(t)
-	gc := NewGitClient()
+	gc := NewGitClient("")
 
 	addTagToRepo(t, repo, "v1.0.0")
 
@@ -565,7 +566,7 @@ func TestPushTag_NoRemote(t *testing.T) {
 
 func TestPushTag_NonexistentTag(t *testing.T) {
 	repo, _ := initTestRepo(t)
-	gc := NewGitClient()
+	gc := NewGitClient("")
 
 	// Add a remote so the error is about the tag, not the remote.
 	_, err := repo.CreateRemote(&config.RemoteConfig{
@@ -580,5 +581,71 @@ func TestPushTag_NonexistentTag(t *testing.T) {
 	// This will fail because the remote doesn't exist or tag doesn't exist.
 	if err == nil {
 		t.Fatal("expected error pushing nonexistent tag to invalid remote")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// parsePackageConfig
+// ---------------------------------------------------------------------------
+
+func TestParsePackageConfig_Valid(t *testing.T) {
+	t.Parallel()
+
+	yaml := `name: test-pkg
+dependencies:
+  utils@community: ">=1.0.0"
+`
+	r := strings.NewReader(yaml)
+	cfg, err := parsePackageConfig(r)
+	if err != nil {
+		t.Fatalf("parsePackageConfig: %v", err)
+	}
+	if cfg.Name != "test-pkg" {
+		t.Errorf("Name = %q, want %q", cfg.Name, "test-pkg")
+	}
+	if len(cfg.Dependencies) != 1 {
+		t.Fatalf("Dependencies count = %d, want 1", len(cfg.Dependencies))
+	}
+	if cfg.Dependencies["utils@community"] != ">=1.0.0" {
+		t.Errorf("Dependencies[utils@community] = %q", cfg.Dependencies["utils@community"])
+	}
+}
+
+func TestParsePackageConfig_InvalidYAML(t *testing.T) {
+	t.Parallel()
+
+	r := strings.NewReader("{{invalid yaml")
+	_, err := parsePackageConfig(r)
+	if err == nil {
+		t.Error("expected error for invalid YAML")
+	}
+}
+
+func TestParsePackageConfig_NoDeps(t *testing.T) {
+	t.Parallel()
+
+	yaml := `name: simple-pkg
+`
+	r := strings.NewReader(yaml)
+	cfg, err := parsePackageConfig(r)
+	if err != nil {
+		t.Fatalf("parsePackageConfig: %v", err)
+	}
+	if len(cfg.Dependencies) != 0 {
+		t.Errorf("expected 0 dependencies, got %d", len(cfg.Dependencies))
+	}
+}
+
+func TestNewGitClient_WithToken(t *testing.T) {
+	gc := NewGitClient("test-token-123")
+	if gc.auth == nil {
+		t.Fatal("expected auth to be set when token is provided")
+	}
+}
+
+func TestNewGitClient_WithoutToken(t *testing.T) {
+	gc := NewGitClient("")
+	if gc.auth != nil {
+		t.Fatal("expected auth to be nil when token is empty")
 	}
 }

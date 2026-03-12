@@ -50,7 +50,7 @@ func TestFormatQueryResults_AllSections(t *testing.T) {
 	}
 
 	// Check entry format.
-	if !strings.Contains(got, "[score: 8.42]") {
+	if !strings.Contains(got, "score: 8.42") {
 		t.Error("missing score in entry")
 	}
 	if !strings.Contains(got, "obj:abc123.1") {
@@ -116,12 +116,12 @@ func TestFormatQueryResults_MultipleEntries(t *testing.T) {
 
 	got := query.FormatQueryResults(r)
 
-	// Entries should be numbered.
-	if !strings.Contains(got, "1. [score: 8.00]") {
-		t.Error("missing first entry numbering")
+	// Entries should be numbered with scores and chunk IDs.
+	if !strings.Contains(got, "1.") || !strings.Contains(got, "score: 8.00") {
+		t.Error("missing first entry numbering or score")
 	}
-	if !strings.Contains(got, "2. [score: 6.50]") {
-		t.Error("missing second entry numbering")
+	if !strings.Contains(got, "2.") || !strings.Contains(got, "score: 6.50") {
+		t.Error("missing second entry numbering or score")
 	}
 }
 
@@ -142,10 +142,10 @@ func TestFormatGenerateSummary_Basic(t *testing.T) {
 	if !strings.Contains(got, "/tmp/codectx/auth-jwt.1700000000.md") {
 		t.Error("missing file path")
 	}
-	if !strings.Contains(got, "1772 tokens") {
+	if !strings.Contains(got, "1,772 tokens") {
 		t.Error("missing token count")
 	}
-	if !strings.Contains(got, "obj:abc123.03, spec:def456.02") {
+	if !strings.Contains(got, "obj:abc123.03") || !strings.Contains(got, "spec:def456.02") {
 		t.Error("missing chunk IDs")
 	}
 }

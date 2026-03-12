@@ -286,3 +286,45 @@ func TestRemoveChunkFiles_EmptyList(t *testing.T) {
 		t.Fatalf("RemoveChunkFiles with empty list: %v", err)
 	}
 }
+
+func TestRemoveChunkFiles_UnparseableID(t *testing.T) {
+	// An ID that cannot be parsed by ChunkFilePath should be silently skipped.
+	compiledDir := filepath.Join(t.TempDir(), project.CompiledDir)
+	if err := os.MkdirAll(compiledDir, project.DirPerm); err != nil {
+		t.Fatal(err)
+	}
+
+	err := compile.RemoveChunkFiles(compiledDir, []string{"not-a-valid-chunk-id", "also:bad"})
+	if err != nil {
+		t.Fatalf("RemoveChunkFiles with unparseable IDs should not error: %v", err)
+	}
+}
+
+func TestWriteChunkFile_NonWritableDir(t *testing.T) {
+	// compiledDir doesn't have the output subdirectory — should error on write.
+	compiledDir := t.TempDir()
+
+	c := makeTestChunk("obj:abcdef0123456789.1", chunk.ChunkObject, "Content", 1)
+	err := compile.WriteChunkFile(compiledDir, &c)
+	if err == nil {
+		t.Error("expected error when output directory doesn't exist")
+	}
+}
+
+func TestWriteChunkFiles_StopsOnError(t *testing.T) {
+	// Write to a directory without proper subdirs — should fail on first chunk.
+	compiledDir := t.TempDir()
+
+	chunks := []chunk.Chunk{
+		makeTestChunk("obj:aaaa000000000000.1", chunk.ChunkObject, "Content 1", 1),
+		makeTestChunk("obj:bbbb000000000000.1", chunk.ChunkObject, "Content 2", 1),
+	}
+
+	written, err := compile.WriteChunkFiles(compiledDir, chunks)
+	if err == nil {
+		t.Error("expected error when output directory doesn't exist")
+	}
+	if written != 0 {
+		t.Errorf("expected 0 files written before error, got %d", written)
+	}
+}

@@ -26,6 +26,8 @@ import (
 	"charm.land/huh/v2"
 	"charm.land/huh/v2/spinner"
 	"github.com/charmbracelet/x/term"
+	"github.com/securacore/codectx/cmds/shared"
+	"github.com/securacore/codectx/core/compile"
 	"github.com/securacore/codectx/core/detect"
 	"github.com/securacore/codectx/core/link"
 	"github.com/securacore/codectx/core/project"
@@ -62,6 +64,14 @@ With a directory name, creates the directory and initializes inside it.`,
 			Usage:   "Accept all defaults without prompting",
 			Aliases: []string{"y"},
 		},
+		&cli.BoolFlag{
+			Name:  "compile",
+			Usage: "Force initial compilation after project setup",
+		},
+		&cli.BoolFlag{
+			Name:  "no-compile",
+			Usage: "Skip initial compilation after project setup",
+		},
 	},
 	Action: run,
 }
@@ -77,6 +87,8 @@ func run(_ context.Context, cmd *cli.Command) error {
 	name := cmd.String("name")
 	model := cmd.String("model")
 	autoYes := cmd.Bool("yes")
+	forceCompile := cmd.IsSet("compile") && cmd.Bool("compile")
+	skipCompile := cmd.IsSet("no-compile") && cmd.Bool("no-compile")
 
 	// Detect if we have an interactive terminal.
 	interactive := term.IsTerminal(os.Stdin.Fd()) && !autoYes
@@ -361,7 +373,10 @@ func run(_ context.Context, cmd *cli.Command) error {
 		}
 	}
 
-	// --- Step 10: Summary ---
+	// --- Step 10: Determine auto-compile intent ---
+	willAutoCompile := shouldInitAutoCompile(targetDir, root, forceCompile, skipCompile)
+
+	// --- Step 11: Summary ---
 	effectiveRoot := project.ResolveRoot(root)
 
 	tree := buildSummaryTree(effectiveRoot)
@@ -371,8 +386,12 @@ func run(_ context.Context, cmd *cli.Command) error {
 			tui.StyleCommand.Render(effectiveRoot+"/foundation/")),
 		fmt.Sprintf("Add topic documentation to %s",
 			tui.StyleCommand.Render(effectiveRoot+"/topics/")),
-		fmt.Sprintf("Run %s to build the documentation index",
-			tui.StyleCommand.Render("codectx compile")),
+	}
+	if !willAutoCompile {
+		nextSteps = append(nextSteps,
+			fmt.Sprintf("Run %s to build the documentation index",
+				tui.StyleCommand.Render("codectx compile")),
+		)
 	}
 
 	fmt.Print(tui.InitSummary(name, tree, nextSteps))
@@ -403,11 +422,26 @@ func run(_ context.Context, cmd *cli.Command) error {
 	}
 	fmt.Println()
 
-	// --- Step 11: Link prompt ---
+	// --- Step 12: Link prompt ---
 	if interactive {
 		if err := promptLink(targetDir); err != nil {
 			// Non-fatal: init succeeded even if link was skipped.
 			return nil //nolint:nilerr // link setup is optional
+		}
+	}
+
+	// --- Step 13: Auto-compile ---
+	if willAutoCompile {
+		if err := runInitCompile(targetDir, root); err != nil {
+			// Non-fatal: init succeeded even if compile failed.
+			// Print the error but don't return it.
+			fmt.Printf("\n%s %s\n%s %s\n\n",
+				tui.StyleMuted.Render("-"),
+				tui.StyleMuted.Render("Initial compilation failed (non-fatal)"),
+				tui.Indent(1),
+				tui.StyleMuted.Render("Run: "+tui.StyleCommand.Render("codectx compile")),
+			)
+			return nil //nolint:nilerr // auto-compile failure is non-fatal; init itself succeeded
 		}
 	}
 
@@ -440,6 +474,70 @@ func promptLink(projectDir string) error {
 	}
 
 	fmt.Print(link.RenderLinkResults(results))
+	return nil
+}
+
+// shouldInitAutoCompile determines whether auto-compilation should run
+// after init, based on CLI flags and the auto_compile preference.
+func shouldInitAutoCompile(
+	projectDir, root string,
+	forceCompile, skipCompile bool,
+) bool {
+	// Load the freshly written preferences to check auto_compile.
+	effectiveRoot := project.ResolveRoot(root)
+	codectxDir := filepath.Join(projectDir, effectiveRoot, project.CodectxDir)
+	prefsCfg, err := project.LoadPreferencesConfig(filepath.Join(codectxDir, project.PreferencesFile))
+	if err != nil {
+		// Preferences just written by scaffold — shouldn't fail.
+		// Default to compiling if it does.
+		prefsCfg = &project.PreferencesConfig{}
+	}
+
+	return shared.ShouldAutoCompile(prefsCfg, forceCompile, skipCompile, "initial compile")
+}
+
+// runInitCompile loads the freshly created project configuration and runs
+// the full compilation pipeline with a spinner.
+func runInitCompile(projectDir, root string) error {
+	cfg, err := project.LoadConfig(filepath.Join(projectDir, project.ConfigFileName))
+	if err != nil {
+		return fmt.Errorf("loading project config: %w", err)
+	}
+
+	rootDir := project.RootDir(projectDir, cfg)
+
+	aiCfg, err := project.LoadAIConfigForProject(projectDir, cfg)
+	if err != nil {
+		return fmt.Errorf("loading AI config: %w", err)
+	}
+
+	prefsCfg, err := project.LoadPreferencesConfigForProject(projectDir, cfg)
+	if err != nil {
+		return fmt.Errorf("loading preferences: %w", err)
+	}
+
+	compileCfg := compile.BuildConfig(projectDir, rootDir, cfg, aiCfg, prefsCfg)
+
+	fmt.Printf("\n%s Compiling documentation...\n", tui.Arrow())
+
+	var result *compile.Result
+	var compileErr error
+
+	if sErr := spinner.New().
+		Title("Compiling...").
+		Action(func() {
+			result, compileErr = compile.Run(compileCfg, nil)
+		}).
+		Run(); sErr != nil {
+		return sErr
+	}
+	if compileErr != nil {
+		return compileErr
+	}
+
+	// Print compact summary.
+	fmt.Print(shared.RenderCompactCompileSummary(result))
+
 	return nil
 }
 

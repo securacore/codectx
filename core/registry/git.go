@@ -10,16 +10,30 @@ import (
 	git "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/transport"
+	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	"gopkg.in/yaml.v3"
 )
 
 // GitClient wraps go-git operations for cloning, fetching, and inspecting
-// package repositories. All operations are unauthenticated (public repos only).
-type GitClient struct{}
+// package repositories. When created with a token, all operations authenticate
+// with it (required for pushing to remotes and accessing private repos).
+type GitClient struct {
+	auth transport.AuthMethod
+}
 
-// NewGitClient creates a new GitClient.
-func NewGitClient() *GitClient {
-	return &GitClient{}
+// NewGitClient creates a new GitClient. If token is non-empty, all git
+// operations (clone, fetch, push, list remote) will authenticate with it.
+// If token is empty, operations are unauthenticated (public repos only).
+func NewGitClient(token string) *GitClient {
+	gc := &GitClient{}
+	if token != "" {
+		gc.auth = &githttp.BasicAuth{
+			Username: "x-access-token",
+			Password: token,
+		}
+	}
+	return gc
 }
 
 // Clone clones a repository to a local path. If the directory already contains
@@ -40,6 +54,7 @@ func (gc *GitClient) Clone(ctx context.Context, url, destPath string) (*git.Repo
 	repo, err = git.PlainCloneContext(ctx, destPath, false, &git.CloneOptions{
 		URL:  url,
 		Tags: git.AllTags,
+		Auth: gc.auth,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("cloning %s: %w", url, err)
@@ -54,6 +69,7 @@ func (gc *GitClient) fetch(ctx context.Context, repo *git.Repository) error {
 	err := repo.FetchContext(ctx, &git.FetchOptions{
 		Tags:  git.AllTags,
 		Force: true,
+		Auth:  gc.auth,
 	})
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return fmt.Errorf("fetching: %w", err)
@@ -61,9 +77,10 @@ func (gc *GitClient) fetch(ctx context.Context, repo *git.Repository) error {
 	return nil
 }
 
-// ListTags returns all tag names from the repository. Tags are returned
+// listTags returns all tag names from the repository. Tags are returned
 // with the "v" prefix if present (e.g. "v1.0.0").
-func (gc *GitClient) ListTags(repo *git.Repository) ([]string, error) {
+// Used internally by tests to verify tag operations on local repos.
+func (gc *GitClient) listTags(repo *git.Repository) ([]string, error) {
 	tagIter, err := repo.Tags()
 	if err != nil {
 		return nil, fmt.Errorf("listing tags: %w", err)
@@ -165,6 +182,7 @@ func (gc *GitClient) PushTag(ctx context.Context, repo *git.Repository, tagName 
 
 	err := repo.PushContext(ctx, &git.PushOptions{
 		RefSpecs: []config.RefSpec{refSpec},
+		Auth:     gc.auth,
 	})
 	if err != nil {
 		return fmt.Errorf("pushing tag %q: %w", tagName, err)
@@ -219,7 +237,9 @@ func (gc *GitClient) ListRemoteTags(ctx context.Context, url string) ([]string, 
 		URLs: []string{url},
 	})
 
-	refs, err := rem.ListContext(ctx, &git.ListOptions{})
+	refs, err := rem.ListContext(ctx, &git.ListOptions{
+		Auth: gc.auth,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("listing remote %s: %w", url, err)
 	}

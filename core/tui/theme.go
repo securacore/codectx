@@ -20,6 +20,7 @@ const (
 	IconSuccess = "✓"
 	IconWarning = "⚠"
 	IconError   = "✗"
+	IconArrow   = "->"
 	IconIndent  = "  "
 )
 
@@ -102,6 +103,9 @@ func Warning() string { return StyleWarningIcon.Render(IconWarning) }
 
 // ErrorIcon renders the ✗ icon in error style.
 func ErrorIcon() string { return StyleErrorIcon.Render(IconError) }
+
+// Arrow renders the -> icon in accent style for progress/status indication.
+func Arrow() string { return StyleAccent.Render(IconArrow) }
 
 // --- Indentation Helpers ---
 

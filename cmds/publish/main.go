@@ -101,7 +101,7 @@ func run(ctx context.Context, _ *cli.Command) error {
 		return fmt.Errorf("not a git repo: %w", err)
 	}
 
-	gc := registry.NewGitClient()
+	gc := registry.NewGitClient(registry.GitHubToken())
 
 	// Step 5: Check if tag already exists.
 	if gc.TagExists(repo, tagName) {
@@ -119,11 +119,11 @@ func run(ctx context.Context, _ *cli.Command) error {
 
 	// Step 6: Create tag and push.
 	fmt.Printf("\n%s Publishing %s v%s\n",
-		tui.StyleAccent.Render("->"),
+		tui.Arrow(),
 		tui.StyleBold.Render(cfg.Name+"@"+cfg.Org),
 		cfg.Version,
 	)
-	fmt.Printf("%sRepo: %s\n", tui.Indent(1), tui.StyleMuted.Render(remoteURL))
+	fmt.Printf("%s%s\n", tui.Indent(1), tui.KeyValue("Repo", tui.StyleMuted.Render(remoteURL)))
 
 	var tagErr, pushErr error
 

@@ -242,11 +242,61 @@ func TestSearchPackages_DefaultLimit(t *testing.T) {
 }
 
 func TestNewGitHubClient(t *testing.T) {
-	gh := NewGitHubClient()
+	gh := NewGitHubClient("")
 	if gh == nil {
 		t.Fatal("expected non-nil client")
 	}
 	if gh.client == nil {
 		t.Fatal("expected non-nil underlying github client")
+	}
+}
+
+func TestNewGitHubClient_WithToken(t *testing.T) {
+	// Verify that providing a token results in authenticated requests.
+	var authHeader string
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /search/repositories", func(w http.ResponseWriter, r *http.Request) {
+		authHeader = r.Header.Get("Authorization")
+		result := github.RepositoriesSearchResult{
+			Total:        github.Ptr(0),
+			Repositories: []*github.Repository{},
+		}
+		jsonRespond(w, result)
+	})
+
+	gh, _ := newTestGitHubClient(t, mux)
+	// Override the client with an authenticated one pointing at our test server.
+	gh.client = gh.client.WithAuthToken("test-token-xyz")
+
+	_, err := gh.SearchPackages(context.Background(), "test", 5)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if authHeader == "" {
+		t.Error("expected Authorization header to be set with token")
+	}
+	if authHeader != "Bearer test-token-xyz" {
+		t.Errorf("unexpected auth header: got %q, want %q", authHeader, "Bearer test-token-xyz")
+	}
+}
+
+func TestGitHubToken_Env(t *testing.T) {
+	// Both unset.
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("GH_TOKEN", "")
+	if got := GitHubToken(); got != "" {
+		t.Errorf("expected empty token, got %q", got)
+	}
+
+	// GH_TOKEN only.
+	t.Setenv("GH_TOKEN", "gh-cli-token")
+	if got := GitHubToken(); got != "gh-cli-token" {
+		t.Errorf("expected %q from GH_TOKEN, got %q", "gh-cli-token", got)
+	}
+
+	// GITHUB_TOKEN takes precedence.
+	t.Setenv("GITHUB_TOKEN", "actions-token")
+	if got := GitHubToken(); got != "actions-token" {
+		t.Errorf("expected %q from GITHUB_TOKEN, got %q", "actions-token", got)
 	}
 }

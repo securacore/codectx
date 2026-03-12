@@ -7,6 +7,7 @@ import (
 
 	"github.com/securacore/codectx/core/detect"
 	"github.com/securacore/codectx/core/project"
+	"github.com/securacore/codectx/core/testutil"
 	"github.com/securacore/codectx/core/tui"
 )
 
@@ -348,5 +349,69 @@ func TestAutoSelectProvider_NeitherAvailable(t *testing.T) {
 	got := autoSelectProvider(false, false)
 	if got != "" {
 		t.Errorf("expected empty string, got %q", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// shouldInitAutoCompile
+// ---------------------------------------------------------------------------
+
+func TestShouldInitAutoCompile_SkipFlag(t *testing.T) {
+	t.Parallel()
+
+	dir, _ := testutil.SetupProjectWithPrefs(t, project.BoolPtr(true))
+	got := shouldInitAutoCompile(dir, "docs", false, true)
+	if got {
+		t.Error("expected false when --no-compile is set")
+	}
+}
+
+func TestShouldInitAutoCompile_ForceFlag(t *testing.T) {
+	t.Parallel()
+
+	dir, _ := testutil.SetupProjectWithPrefs(t, project.BoolPtr(false))
+	got := shouldInitAutoCompile(dir, "docs", true, false)
+	if !got {
+		t.Error("expected true when --compile is set, even with auto_compile: false")
+	}
+}
+
+func TestShouldInitAutoCompile_ConfigDefault(t *testing.T) {
+	t.Parallel()
+
+	dir, _ := testutil.SetupProjectWithPrefs(t, nil)
+	got := shouldInitAutoCompile(dir, "docs", false, false)
+	if !got {
+		t.Error("expected true when auto_compile is not set (default)")
+	}
+}
+
+func TestShouldInitAutoCompile_ConfigExplicitTrue(t *testing.T) {
+	t.Parallel()
+
+	dir, _ := testutil.SetupProjectWithPrefs(t, project.BoolPtr(true))
+	got := shouldInitAutoCompile(dir, "docs", false, false)
+	if !got {
+		t.Error("expected true when auto_compile is explicitly true")
+	}
+}
+
+func TestShouldInitAutoCompile_ConfigExplicitFalse(t *testing.T) {
+	t.Parallel()
+
+	dir, _ := testutil.SetupProjectWithPrefs(t, project.BoolPtr(false))
+	got := shouldInitAutoCompile(dir, "docs", false, false)
+	if got {
+		t.Error("expected false when auto_compile is explicitly false")
+	}
+}
+
+func TestShouldInitAutoCompile_SkipOverridesForce(t *testing.T) {
+	t.Parallel()
+
+	dir, _ := testutil.SetupProjectWithPrefs(t, project.BoolPtr(true))
+	got := shouldInitAutoCompile(dir, "docs", true, true)
+	if got {
+		t.Error("expected false when --no-compile is set, even with --compile")
 	}
 }

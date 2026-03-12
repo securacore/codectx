@@ -265,28 +265,6 @@ func NeedsUpdate(projectDir, contextRelPath string) []Integration {
 	return needsUpdate
 }
 
-// LinkedIntegrations returns which entry point files currently exist
-// in the project directory (regardless of whether they need updating).
-func LinkedIntegrations(projectDir string) []Integration {
-	var linked []Integration
-
-	for _, info := range AllIntegrations() {
-		absPath := filepath.Join(projectDir, info.FilePath)
-		if fileExists(absPath) {
-			data, err := os.ReadFile(absPath)
-			if err != nil {
-				continue
-			}
-			// Only count files that were written by codectx.
-			if strings.Contains(string(data), codectxMarker) {
-				linked = append(linked, info.Type)
-			}
-		}
-	}
-
-	return linked
-}
-
 // renderTemplate produces the entry point file content.
 // The template is deliberately minimal — its only job is to bootstrap
 // the AI into the codectx system.

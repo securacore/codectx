@@ -116,8 +116,9 @@ steps:
 		t.Error("Check should be nil when no current step")
 	}
 	// Output should be the status format (fallback).
-	if !strings.Contains(result.Output, "Plan: Draft Plan") {
-		t.Errorf("output should contain plan name: %s", result.Output)
+	output := stripANSI(result.Output)
+	if !strings.Contains(output, "Draft Plan") {
+		t.Errorf("output should contain plan name: %s", output)
 	}
 }
 
@@ -166,14 +167,15 @@ steps:
 	}
 
 	// Output should include "all unchanged" and "Replaying".
-	if !strings.Contains(result.Output, "all unchanged") {
-		t.Errorf("output missing 'all unchanged': %s", result.Output)
+	output := stripANSI(result.Output)
+	if !strings.Contains(output, "all unchanged") {
+		t.Errorf("output missing 'all unchanged': %s", output)
 	}
-	if !strings.Contains(result.Output, "Replaying context") {
-		t.Errorf("output missing 'Replaying context': %s", result.Output)
+	if !strings.Contains(output, "Replaying context") {
+		t.Errorf("output missing 'Replaying context': %s", output)
 	}
-	if !strings.Contains(result.Output, "Current step: Audit JWT") {
-		t.Errorf("output missing current step title: %s", result.Output)
+	if !strings.Contains(output, "Audit JWT") {
+		t.Errorf("output missing current step title: %s", output)
 	}
 
 	// Clean up generated files.
@@ -226,17 +228,18 @@ steps:
 	}
 
 	// Output should include drift report and stored queries.
-	if !strings.Contains(result.Output, "Documentation changes") {
-		t.Errorf("output missing drift report: %s", result.Output)
+	output := stripANSI(result.Output)
+	if !strings.Contains(output, "Documentation changes") {
+		t.Errorf("output missing drift report: %s", output)
 	}
-	if !strings.Contains(result.Output, "topics/auth") {
-		t.Errorf("output missing changed dependency: %s", result.Output)
+	if !strings.Contains(output, "topics/auth") {
+		t.Errorf("output missing changed dependency: %s", output)
 	}
-	if !strings.Contains(result.Output, "jwt audit query") {
-		t.Errorf("output missing stored query: %s", result.Output)
+	if !strings.Contains(output, "jwt audit query") {
+		t.Errorf("output missing stored query: %s", output)
 	}
-	if !strings.Contains(result.Output, "Recommendation") {
-		t.Errorf("output missing recommendation: %s", result.Output)
+	if !strings.Contains(output, "Recommendation") {
+		t.Errorf("output missing recommendation: %s", output)
 	}
 }
 
@@ -310,8 +313,9 @@ steps:
 	if len(result.GenerateResults) != 0 {
 		t.Error("GenerateResults should be empty when no chunks")
 	}
-	if !strings.Contains(result.Output, "all unchanged") {
-		t.Errorf("output should show deps unchanged: %s", result.Output)
+	output := stripANSI(result.Output)
+	if !strings.Contains(output, "all unchanged") {
+		t.Errorf("output should show deps unchanged: %s", output)
 	}
 }
 

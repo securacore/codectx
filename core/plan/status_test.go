@@ -1,9 +1,17 @@
 package plan
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 )
+
+// stripANSI removes ANSI escape sequences from a string for test assertions.
+var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+func stripANSI(s string) string {
+	return ansiRegex.ReplaceAllString(s, "")
+}
 
 func TestFormatStatus(t *testing.T) {
 	t.Parallel()
@@ -41,17 +49,20 @@ func TestFormatStatus(t *testing.T) {
 		},
 	}
 
-	output := FormatStatus(p, check)
+	output := stripANSI(FormatStatus(p, check))
 
 	// Check key content from the spec's example output.
 	assertions := []string{
-		"Plan: Authentication System Migration",
+		"Plan:",
+		"Authentication System Migration",
 		"step 3 of 5",
 		"2 steps completed",
 		"1 in progress",
 		"2 pending",
-		"Current step: Implement token service refactor",
-		"Started: 2025-03-07T09:00:00Z",
+		"Current step:",
+		"Implement token service refactor",
+		"Started:",
+		"2025-03-07T09:00:00Z",
 		"User service and payment service updated",
 		"token service refactor implementation",
 		"order service authentication",
@@ -59,9 +70,11 @@ func TestFormatStatus(t *testing.T) {
 		"unchanged",
 		"topics/authentication/jwt-tokens",
 		"content changed",
-		"Step 4 (Migration testing)",
+		"Step 4",
+		"Migration testing",
 		"blocked by step 3",
-		"Step 5 (Production rollout)",
+		"Step 5",
+		"Production rollout",
 		"blocked by step 4",
 	}
 
@@ -82,8 +95,8 @@ func TestFormatStatusNoDependencies(t *testing.T) {
 		Steps:       []Step{},
 	}
 
-	output := FormatStatus(p, nil)
-	if !strings.Contains(output, "Plan: Simple Plan") {
+	output := stripANSI(FormatStatus(p, nil))
+	if !strings.Contains(output, "Simple Plan") {
 		t.Errorf("missing plan name in output: %s", output)
 	}
 	if strings.Contains(output, "Dependencies") {
@@ -116,16 +129,18 @@ func TestFormatResumeMatch(t *testing.T) {
 		"Generated: /tmp/codectx/auth.123.md (500 tokens)\nContains: obj:abc.01\n",
 	}
 
-	output := FormatResumeMatch(p, generateOutputs)
+	output := stripANSI(FormatResumeMatch(p, generateOutputs))
 
 	assertions := []string{
-		"Plan: Auth Migration",
+		"Auth Migration",
 		"step 3 of 5",
 		"all unchanged",
 		"Replaying context for step 3",
 		"/tmp/codectx/auth.123.md",
-		"Current step: Token refactor",
-		"Notes: In progress notes.",
+		"Current step:",
+		"Token refactor",
+		"Notes:",
+		"In progress notes.",
 	}
 
 	for _, want := range assertions {
@@ -168,10 +183,10 @@ func TestFormatResumeDrift(t *testing.T) {
 		},
 	}
 
-	output := FormatResumeDrift(p, check)
+	output := stripANSI(FormatResumeDrift(p, check))
 
 	assertions := []string{
-		"Plan: Auth Migration",
+		"Auth Migration",
 		"Documentation changes since last update",
 		"topics/jwt",
 		"content changed",
@@ -309,7 +324,7 @@ func TestFormatStatusMissingDependency(t *testing.T) {
 		},
 	}
 
-	output := FormatStatus(p, check)
+	output := stripANSI(FormatStatus(p, check))
 	if !strings.Contains(output, "not found in compiled output") {
 		t.Errorf("missing 'not found' suffix for missing dependency: %s", output)
 	}
@@ -328,7 +343,7 @@ func TestFormatStatusEmptyCheck(t *testing.T) {
 		Statuses: []DependencyStatus{},
 	}
 
-	output := FormatStatus(p, check)
+	output := stripANSI(FormatStatus(p, check))
 	// Empty statuses should not show Dependencies section.
 	if strings.Contains(output, "Dependencies:") {
 		t.Errorf("should not show Dependencies section with empty statuses: %s", output)
@@ -347,7 +362,7 @@ func TestFormatStatusNoCurrentStep(t *testing.T) {
 		},
 	}
 
-	output := FormatStatus(p, nil)
+	output := stripANSI(FormatStatus(p, nil))
 	// Should not show "step X of Y" in status line.
 	if strings.Contains(output, "step 0") {
 		t.Errorf("should not show step 0: %s", output)
@@ -372,7 +387,7 @@ func TestFormatResumeMatchNoOutputs(t *testing.T) {
 		Steps:       []Step{{ID: 1, Title: "Step", Status: StepInProgress}},
 	}
 
-	output := FormatResumeMatch(p, nil)
+	output := stripANSI(FormatResumeMatch(p, nil))
 	if strings.Contains(output, "Replaying") {
 		t.Errorf("should not show Replaying when no outputs: %s", output)
 	}
@@ -391,7 +406,7 @@ func TestFormatResumeMatchNoNotes(t *testing.T) {
 		Steps:       []Step{{ID: 1, Title: "Step", Status: StepInProgress}},
 	}
 
-	output := FormatResumeMatch(p, []string{"test output\n"})
+	output := stripANSI(FormatResumeMatch(p, []string{"test output\n"}))
 	if strings.Contains(output, "Notes:") {
 		t.Errorf("should not show Notes when empty: %s", output)
 	}
@@ -420,7 +435,7 @@ func TestFormatResumeDriftMissingDep(t *testing.T) {
 		},
 	}
 
-	output := FormatResumeDrift(p, check)
+	output := stripANSI(FormatResumeDrift(p, check))
 	if !strings.Contains(output, "not found in compiled output") {
 		t.Errorf("missing 'not found' for missing dep: %s", output)
 	}
@@ -442,7 +457,7 @@ func TestFormatResumeDriftNoQueries(t *testing.T) {
 		},
 	}
 
-	output := FormatResumeDrift(p, check)
+	output := stripANSI(FormatResumeDrift(p, check))
 	// Should not show "Stored chunks may be stale" when no queries.
 	if strings.Contains(output, "Stored chunks may be stale") {
 		t.Errorf("should not show stale message when no queries: %s", output)
@@ -468,7 +483,7 @@ func TestWriteDependencyStatuses(t *testing.T) {
 	}
 
 	writeDependencyStatuses(&b, statuses, "content changed")
-	output := b.String()
+	output := stripANSI(b.String())
 
 	if !strings.Contains(output, "a") || !strings.Contains(output, "unchanged") {
 		t.Errorf("missing unchanged dep: %s", output)
@@ -497,9 +512,9 @@ func TestWritePlanHeader(t *testing.T) {
 	}
 
 	writePlanHeader(&b, p)
-	output := b.String()
+	output := stripANSI(b.String())
 
-	if !strings.Contains(output, "Plan: Test Plan") {
+	if !strings.Contains(output, "Test Plan") {
 		t.Errorf("missing plan name: %s", output)
 	}
 	if !strings.Contains(output, "step 2 of 3") {
@@ -519,7 +534,7 @@ func TestWritePlanHeaderNoCurrentStep(t *testing.T) {
 	}
 
 	writePlanHeader(&b, p)
-	output := b.String()
+	output := stripANSI(b.String())
 
 	if strings.Contains(output, "step 0") {
 		t.Errorf("should not show step info when CurrentStep=0: %s", output)
