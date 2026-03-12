@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/securacore/codectx/core/project"
+	"golang.org/x/sync/errgroup"
 )
 
 // indexFileName is the name of the serialized index file within each
@@ -35,24 +36,38 @@ func (idx *Index) Save(compiledDir string) error {
 	return nil
 }
 
-// Load reads all three BM25 indexes from the compiled directory.
+// Load reads all three BM25 indexes from the compiled directory in parallel.
 // Returns an error if any index file is missing or corrupted.
 //
 // The loaded indexes are ready for querying — no Build() call is needed
 // since the IDF cache and average document length are part of the
 // serialized state.
 func Load(compiledDir string) (*Index, error) {
-	idx := &Index{
-		Indexes: make(map[IndexType]*BM25, 3),
+	types := allIndexTypes()
+	loaded := make([]*BM25, len(types))
+
+	var g errgroup.Group
+	for i, it := range types {
+		path := filepath.Join(compiledDir, project.BM25Dir, string(it), indexFileName)
+		g.Go(func() error {
+			bm25, err := loadIndex(path)
+			if err != nil {
+				return fmt.Errorf("loading %s index: %w", it, err)
+			}
+			loaded[i] = bm25
+			return nil
+		})
 	}
 
-	for _, it := range allIndexTypes() {
-		path := filepath.Join(compiledDir, project.BM25Dir, string(it), indexFileName)
-		bm25, err := loadIndex(path)
-		if err != nil {
-			return nil, fmt.Errorf("loading %s index: %w", it, err)
-		}
-		idx.Indexes[it] = bm25
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	idx := &Index{
+		Indexes: make(map[IndexType]*BM25, len(types)),
+	}
+	for i, it := range types {
+		idx.Indexes[it] = loaded[i]
 	}
 
 	return idx, nil

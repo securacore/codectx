@@ -94,7 +94,7 @@ func runAdd(_ context.Context, cmd *cli.Command) error {
 	ref := cmd.Args().First()
 
 	// Discover and load the project.
-	projectDir, cfg, err := loadProject()
+	projectDir, cfg, err := shared.DiscoverProject()
 	if err != nil {
 		return err
 	}
@@ -180,7 +180,7 @@ func runAdd(_ context.Context, cmd *cli.Command) error {
 	}
 
 	// Display result.
-	fmt.Printf("\n%s Added %s (%s tokens)\n",
+	fmt.Printf("\n%s Added %s (%s tokens)\n\n",
 		tui.Success(),
 		tui.StyleAccent.Render(ref),
 		tui.FormatNumber(newEntryTokens),
@@ -224,7 +224,7 @@ func runRemove(_ context.Context, cmd *cli.Command) error {
 	ref := cmd.Args().First()
 
 	// Discover and load the project.
-	projectDir, cfg, err := loadProject()
+	projectDir, cfg, err := shared.DiscoverProject()
 	if err != nil {
 		return err
 	}
@@ -275,7 +275,7 @@ func runList(_ context.Context, _ *cli.Command) error {
 	interactive := term.IsTerminal(os.Stdin.Fd())
 
 	// Discover and load the project.
-	projectDir, cfg, err := loadProject()
+	projectDir, cfg, err := shared.DiscoverProject()
 	if err != nil {
 		return err
 	}
@@ -331,8 +331,11 @@ func runList(_ context.Context, _ *cli.Command) error {
 func renderSessionList(assembly *codectx.AssemblyResult, budget int) string {
 	var b strings.Builder
 
-	fmt.Fprintf(&b, "\nAlways-loaded session context (%s):\n\n",
-		tui.FormatBudget(assembly.TotalTokens, budget),
+	fmt.Fprintf(&b, "\n%s %s\n\n",
+		tui.Arrow(),
+		tui.StyleBold.Render(fmt.Sprintf("Always-loaded session context (%s)",
+			tui.FormatBudget(assembly.TotalTokens, budget),
+		)),
 	)
 
 	// Find the longest reference for alignment.
@@ -364,12 +367,6 @@ func renderSessionList(assembly *codectx.AssemblyResult, budget int) string {
 	}
 
 	return b.String()
-}
-
-// loadProject discovers and loads the project configuration.
-// Returns (projectDir, config, error).
-func loadProject() (string, *project.Config, error) {
-	return shared.DiscoverProject()
 }
 
 // isDuplicate checks whether ref already exists in the list.

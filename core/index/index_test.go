@@ -3,6 +3,7 @@ package index
 import (
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/securacore/codectx/core/chunk"
@@ -682,5 +683,97 @@ func TestSearch_EmptyIndex(t *testing.T) {
 	allResults := idx.QueryAll("some query term", 10)
 	if len(allResults) != 0 {
 		t.Errorf("expected 0 result groups from empty index, got %d", len(allResults))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Concurrency safety — run with -race
+// ---------------------------------------------------------------------------
+
+// TestQueryAll_ConcurrentSafety verifies that multiple goroutines can
+// call QueryAll on the same Index simultaneously without data races.
+func TestQueryAll_ConcurrentSafety(t *testing.T) {
+	idx := New(1.2, 0.75)
+	idx.BuildFromChunks(testChunks())
+
+	var wg sync.WaitGroup
+	for range 10 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results := idx.QueryAll("JWT authentication token", 5)
+			if _, ok := results[IndexObjects]; !ok {
+				t.Error("expected objects results")
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+// TestQueryAllWithTokens_ConcurrentSafety verifies that multiple goroutines
+// can call QueryAllWithTokens on the same Index simultaneously.
+func TestQueryAllWithTokens_ConcurrentSafety(t *testing.T) {
+	idx := New(1.2, 0.75)
+	idx.BuildFromChunks(testChunks())
+
+	tokens := Tokenize("JWT authentication token")
+
+	var wg sync.WaitGroup
+	for range 10 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results := idx.QueryAllWithTokens(tokens, 5)
+			if _, ok := results[IndexObjects]; !ok {
+				t.Error("expected objects results")
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+// TestLoad_ParallelProducesSameResults verifies that the parallel Load
+// produces results identical to a sequentially-built index.
+func TestLoad_ParallelProducesSameResults(t *testing.T) {
+	tmpDir := t.TempDir()
+	compiledDir := filepath.Join(tmpDir, "compiled")
+
+	// Build and save an index with known data.
+	original := New(1.2, 0.75)
+	original.BuildFromChunks(testChunks())
+	if err := original.Save(compiledDir); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	// Load (now parallel) and query.
+	loaded, err := Load(compiledDir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	// Verify results match across all index types.
+	queries := []string{"JWT", "taxonomy", "database connection"}
+	for _, q := range queries {
+		origResults := original.QueryAll(q, 10)
+		loadResults := loaded.QueryAll(q, 10)
+
+		for _, it := range allIndexTypes() {
+			orig := origResults[it]
+			load := loadResults[it]
+			if len(orig) != len(load) {
+				t.Errorf("query %q, index %s: result count %d vs %d", q, it, len(orig), len(load))
+				continue
+			}
+			for i := range orig {
+				if orig[i].ChunkID != load[i].ChunkID {
+					t.Errorf("query %q, index %s, result %d: ChunkID %q vs %q",
+						q, it, i, orig[i].ChunkID, load[i].ChunkID)
+				}
+				if orig[i].Score != load[i].Score {
+					t.Errorf("query %q, index %s, result %d: Score %f vs %f",
+						q, it, i, orig[i].Score, load[i].Score)
+				}
+			}
+		}
 	}
 }

@@ -16,9 +16,10 @@ import (
 	querycmd "github.com/securacore/codectx/cmds/query"
 	repaircmd "github.com/securacore/codectx/cmds/repair"
 	searchcmd "github.com/securacore/codectx/cmds/search"
+	selfcmd "github.com/securacore/codectx/cmds/self"
 	sessioncmd "github.com/securacore/codectx/cmds/session"
 	updatecmd "github.com/securacore/codectx/cmds/update"
-	"github.com/securacore/codectx/cmds/version"
+	versioncmd "github.com/securacore/codectx/cmds/version"
 	"github.com/urfave/cli/v3"
 )
 
@@ -38,9 +39,10 @@ func main() {
 			querycmd.Command,
 			repaircmd.Command,
 			searchcmd.Command,
+			selfcmd.Command,
 			sessioncmd.Command,
 			updatecmd.Command,
-			version.Command,
+			versioncmd.Command,
 		},
 	}
 

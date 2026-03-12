@@ -164,9 +164,9 @@ func run(ctx context.Context, _ *cli.Command) error {
 		sha = sha[:8]
 	}
 
-	fmt.Printf("\n%s Published %s@%s v%s (%s)\n",
+	fmt.Printf("\n%s Published %s v%s (%s)\n\n",
 		tui.Success(),
-		cfg.Name, cfg.Org, cfg.Version, sha,
+		tui.StyleBold.Render(cfg.Name+"@"+cfg.Org), cfg.Version, sha,
 	)
 	fmt.Printf("%sInstall with: %s\n\n",
 		tui.Indent(1),

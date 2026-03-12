@@ -305,7 +305,6 @@ func renderWarnings(warnings []string) string {
 }
 
 // countNonZero returns how many of the given ints are greater than zero.
-// countNonZero returns how many of the given ints are greater than zero.
 func countNonZero(values ...int) int {
 	count := 0
 	for _, v := range values {

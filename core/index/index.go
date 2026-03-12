@@ -1,6 +1,8 @@
 package index
 
 import (
+	"sync"
+
 	"github.com/securacore/codectx/core/chunk"
 	"github.com/securacore/codectx/core/project"
 )
@@ -106,39 +108,52 @@ func (idx *Index) Query(indexType IndexType, query string, topN int) []ScoredRes
 	return bm25.Score(tokens, topN)
 }
 
-// QueryAll runs the query against all three indexes and returns results
-// grouped by index type.
+// QueryAll runs the query against all three indexes in parallel and returns
+// results grouped by index type.
 func (idx *Index) QueryAll(query string, topN int) map[IndexType][]ScoredResult {
-	results := make(map[IndexType][]ScoredResult, len(idx.Indexes))
 	tokens := Tokenize(query)
 	if len(tokens) == 0 {
-		return results
+		return make(map[IndexType][]ScoredResult)
 	}
-
-	for it, bm25 := range idx.Indexes {
-		r := bm25.Score(tokens, topN)
-		if len(r) > 0 {
-			results[it] = r
-		}
-	}
-
-	return results
+	return idx.scoreAll(tokens, topN)
 }
 
 // QueryAllWithTokens runs pre-tokenized/expanded tokens against all three
-// indexes. Unlike QueryAll, this skips the Tokenize step, allowing the
-// caller to supply tokens that have already been expanded (e.g. via
-// taxonomy-based query expansion).
+// indexes in parallel. Unlike QueryAll, this skips the Tokenize step,
+// allowing the caller to supply tokens that have already been expanded
+// (e.g. via taxonomy-based query expansion).
 func (idx *Index) QueryAllWithTokens(tokens []string, topN int) map[IndexType][]ScoredResult {
-	results := make(map[IndexType][]ScoredResult, len(idx.Indexes))
 	if len(tokens) == 0 {
-		return results
+		return make(map[IndexType][]ScoredResult)
 	}
+	return idx.scoreAll(tokens, topN)
+}
 
-	for it, bm25 := range idx.Indexes {
-		r := bm25.Score(tokens, topN)
-		if len(r) > 0 {
-			results[it] = r
+// scoreAll fans out BM25 scoring across all indexes in parallel and
+// collects the results. Each Score call is read-only on an independent
+// BM25 struct, so no synchronization is needed beyond the WaitGroup.
+func (idx *Index) scoreAll(tokens []string, topN int) map[IndexType][]ScoredResult {
+	types := allIndexTypes()
+	scored := make([][]ScoredResult, len(types))
+
+	var wg sync.WaitGroup
+	for i, it := range types {
+		bm25, ok := idx.Indexes[it]
+		if !ok {
+			continue
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			scored[i] = bm25.Score(tokens, topN)
+		}()
+	}
+	wg.Wait()
+
+	results := make(map[IndexType][]ScoredResult, len(types))
+	for i, it := range types {
+		if len(scored[i]) > 0 {
+			results[it] = scored[i]
 		}
 	}
 

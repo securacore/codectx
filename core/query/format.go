@@ -115,7 +115,7 @@ func FormatGenerateSummary(r *GenerateResult, historyPath, filePath string) stri
 	// Build the header: tokens + short hash.
 	shortHash := history.ShortHash(r.ContentHash)
 
-	fmt.Fprintf(&b, "\n%s %s\n",
+	fmt.Fprintf(&b, "\n%s %s\n\n",
 		tui.Success(),
 		tui.StyleBold.Render(fmt.Sprintf("Generated (%s tokens, hash: %s)",
 			tui.FormatNumber(r.TotalTokens),

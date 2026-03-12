@@ -88,7 +88,7 @@ func installFromLock(ctx context.Context, lf *registry.LockFile, packagesDir str
 			return fmt.Errorf("spinner: %w", err)
 		}
 		if installErr != nil {
-			fmt.Printf("  %s %s: %v\n", tui.ErrorIcon(), ref, installErr)
+			fmt.Printf("%s%s %s: %v\n", tui.Indent(1), tui.ErrorIcon(), tui.StyleAccent.Render(ref), installErr)
 			continue
 		}
 
@@ -97,7 +97,7 @@ func installFromLock(ctx context.Context, lf *registry.LockFile, packagesDir str
 			source = tui.StyleMuted.Render(" (transitive)")
 		}
 
-		fmt.Printf("  %s %s v%s%s\n", tui.Success(), ref, pkg.ResolvedVersion, source)
+		fmt.Printf("%s%s %s v%s%s\n", tui.Indent(1), tui.Success(), tui.StyleAccent.Render(ref), pkg.ResolvedVersion, source)
 	}
 
 	fmt.Println()
@@ -140,18 +140,7 @@ func resolveAndInstall(
 	}
 
 	// Report conflicts.
-	for _, conflict := range result.Conflicts {
-		fmt.Print(tui.WarnMsg{
-			Title: fmt.Sprintf("Version conflict: %s", conflict.PackageRef),
-			Detail: func() []string {
-				var lines []string
-				for requester, version := range conflict.Versions {
-					lines = append(lines, fmt.Sprintf("  %s requires %s", requester, version))
-				}
-				return lines
-			}(),
-		}.Render())
-	}
+	shared.PrintConflicts(result.Conflicts)
 
 	// Step 4: Download resolved packages.
 	fmt.Printf("\n%s Installing %d packages\n\n",
@@ -184,7 +173,7 @@ func resolveAndInstall(
 			return fmt.Errorf("spinner: %w", err)
 		}
 		if installErr != nil {
-			fmt.Printf("  %s %s: %v\n", tui.ErrorIcon(), ref, installErr)
+			fmt.Printf("%s%s %s: %v\n", tui.Indent(1), tui.ErrorIcon(), tui.StyleAccent.Render(ref), installErr)
 			continue
 		}
 
@@ -196,17 +185,12 @@ func resolveAndInstall(
 			source = tui.StyleMuted.Render(" (transitive)")
 		}
 
-		fmt.Printf("  %s %s v%s%s\n", tui.Success(), ref, pkg.ResolvedVersion, source)
-		fmt.Printf("    %s %s\n", tui.StyleMuted.Render(tui.IconArrow), tui.StyleMuted.Render(url+"@"+pkg.ResolvedTag))
+		fmt.Printf("%s%s %s v%s%s\n", tui.Indent(1), tui.Success(), tui.StyleAccent.Render(ref), pkg.ResolvedVersion, source)
+		fmt.Printf("%s%s %s\n", tui.Indent(2), tui.StyleMuted.Render(tui.IconArrow), tui.StyleMuted.Render(url+"@"+pkg.ResolvedTag))
 	}
 
 	// Step 5: Write lock file.
-	lf := registry.ToLockFile(result, commitSHAs, reg)
-	if err := registry.SaveLock(lockPath, lf); err != nil {
-		fmt.Print(tui.ErrorMsg{
-			Title:  "Failed to write lock file",
-			Detail: []string{err.Error()},
-		}.Render())
+	if err := shared.SaveLockOrError(lockPath, result, commitSHAs, reg); err != nil {
 		return err
 	}
 

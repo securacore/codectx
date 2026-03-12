@@ -169,18 +169,7 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	// Report conflicts.
-	for _, conflict := range result.Conflicts {
-		fmt.Print(tui.WarnMsg{
-			Title: fmt.Sprintf("Version conflict: %s", conflict.PackageRef),
-			Detail: func() []string {
-				var lines []string
-				for requester, version := range conflict.Versions {
-					lines = append(lines, fmt.Sprintf("  %s requires %s", requester, version))
-				}
-				return lines
-			}(),
-		}.Render())
-	}
+	shared.PrintConflicts(result.Conflicts)
 
 	// Step 3: Compare with old lock and report changes.
 	entries := classifyChanges(result, oldLock)
@@ -196,23 +185,26 @@ func run(ctx context.Context, cmd *cli.Command) error {
 
 		switch entry.Status {
 		case statusUpdated:
-			fmt.Printf("  %s %s: %s -> %s%s\n",
+			fmt.Printf("%s%s %s: %s -> %s%s\n",
+				tui.Indent(1),
 				tui.Arrow(),
-				entry.Ref, entry.OldVersion,
+				tui.StyleAccent.Render(entry.Ref), entry.OldVersion,
 				tui.StyleBold.Render(entry.NewVersion),
 				tui.StyleMuted.Render(source),
 			)
 		case statusNew:
-			fmt.Printf("  %s %s: %s%s\n",
+			fmt.Printf("%s%s %s: %s%s\n",
+				tui.Indent(1),
 				tui.Success(),
-				entry.Ref,
+				tui.StyleAccent.Render(entry.Ref),
 				tui.StyleBold.Render(entry.NewVersion),
 				tui.StyleMuted.Render(source+" (new)"),
 			)
 		default:
-			fmt.Printf("  %s %s: %s%s\n",
+			fmt.Printf("%s%s %s: %s%s\n",
+				tui.Indent(1),
 				tui.StyleMuted.Render("-"),
-				entry.Ref,
+				tui.StyleAccent.Render(entry.Ref),
 				entry.NewVersion,
 				tui.StyleMuted.Render(source+" (unchanged)"),
 			)
@@ -250,12 +242,12 @@ func run(ctx context.Context, cmd *cli.Command) error {
 				return fmt.Errorf("spinner: %w", err)
 			}
 			if installErr != nil {
-				fmt.Printf("  %s %s: %v\n", tui.ErrorIcon(), ref, installErr)
+				fmt.Printf("%s%s %s: %v\n", tui.Indent(1), tui.ErrorIcon(), tui.StyleAccent.Render(ref), installErr)
 				continue
 			}
 
 			commitSHAs[ref] = sha
-			fmt.Printf("  %s Downloaded: %s v%s\n", tui.Success(), ref, pkg.ResolvedVersion)
+			fmt.Printf("%s%s Downloaded: %s v%s\n", tui.Indent(1), tui.Success(), tui.StyleAccent.Render(ref), pkg.ResolvedVersion)
 		}
 	} else {
 		// Still need commit SHAs for unchanged packages.
@@ -286,12 +278,7 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	// Step 5: Write lock file.
-	lf := registry.ToLockFile(result, commitSHAs, reg)
-	if err := registry.SaveLock(lockPath, lf); err != nil {
-		fmt.Print(tui.ErrorMsg{
-			Title:  "Failed to write lock file",
-			Detail: []string{err.Error()},
-		}.Render())
+	if err := shared.SaveLockOrError(lockPath, result, commitSHAs, reg); err != nil {
 		return err
 	}
 

@@ -120,7 +120,8 @@ func renderSearchResults(query string, results []registry.SearchResult) string {
 
 	if len(results) > 0 {
 		example := results[0]
-		fmt.Fprintf(&b, "Install with: %s\n\n",
+		fmt.Fprintf(&b, "%sInstall with: %s\n\n",
+			tui.Indent(1),
 			tui.StyleCommand.Render(
 				fmt.Sprintf("codectx install %s@%s:latest", example.Name, example.Org),
 			),
