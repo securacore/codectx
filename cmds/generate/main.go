@@ -15,7 +15,7 @@ import (
 	"context"
 	"fmt"
 
-	"charm.land/huh/v2/spinner"
+	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/project"
 	corequery "github.com/securacore/codectx/core/query"
 	"github.com/securacore/codectx/core/tui"
@@ -85,13 +85,9 @@ func run(_ context.Context, cmd *cli.Command) error {
 	var result *corequery.GenerateResult
 	var genErr error
 
-	err = spinner.New().
-		Title("Assembling reading document...").
-		Action(func() {
-			result, genErr = corequery.RunGenerate(compiledDir, encoding, chunkIDs)
-		}).
-		Run()
-	if err != nil {
+	if err = shared.RunWithSpinner("Assembling reading document...", func() {
+		result, genErr = corequery.RunGenerate(compiledDir, encoding, chunkIDs)
+	}); err != nil {
 		return fmt.Errorf("spinner: %w", err)
 	}
 	if genErr != nil {

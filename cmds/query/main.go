@@ -14,7 +14,7 @@ import (
 	"context"
 	"fmt"
 
-	"charm.land/huh/v2/spinner"
+	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/project"
 	corequery "github.com/securacore/codectx/core/query"
 	"github.com/securacore/codectx/core/tui"
@@ -77,13 +77,9 @@ func run(_ context.Context, cmd *cli.Command) error {
 	var result *corequery.QueryResult
 	var queryErr error
 
-	err = spinner.New().
-		Title("Searching compiled documentation...").
-		Action(func() {
-			result, queryErr = corequery.RunQuery(compiledDir, queryStr, topN)
-		}).
-		Run()
-	if err != nil {
+	if err = shared.RunWithSpinner("Searching compiled documentation...", func() {
+		result, queryErr = corequery.RunQuery(compiledDir, queryStr, topN)
+	}); err != nil {
 		return fmt.Errorf("spinner: %w", err)
 	}
 	if queryErr != nil {

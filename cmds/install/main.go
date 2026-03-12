@@ -12,7 +12,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"charm.land/huh/v2/spinner"
+	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/project"
 	"github.com/securacore/codectx/core/registry"
 	"github.com/securacore/codectx/core/tui"
@@ -75,19 +75,16 @@ func installFromLock(ctx context.Context, lf *registry.LockFile, packagesDir str
 		destDir := filepath.Join(packagesDir, ref)
 
 		var installErr error
-		err := spinner.New().
-			Title(fmt.Sprintf("Installing %s v%s...", ref, pkg.ResolvedVersion)).
-			Action(func() {
-				repo, cloneErr := gc.Clone(ctx, url, destDir)
-				if cloneErr != nil {
-					installErr = cloneErr
-					return
-				}
+		err := shared.RunWithSpinner(fmt.Sprintf("Installing %s v%s...", ref, pkg.ResolvedVersion), func() {
+			repo, cloneErr := gc.Clone(ctx, url, destDir)
+			if cloneErr != nil {
+				installErr = cloneErr
+				return
+			}
 
-				tag := registry.GitTag(pkg.ResolvedVersion)
-				installErr = gc.CheckoutTag(repo, tag)
-			}).
-			Run()
+			tag := registry.GitTag(pkg.ResolvedVersion)
+			installErr = gc.CheckoutTag(repo, tag)
+		})
 		if err != nil {
 			return fmt.Errorf("spinner: %w", err)
 		}
@@ -130,13 +127,9 @@ func resolveAndInstall(
 	var result *registry.ResolveResult
 	var resolveErr error
 
-	err = spinner.New().
-		Title("Resolving dependencies...").
-		Action(func() {
-			result, resolveErr = registry.Resolve(ctx, cfg.Dependencies, reg, tags, configs)
-		}).
-		Run()
-	if err != nil {
+	if err = shared.RunWithSpinner("Resolving dependencies...", func() {
+		result, resolveErr = registry.Resolve(ctx, cfg.Dependencies, reg, tags, configs)
+	}); err != nil {
 		return fmt.Errorf("spinner: %w", err)
 	}
 	if resolveErr != nil {
@@ -175,24 +168,20 @@ func resolveAndInstall(
 		var installErr error
 		var sha string
 
-		err = spinner.New().
-			Title(fmt.Sprintf("Installing %s v%s...", ref, pkg.ResolvedVersion)).
-			Action(func() {
-				repo, cloneErr := gc.Clone(ctx, url, destDir)
-				if cloneErr != nil {
-					installErr = cloneErr
-					return
-				}
+		if err = shared.RunWithSpinner(fmt.Sprintf("Installing %s v%s...", ref, pkg.ResolvedVersion), func() {
+			repo, cloneErr := gc.Clone(ctx, url, destDir)
+			if cloneErr != nil {
+				installErr = cloneErr
+				return
+			}
 
-				if checkoutErr := gc.CheckoutTag(repo, pkg.ResolvedTag); checkoutErr != nil {
-					installErr = checkoutErr
-					return
-				}
+			if checkoutErr := gc.CheckoutTag(repo, pkg.ResolvedTag); checkoutErr != nil {
+				installErr = checkoutErr
+				return
+			}
 
-				sha, installErr = gc.TagCommitSHA(repo, pkg.ResolvedTag)
-			}).
-			Run()
-		if err != nil {
+			sha, installErr = gc.TagCommitSHA(repo, pkg.ResolvedTag)
+		}); err != nil {
 			return fmt.Errorf("spinner: %w", err)
 		}
 		if installErr != nil {

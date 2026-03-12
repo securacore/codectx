@@ -12,8 +12,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"charm.land/huh/v2/spinner"
 	git "github.com/go-git/go-git/v5"
+	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/project"
 	"github.com/securacore/codectx/core/registry"
 	"github.com/securacore/codectx/core/tui"
@@ -127,13 +127,9 @@ func run(ctx context.Context, _ *cli.Command) error {
 
 	var tagErr, pushErr error
 
-	err = spinner.New().
-		Title(fmt.Sprintf("Creating tag %s...", tagName)).
-		Action(func() {
-			tagErr = gc.CreateLightweightTag(repo, tagName)
-		}).
-		Run()
-	if err != nil {
+	if err = shared.RunWithSpinner(fmt.Sprintf("Creating tag %s...", tagName), func() {
+		tagErr = gc.CreateLightweightTag(repo, tagName)
+	}); err != nil {
 		return fmt.Errorf("spinner: %w", err)
 	}
 	if tagErr != nil {
@@ -144,13 +140,9 @@ func run(ctx context.Context, _ *cli.Command) error {
 		return tagErr
 	}
 
-	err = spinner.New().
-		Title(fmt.Sprintf("Pushing %s to %s...", tagName, cfg.Org+"/"+repoName)).
-		Action(func() {
-			pushErr = gc.PushTag(ctx, repo, tagName)
-		}).
-		Run()
-	if err != nil {
+	if err = shared.RunWithSpinner(fmt.Sprintf("Pushing %s to %s...", tagName, cfg.Org+"/"+repoName), func() {
+		pushErr = gc.PushTag(ctx, repo, tagName)
+	}); err != nil {
 		return fmt.Errorf("spinner: %w", err)
 	}
 	if pushErr != nil {

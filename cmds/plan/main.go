@@ -14,7 +14,7 @@ import (
 	"context"
 	"fmt"
 
-	"charm.land/huh/v2/spinner"
+	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/manifest"
 	coreplan "github.com/securacore/codectx/core/plan"
 	"github.com/securacore/codectx/core/project"
@@ -91,35 +91,31 @@ func runStatus(_ context.Context, cmd *cli.Command) error {
 	var statusErr error
 	var hashWarn string
 
-	err = spinner.New().
-		Title("Loading plan status...").
-		Action(func() {
-			_, planPath, findErr := coreplan.FindPlan(rootDir, planName)
-			if findErr != nil {
-				statusErr = fmt.Errorf("finding plan: %w", findErr)
-				return
-			}
+	if err = shared.RunWithSpinner("Loading plan status...", func() {
+		_, planPath, findErr := coreplan.FindPlan(rootDir, planName)
+		if findErr != nil {
+			statusErr = fmt.Errorf("finding plan: %w", findErr)
+			return
+		}
 
-			var loadErr error
-			p, loadErr = coreplan.Load(planPath)
-			if loadErr != nil {
-				statusErr = fmt.Errorf("loading plan: %w", loadErr)
-				return
-			}
+		var loadErr error
+		p, loadErr = coreplan.Load(planPath)
+		if loadErr != nil {
+			statusErr = fmt.Errorf("loading plan: %w", loadErr)
+			return
+		}
 
-			if len(p.Dependencies) > 0 {
-				compiledDir := corequery.CompiledDir(projectDir, cfg)
-				hashesPath := manifest.HashesPath(compiledDir)
-				hashes, hashErr := manifest.LoadHashes(hashesPath)
-				if hashErr != nil {
-					hashWarn = hashErr.Error()
-				} else {
-					check = coreplan.CheckDependencies(p.Dependencies, hashes)
-				}
+		if len(p.Dependencies) > 0 {
+			compiledDir := corequery.CompiledDir(projectDir, cfg)
+			hashesPath := manifest.HashesPath(compiledDir)
+			hashes, hashErr := manifest.LoadHashes(hashesPath)
+			if hashErr != nil {
+				hashWarn = hashErr.Error()
+			} else {
+				check = coreplan.CheckDependencies(p.Dependencies, hashes)
 			}
-		}).
-		Run()
-	if err != nil {
+		}
+	}); err != nil {
 		return fmt.Errorf("spinner: %w", err)
 	}
 	if statusErr != nil {
@@ -183,13 +179,9 @@ func runResume(_ context.Context, cmd *cli.Command) error {
 	var result *coreplan.ResumeResult
 	var resumeErr error
 
-	err = spinner.New().
-		Title("Resuming plan...").
-		Action(func() {
-			result, resumeErr = coreplan.Resume(planPath, compiledDir, encoding)
-		}).
-		Run()
-	if err != nil {
+	if err = shared.RunWithSpinner("Resuming plan...", func() {
+		result, resumeErr = coreplan.Resume(planPath, compiledDir, encoding)
+	}); err != nil {
 		return fmt.Errorf("spinner: %w", err)
 	}
 	if resumeErr != nil {

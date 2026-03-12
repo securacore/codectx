@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"strings"
 
-	"charm.land/huh/v2/spinner"
+	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/registry"
 	"github.com/securacore/codectx/core/tui"
 	"github.com/urfave/cli/v3"
@@ -57,12 +57,9 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	var results []registry.SearchResult
 	var searchErr error
 
-	err := spinner.New().
-		Title("Searching packages...").
-		Action(func() {
-			results, searchErr = gh.SearchPackages(ctx, query, limit)
-		}).
-		Run()
+	err := shared.RunWithSpinner("Searching packages...", func() {
+		results, searchErr = gh.SearchPackages(ctx, query, limit)
+	})
 	if err != nil {
 		return fmt.Errorf("spinner: %w", err)
 	}
@@ -85,24 +82,20 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	// Resolve latest version for each result.
-	err = spinner.New().
-		Title("Resolving versions...").
-		Action(func() {
-			for i := range results {
-				r := &results[i]
-				tags, tagErr := gitClient.ListRemoteTags(ctx, "https://github.com/"+r.FullName)
-				if tagErr != nil {
-					continue
-				}
-				resolved, verErr := registry.ResolveVersion(tags, registry.LatestVersion)
-				if verErr != nil {
-					continue
-				}
-				r.LatestVersion = registry.VersionFromTag(resolved)
+	if err = shared.RunWithSpinner("Resolving versions...", func() {
+		for i := range results {
+			r := &results[i]
+			tags, tagErr := gitClient.ListRemoteTags(ctx, "https://github.com/"+r.FullName)
+			if tagErr != nil {
+				continue
 			}
-		}).
-		Run()
-	if err != nil {
+			resolved, verErr := registry.ResolveVersion(tags, registry.LatestVersion)
+			if verErr != nil {
+				continue
+			}
+			r.LatestVersion = registry.VersionFromTag(resolved)
+		}
+	}); err != nil {
 		return fmt.Errorf("spinner: %w", err)
 	}
 

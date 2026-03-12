@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"sort"
 
-	"charm.land/huh/v2/spinner"
 	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/compile"
 	"github.com/securacore/codectx/core/project"
@@ -157,13 +156,9 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	var result *registry.ResolveResult
 	var resolveErr error
 
-	err = spinner.New().
-		Title("Resolving dependencies...").
-		Action(func() {
-			result, resolveErr = registry.Resolve(ctx, cfg.Dependencies, reg, tags, configs)
-		}).
-		Run()
-	if err != nil {
+	if err = shared.RunWithSpinner("Resolving dependencies...", func() {
+		result, resolveErr = registry.Resolve(ctx, cfg.Dependencies, reg, tags, configs)
+	}); err != nil {
 		return fmt.Errorf("spinner: %w", err)
 	}
 	if resolveErr != nil {
@@ -239,24 +234,20 @@ func run(ctx context.Context, cmd *cli.Command) error {
 			var installErr error
 			var sha string
 
-			err = spinner.New().
-				Title(fmt.Sprintf("Installing %s v%s...", ref, pkg.ResolvedVersion)).
-				Action(func() {
-					repo, cloneErr := gc.Clone(ctx, url, destDir)
-					if cloneErr != nil {
-						installErr = cloneErr
-						return
-					}
+			if err = shared.RunWithSpinner(fmt.Sprintf("Installing %s v%s...", ref, pkg.ResolvedVersion), func() {
+				repo, cloneErr := gc.Clone(ctx, url, destDir)
+				if cloneErr != nil {
+					installErr = cloneErr
+					return
+				}
 
-					if checkoutErr := gc.CheckoutTag(repo, pkg.ResolvedTag); checkoutErr != nil {
-						installErr = checkoutErr
-						return
-					}
+				if checkoutErr := gc.CheckoutTag(repo, pkg.ResolvedTag); checkoutErr != nil {
+					installErr = checkoutErr
+					return
+				}
 
-					sha, installErr = gc.TagCommitSHA(repo, pkg.ResolvedTag)
-				}).
-				Run()
-			if err != nil {
+				sha, installErr = gc.TagCommitSHA(repo, pkg.ResolvedTag)
+			}); err != nil {
 				return fmt.Errorf("spinner: %w", err)
 			}
 			if installErr != nil {
@@ -348,13 +339,9 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	var compileResult *compile.Result
 	var compileErr error
 
-	err = spinner.New().
-		Title("Compiling...").
-		Action(func() {
-			compileResult, compileErr = compile.Run(compileCfg, nil)
-		}).
-		Run()
-	if err != nil {
+	if err = shared.RunWithSpinner("Compiling...", func() {
+		compileResult, compileErr = compile.Run(compileCfg, nil)
+	}); err != nil {
 		return fmt.Errorf("spinner: %w", err)
 	}
 	if compileErr != nil {

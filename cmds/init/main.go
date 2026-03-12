@@ -24,7 +24,6 @@ import (
 	"path/filepath"
 
 	"charm.land/huh/v2"
-	"charm.land/huh/v2/spinner"
 	"github.com/charmbracelet/x/term"
 	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/compile"
@@ -236,19 +235,10 @@ func run(_ context.Context, cmd *cli.Command) error {
 	// --- Step 7: AI tool detection ---
 	var detection detect.Result
 
-	if interactive {
-		err = spinner.New().
-			Title("Scanning for AI tools...").
-			ActionWithErr(func(_ context.Context) error {
-				detection = detect.Scan()
-				return nil
-			}).
-			Run()
-		if err != nil {
-			return err
-		}
-	} else {
+	if err = shared.RunWithSpinner("Scanning for AI tools...", func() {
 		detection = detect.Scan()
+	}); err != nil {
+		return err
 	}
 
 	// Display detection results.
@@ -354,23 +344,14 @@ func run(_ context.Context, cmd *cli.Command) error {
 	}
 
 	var result *scaffold.Result
-	if interactive {
-		err = spinner.New().
-			Title("Creating project structure...").
-			ActionWithErr(func(_ context.Context) error {
-				var initErr error
-				result, initErr = scaffold.Init(opts)
-				return initErr
-			}).
-			Run()
-		if err != nil {
-			return err
-		}
-	} else {
-		result, err = scaffold.Init(opts)
-		if err != nil {
-			return err
-		}
+	var initErr error
+	if err = shared.RunWithSpinner("Creating project structure...", func() {
+		result, initErr = scaffold.Init(opts)
+	}); err != nil {
+		return err
+	}
+	if initErr != nil {
+		return initErr
 	}
 
 	// --- Step 10: Determine auto-compile intent ---
@@ -523,12 +504,9 @@ func runInitCompile(projectDir, root string) error {
 	var result *compile.Result
 	var compileErr error
 
-	if sErr := spinner.New().
-		Title("Compiling...").
-		Action(func() {
-			result, compileErr = compile.Run(compileCfg, nil)
-		}).
-		Run(); sErr != nil {
+	if sErr := shared.RunWithSpinner("Compiling...", func() {
+		result, compileErr = compile.Run(compileCfg, nil)
+	}); sErr != nil {
 		return sErr
 	}
 	if compileErr != nil {
