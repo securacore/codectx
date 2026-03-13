@@ -40,15 +40,17 @@ const (
 var Command = &cli.Command{
 	Name:      "remove",
 	Usage:     "Remove a documentation package dependency",
-	ArgsUsage: "<name@org[:version]>",
+	ArgsUsage: "<name[@author][:version]>",
 	Description: `Removes a dependency from codectx.yml, deletes the installed package,
 and updates the lock file.
 
-The version is optional — the package is matched by name@org.
+The author and version are optional — when omitted, codectx searches
+your project dependencies for matches by name.
 
 Examples:
-  codectx remove react-patterns@community
-  codectx remove react-patterns@community:latest
+  codectx remove react                         Search deps by name, auto-select if unique
+  codectx remove react@community               Specific author
+  codectx remove react@community:latest         Full key format
 
 For package authoring projects (type: "package"), you will be prompted
 to choose where the dependency is removed from:
@@ -75,28 +77,32 @@ Use --project, --package, or --both to skip the prompt.`,
 }
 
 func run(_ context.Context, cmd *cli.Command) error {
-	// --- Step 1: Validate arguments ---
+	// --- Step 1: Validate and parse arguments ---
 	if cmd.NArg() < 1 {
 		fmt.Print(tui.ErrorMsg{
 			Title: "Missing dependency argument",
 			Detail: []string{
-				"Usage: codectx remove <name@org[:version]>",
+				"Usage: codectx remove <name[@author][:version]>",
 			},
 			Suggestions: []tui.Suggestion{
-				{Text: "Example:", Command: "codectx remove react-patterns@community"},
+				{Text: "Examples:"},
+				{Text: "By name:", Command: "codectx remove react"},
+				{Text: "By name@author:", Command: "codectx remove react@community"},
 			},
 		}.Render())
 		return fmt.Errorf("missing dependency argument")
 	}
 
 	depStr := cmd.Args().First()
-	ref, err := parseRef(depStr)
+	partial, err := registry.ParsePartialDepKey(depStr)
 	if err != nil {
 		fmt.Print(tui.ErrorMsg{
 			Title:  "Invalid dependency format",
 			Detail: []string{err.Error()},
 			Suggestions: []tui.Suggestion{
-				{Text: "Expected format:", Command: "name@org or name@org:version"},
+				{Text: "Name only:", Command: "codectx remove react"},
+				{Text: "Name@author:", Command: "codectx remove react@community"},
+				{Text: "Full key:", Command: "codectx remove react@community:latest"},
 			},
 		}.Render())
 		return err
@@ -108,7 +114,13 @@ func run(_ context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	// --- Step 3: Find the dependency in the project config ---
+	// --- Step 3: Resolve the dependency ref from project deps ---
+	ref, err := resolveDepRef(cfg, partial)
+	if err != nil {
+		return err
+	}
+
+	// --- Step 4: Find the dependency in the project config ---
 	depKey, found := findDepByRef(cfg, ref)
 	inProject := found
 
@@ -124,25 +136,29 @@ func run(_ context.Context, cmd *cli.Command) error {
 	}
 
 	if !inProject && !inPackageManifest {
-		fmt.Printf("\n%s Dependency %s not found in any config file\n\n",
-			tui.Warning(),
-			tui.StyleAccent.Render(ref),
-		)
+		fmt.Print(tui.WarnMsg{
+			Title: "Dependency not found",
+			Detail: []string{
+				fmt.Sprintf("%s is not declared in any config file.",
+					tui.StyleAccent.Render(ref),
+				),
+			},
+		}.Render())
 		return fmt.Errorf("dependency %s not found", ref)
 	}
 
-	// --- Step 4: Determine target ---
+	// --- Step 5: Determine target ---
 	target, err := resolveTarget(cmd, cfg, projectDir, inProject, inPackageManifest)
 	if err != nil {
 		return err
 	}
 
-	// --- Step 5: Remove from config file(s) ---
+	// --- Step 6: Remove from config file(s) ---
 	if err := removeDependency(projectDir, cfg, ref, depKey, target, inProject, inPackageManifest); err != nil {
 		return err
 	}
 
-	// --- Step 6: Remove installed package directory ---
+	// --- Step 7: Remove installed package directory ---
 	rootDir := project.RootDir(projectDir, cfg)
 	packagesDir := project.PackagesPath(rootDir)
 	pkgDir := filepath.Join(packagesDir, ref)
@@ -161,13 +177,13 @@ func run(_ context.Context, cmd *cli.Command) error {
 		}
 	}
 
-	// --- Step 7: Update lock file ---
+	// --- Step 8: Update lock file ---
 	if shouldUninstall {
 		lockPath := filepath.Join(rootDir, registry.LockFileName)
 		removeLockEntry(lockPath, ref)
 	}
 
-	// --- Step 8: Summary ---
+	// --- Step 9: Summary ---
 	fmt.Printf("\n%s Removed %s\n", tui.Success(), tui.StyleAccent.Render(ref))
 	printTargetInfo(target, shouldUninstall)
 	fmt.Println()
@@ -175,26 +191,125 @@ func run(_ context.Context, cmd *cli.Command) error {
 	return nil
 }
 
-// parseRef parses a dependency argument that can be either "name@org:version"
-// or just "name@org". Returns the short ref "name@org".
-func parseRef(s string) (string, error) {
-	// Try full key format first.
-	dk, err := registry.ParseDepKey(s)
-	if err == nil {
-		return dk.PackageRef(), nil
+// resolveDepRef takes a partial dependency key and resolves it to a full
+// "name@author" ref by searching the project's existing dependencies.
+//
+// When the author is already specified, the ref is returned directly.
+// When only a name is given, it searches deps for matches:
+//   - 0 matches → error with available deps hint
+//   - 1 match → auto-select with info message
+//   - multiple → interactive prompt or error in non-interactive mode
+func resolveDepRef(cfg *project.Config, partial registry.PartialDepKey) (string, error) {
+	// If author is known, return the ref directly.
+	if partial.Author != "" {
+		return partial.Name + "@" + partial.Author, nil
 	}
 
-	// Try short ref format.
-	_, _, parseErr := registry.ParsePackageRef(s)
-	if parseErr != nil {
-		return "", fmt.Errorf("invalid format %q: expected name@org or name@org:version", s)
+	// Search project deps by name.
+	matches := findDepsByName(cfg, partial.Name)
+
+	switch len(matches) {
+	case 0:
+		fmt.Print(tui.ErrorMsg{
+			Title: "Dependency not found",
+			Detail: []string{
+				fmt.Sprintf("No dependency matching %s in codectx.yml.",
+					tui.StyleAccent.Render(partial.Name)),
+			},
+			Suggestions: depListSuggestions(cfg),
+		}.Render())
+		return "", fmt.Errorf("no dependency matching %q", partial.Name)
+
+	case 1:
+		ref := matches[0]
+		fmt.Printf("\n%s Matched %s\n",
+			tui.Arrow(),
+			tui.StyleAccent.Render(ref),
+		)
+		return ref, nil
+
+	default:
+		// Multiple matches — need disambiguation.
+		interactive := term.IsTerminal(os.Stdin.Fd())
+		if !interactive {
+			suggestions := make([]tui.Suggestion, 0, len(matches)+1)
+			suggestions = append(suggestions, tui.Suggestion{Text: "Specify the full reference:"})
+			for _, ref := range matches {
+				suggestions = append(suggestions, tui.Suggestion{
+					Command: fmt.Sprintf("codectx remove %s", ref),
+				})
+			}
+			fmt.Print(tui.ErrorMsg{
+				Title: "Multiple dependencies match (non-interactive mode)",
+				Detail: []string{
+					fmt.Sprintf("Found %d dependencies matching %s.",
+						len(matches), tui.StyleAccent.Render(partial.Name)),
+				},
+				Suggestions: suggestions,
+			}.Render())
+			return "", fmt.Errorf("multiple dependencies match %q in non-interactive mode", partial.Name)
+		}
+
+		// Interactive select.
+		options := make([]huh.Option[string], 0, len(matches))
+		for _, ref := range matches {
+			options = append(options, huh.NewOption(ref, ref))
+		}
+
+		var selected string
+		if err := huh.NewSelect[string]().
+			Title(fmt.Sprintf("Multiple dependencies match %q. Which one?", partial.Name)).
+			Options(options...).
+			Value(&selected).
+			Run(); err != nil {
+			return "", err
+		}
+
+		return selected, nil
+	}
+}
+
+// findDepsByName returns all "name@author" refs from the project config
+// where the package name matches.
+func findDepsByName(cfg *project.Config, name string) []string {
+	var matches []string
+	for key := range cfg.Dependencies {
+		dk, err := registry.ParseDepKey(key)
+		if err != nil {
+			continue
+		}
+		if dk.Name == name {
+			matches = append(matches, dk.PackageRef())
+		}
+	}
+	return matches
+}
+
+// depListSuggestions returns suggestions listing the current project dependencies.
+func depListSuggestions(cfg *project.Config) []tui.Suggestion {
+	if len(cfg.Dependencies) == 0 {
+		return []tui.Suggestion{
+			{Text: "No dependencies are currently configured."},
+		}
 	}
 
-	return s, nil
+	suggestions := []tui.Suggestion{
+		{Text: "Current dependencies:"},
+	}
+	for key := range cfg.Dependencies {
+		dk, err := registry.ParseDepKey(key)
+		if err != nil {
+			continue
+		}
+		suggestions = append(suggestions, tui.Suggestion{
+			Command: fmt.Sprintf("codectx remove %s", dk.PackageRef()),
+		})
+	}
+	return suggestions
 }
 
 // findDepByRef searches the project config dependencies for one matching
-// the given "name@org" ref. Returns the full key and whether it was found.
+// the given "name@author" ref. Returns the full key and whether it was found.
 func findDepByRef(cfg *project.Config, ref string) (string, bool) {
 	for key := range cfg.Dependencies {
 		dk, err := registry.ParseDepKey(key)
@@ -229,8 +344,14 @@ func resolveTarget(
 	flagCount := shared.BoolCount(flagProject, flagPackage, flagBoth)
 	if flagCount > 1 {
 		fmt.Print(tui.ErrorMsg{
-			Title:  "Conflicting flags",
-			Detail: []string{"Only one of --project, --package, or --both may be specified."},
+			Title: "Conflicting flags",
+			Detail: []string{
+				fmt.Sprintf("Only one of %s, %s, or %s may be specified.",
+					tui.StyleCommand.Render("--project"),
+					tui.StyleCommand.Render("--package"),
+					tui.StyleCommand.Render("--both"),
+				),
+			},
 		}.Render())
 		return 0, fmt.Errorf("conflicting target flags")
 	}
@@ -395,13 +516,13 @@ func pruneOrphanedTransitive(lf *registry.LockFile, removedRef string) {
 		// Filter out the removed ref from RequiredBy.
 		filtered := make([]string, 0, len(pkg.RequiredBy))
 		for _, rb := range pkg.RequiredBy {
-			// RequiredBy entries are "name@org:version", extract ref part.
-			name, org, err := registry.ParsePackageRef(extractRef(rb))
+			// RequiredBy entries are "name@author:version", extract ref part.
+			name, author, err := registry.ParsePackageRef(extractRef(rb))
 			if err != nil {
 				filtered = append(filtered, rb)
 				continue
 			}
-			if name+"@"+org != removedRef {
+			if name+"@"+author != removedRef {
 				filtered = append(filtered, rb)
 			}
 		}
@@ -415,7 +536,7 @@ func pruneOrphanedTransitive(lf *registry.LockFile, removedRef string) {
 	}
 }
 
-// extractRef extracts the "name@org" part from a "name@org:version" string.
+// extractRef extracts the "name@author" part from a "name@author:version" string.
 func extractRef(s string) string {
 	dk, err := registry.ParseDepKey(s)
 	if err != nil {
@@ -427,23 +548,23 @@ func extractRef(s string) string {
 
 // printTargetInfo prints where the dependency was removed from.
 func printTargetInfo(target removeTarget, uninstalled bool) {
+	var value string
+	suffix := ""
+	if uninstalled {
+		suffix = tui.StyleMuted.Render(" + uninstalled")
+	}
+
 	switch target {
 	case rmProject:
-		msg := "Removed from: codectx.yml (project)"
-		if uninstalled {
-			msg += " + uninstalled"
-		}
-		fmt.Printf("%s%s\n", tui.Indent(1), tui.StyleMuted.Render(msg))
+		value = tui.StylePath.Render("codectx.yml") +
+			tui.StyleMuted.Render(" (project)") + suffix
 	case rmPackage:
-		fmt.Printf("%s%s\n",
-			tui.Indent(1),
-			tui.StyleMuted.Render("Removed from: package/codectx.yml (package manifest)"),
-		)
+		value = tui.StylePath.Render("package/codectx.yml") +
+			tui.StyleMuted.Render(" (package manifest)")
 	case rmBoth:
-		msg := "Removed from: codectx.yml + package/codectx.yml"
-		if uninstalled {
-			msg += " + uninstalled"
-		}
-		fmt.Printf("%s%s\n", tui.Indent(1), tui.StyleMuted.Render(msg))
+		value = tui.StylePath.Render("codectx.yml") +
+			tui.StyleMuted.Render(" + ") +
+			tui.StylePath.Render("package/codectx.yml") + suffix
 	}
+	fmt.Printf("%s%s\n", tui.Indent(1), tui.KeyValue("Removed from", value))
 }

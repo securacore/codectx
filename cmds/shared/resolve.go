@@ -150,9 +150,8 @@ func ResolveAndInstall(
 		return err
 	}
 
-	// Write lock file.
-	commitSHAs := make(map[string]string)
-	if err := SaveLockOrError(lockPath, result, commitSHAs, reg); err != nil {
+	// Write lock file (no commit SHAs for archive-based installs).
+	if err := SaveLockOrError(lockPath, result, nil, reg); err != nil {
 		return err
 	}
 

@@ -38,7 +38,7 @@ func TestResolveTopN_AIConfigOverridesDefault(t *testing.T) {
 
 	// Write codectx.yml.
 	testutil.MustWriteFile(t, filepath.Join(dir, root, "codectx.yml"), `name: test
-org: test
+author: test
 version: "0.1.0"
 root: docs
 `)
@@ -62,7 +62,7 @@ func TestResolveTopN_FlagOverridesAIConfig(t *testing.T) {
 	root := "docs"
 
 	testutil.MustWriteFile(t, filepath.Join(dir, root, "codectx.yml"), `name: test
-org: test
+author: test
 version: "0.1.0"
 root: docs
 `)

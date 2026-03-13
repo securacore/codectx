@@ -112,8 +112,8 @@ type Config struct {
 	// Name is the package/project name.
 	Name string `yaml:"name"`
 
-	// Org is the organization or author namespace.
-	Org string `yaml:"org"`
+	// Author is the GitHub username or organization that owns this package.
+	Author string `yaml:"author"`
 
 	// Version is the package version in semver format.
 	Version string `yaml:"version"`
@@ -215,7 +215,7 @@ func DefaultConfig(name string, root string, projectType string) Config {
 	cfg := Config{
 		Root:        root,
 		Name:        name,
-		Org:         "",
+		Author:      "",
 		Version:     "0.1.0",
 		Description: "",
 		Session: &SessionConfig{
@@ -352,6 +352,9 @@ type PreferencesConfig struct {
 	// "not set" (nil → default true) from "explicitly set to false".
 	ScaffoldMaintenance *bool `yaml:"scaffold_maintenance,omitempty"`
 
+	// Search configures package search and discovery settings.
+	Search SearchConfig `yaml:"search"`
+
 	// Chunking configures chunk compilation settings.
 	Chunking ChunkingConfig `yaml:"chunking"`
 
@@ -363,6 +366,25 @@ type PreferencesConfig struct {
 
 	// Validation configures documentation linting and validation.
 	Validation ValidationConfig `yaml:"validation"`
+}
+
+// SearchConfig controls package search and discovery behavior.
+type SearchConfig struct {
+	// ShowUninstallable controls whether packages without a release archive
+	// are included in search and add results.
+	// Defaults to false when absent (nil → hide uninstallable packages).
+	// Uses a pointer to distinguish "not set" from "explicitly set to true".
+	ShowUninstallable *bool `yaml:"show_uninstallable,omitempty"`
+}
+
+// EffectiveShowUninstallable returns whether uninstallable packages should
+// be shown in search results. Returns false when ShowUninstallable is nil
+// (field absent from config file), hiding packages without release archives.
+func (c *SearchConfig) EffectiveShowUninstallable() bool {
+	if c.ShowUninstallable == nil {
+		return false
+	}
+	return *c.ShowUninstallable
 }
 
 // ChunkingConfig controls how documents are split into chunks.
@@ -490,6 +512,7 @@ func DefaultPreferencesConfig() PreferencesConfig {
 	return PreferencesConfig{
 		AutoCompile:         BoolPtr(true),
 		ScaffoldMaintenance: BoolPtr(true),
+		Search:              SearchConfig{},
 		Chunking: ChunkingConfig{
 			TargetTokens:      450,
 			MinTokens:         200,
@@ -543,8 +566,8 @@ type PackageManifest struct {
 	// Name is the package name.
 	Name string `yaml:"name"`
 
-	// Org is the organization or author namespace.
-	Org string `yaml:"org"`
+	// Author is the GitHub username or organization that owns this package.
+	Author string `yaml:"author"`
 
 	// Version is the package version in semver format.
 	Version string `yaml:"version"`
@@ -552,7 +575,7 @@ type PackageManifest struct {
 	// Description is a one-line package description.
 	Description string `yaml:"description,omitempty"`
 
-	// Dependencies maps "name@org" to semver range constraints.
+	// Dependencies maps "name@author" to semver range constraints.
 	// Published packages use ranges (e.g., ">=1.0.0") instead of the
 	// project-level active/inactive format.
 	Dependencies map[string]string `yaml:"dependencies,omitempty"`
@@ -569,10 +592,10 @@ func LoadPackageManifest(path string) (*PackageManifest, error) {
 }
 
 // DefaultPackageManifest returns a PackageManifest with sensible defaults.
-func DefaultPackageManifest(name, org, description string) PackageManifest {
+func DefaultPackageManifest(name, author, description string) PackageManifest {
 	return PackageManifest{
 		Name:         name,
-		Org:          org,
+		Author:       author,
 		Version:      "0.1.0",
 		Description:  description,
 		Dependencies: map[string]string{},

@@ -4,9 +4,18 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/securacore/codectx/core/history"
 	"github.com/securacore/codectx/core/tui"
 )
+
+// ShortHash truncates a full hash to 12 characters for display.
+// If the hash has a "sha256:" prefix, that prefix is stripped first.
+func ShortHash(hash string) string {
+	h := strings.TrimPrefix(hash, "sha256:")
+	if len(h) > 12 {
+		return h[:12]
+	}
+	return h
+}
 
 // FormatQueryResults renders a QueryResult into the spec-defined output format
 // with full TUI styling.
@@ -99,27 +108,34 @@ func formatEntries(b *strings.Builder, entries []ResultEntry) {
 // FormatGenerateSummary renders the summary for a generate operation with
 // full TUI styling. historyPath is the path to the saved history document
 // (always shown). filePath is the --file output path (empty when stdout mode).
+// cacheHit appends "[from cache]" to the header when true.
 //
 // Output format:
 //
 //	✓ Generated (1,772 tokens, hash: a1b2c3d4e5f6)
-//	  History: docs/.codectx/history/docs/a1b2c3d4e5f6.1741532400.md
+//	  History: docs/.codectx/history/docs/1741532400000000000.a1b2c3d4e5f6.md
 //	  Written to: /path/to/output.md   (only when --file is used)
 //	  Contains: obj:a1b2c3.03, obj:a1b2c3.04, spec:f7g8h9.02
 //
 //	  Related chunks not included:
 //	    obj:a1b2c3.02 — Authentication > JWT Tokens > Token Structure (488 tokens)
-func FormatGenerateSummary(r *GenerateResult, historyPath, filePath string) string {
+func FormatGenerateSummary(r *GenerateResult, historyPath, filePath string, cacheHit bool) string {
 	var b strings.Builder
 
 	// Build the header: tokens + short hash.
-	shortHash := history.ShortHash(r.ContentHash)
+	shortHash := ShortHash(r.ContentHash)
+
+	cacheTag := ""
+	if cacheHit {
+		cacheTag = " [from cache]"
+	}
 
 	fmt.Fprintf(&b, "\n%s %s\n\n",
 		tui.Success(),
-		tui.StyleBold.Render(fmt.Sprintf("Generated (%s tokens, hash: %s)",
+		tui.StyleBold.Render(fmt.Sprintf("Generated (%s tokens, hash: %s)%s",
 			tui.FormatNumber(r.TotalTokens),
 			shortHash,
+			cacheTag,
 		)),
 	)
 

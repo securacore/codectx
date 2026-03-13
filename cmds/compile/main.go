@@ -26,6 +26,7 @@ import (
 	"github.com/securacore/codectx/core/project"
 	"github.com/securacore/codectx/core/scaffold"
 	"github.com/securacore/codectx/core/tui"
+	"github.com/securacore/codectx/core/usage"
 	"github.com/urfave/cli/v3"
 )
 
@@ -123,6 +124,13 @@ func run(_ context.Context, cmd *cli.Command) error {
 	// --- Step 5: Display warnings ---
 	if len(result.Warnings) > 0 {
 		fmt.Print(renderWarnings(result.Warnings))
+	}
+
+	// --- Step 6: Sync usage metrics (best-effort) ---
+	localUsage := usage.LocalPath(projectDir, cfg)
+	globalUsage := usage.GlobalPath(projectDir, cfg)
+	if syncErr := usage.SyncGlobal(localUsage, globalUsage, cfg.Name); syncErr != nil {
+		shared.WarnBestEffort("Syncing usage metrics", syncErr)
 	}
 
 	return nil

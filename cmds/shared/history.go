@@ -31,3 +31,13 @@ func WarnHistory(action string, err error) {
 		Detail: []string{err.Error()},
 	}.Render())
 }
+
+// WarnBestEffort prints a best-effort warning for any non-critical operation
+// to stderr using the standard WarnMsg format. Use this for cache writes,
+// usage updates, and other operations that should never block the primary command.
+func WarnBestEffort(action string, err error) {
+	fmt.Fprint(os.Stderr, tui.WarnMsg{
+		Title:  fmt.Sprintf("%s failed", action),
+		Detail: []string{err.Error()},
+	}.Render())
+}

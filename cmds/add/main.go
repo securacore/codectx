@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"charm.land/huh/v2"
 	"github.com/charmbracelet/x/term"
@@ -48,12 +49,19 @@ const (
 var Command = &cli.Command{
 	Name:      "add",
 	Usage:     "Add a documentation package dependency",
-	ArgsUsage: "<name@org:version>",
+	ArgsUsage: "<name[@author][:version]>",
 	Description: `Adds a dependency to codectx.yml and installs it.
 
 Examples:
-  codectx add react-patterns@community:latest
-  codectx add company-standards@acme:2.0.0
+  codectx add react                           Search and pick from available sources
+  codectx add react@community                 Specific author, latest version
+  codectx add react@community:2.0.0           Specific author and version
+  codectx add react:2.0.0                     Specific version, pick author
+
+When the author is omitted, codectx searches GitHub for packages matching
+the name. If exactly one is found, it is used automatically. If multiple
+are found, you are prompted to pick one (or an error is shown in
+non-interactive mode).
 
 For package authoring projects (type: "package"), you will be prompted
 to choose where the dependency is added:
@@ -79,34 +87,43 @@ Use --project, --package, or --both to skip the prompt.`,
 			Name:  "inactive",
 			Usage: "Add as inactive (excluded from compiled output)",
 		},
+		&cli.BoolFlag{
+			Name:  "show-uninstallable",
+			Usage: "Include packages without a release archive in search results",
+		},
 	},
 	Action: run,
 }
 
 func run(ctx context.Context, cmd *cli.Command) error {
-	// --- Step 1: Validate arguments ---
+	// --- Step 1: Validate and parse arguments ---
 	if cmd.NArg() < 1 {
 		fmt.Print(tui.ErrorMsg{
 			Title: "Missing dependency argument",
 			Detail: []string{
-				"Usage: codectx add <name@org:version>",
+				"Usage: codectx add <name[@author][:version]>",
 			},
 			Suggestions: []tui.Suggestion{
-				{Text: "Example:", Command: "codectx add react-patterns@community:latest"},
+				{Text: "Examples:"},
+				{Text: "Search and pick:", Command: "codectx add react"},
+				{Text: "Specific author:", Command: "codectx add react@community"},
+				{Text: "Full spec:", Command: "codectx add react@community:2.0.0"},
 			},
 		}.Render())
 		return fmt.Errorf("missing dependency argument")
 	}
 
 	depStr := cmd.Args().First()
-	dk, err := registry.ParseDepKey(depStr)
+	partial, err := registry.ParsePartialDepKey(depStr)
 	if err != nil {
 		fmt.Print(tui.ErrorMsg{
 			Title:  "Invalid dependency format",
 			Detail: []string{err.Error()},
 			Suggestions: []tui.Suggestion{
-				{Text: "Expected format:", Command: "name@org:version"},
-				{Text: "Example:", Command: "react-patterns@community:latest"},
+				{Text: "Name only:", Command: "codectx add react"},
+				{Text: "Name@author:", Command: "codectx add react@community"},
+				{Text: "Full spec:", Command: "codectx add react@community:2.0.0"},
+				{Text: "Pinned version:", Command: "codectx add react:2.0.0"},
 			},
 		}.Render())
 		return err
@@ -118,19 +135,46 @@ func run(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	// --- Step 3: Check for duplicate ---
+	// --- Step 3: Resolve author if missing ---
+	if partial.Author == "" {
+		showUninstallable := cmd.Bool("show-uninstallable")
+		if !showUninstallable {
+			// Check project preference.
+			if prefs, prefsErr := project.LoadPreferencesConfigForProject(projectDir, cfg); prefsErr == nil {
+				showUninstallable = prefs.Search.EffectiveShowUninstallable()
+			}
+		}
+		resolved, resolveErr := resolveAuthor(ctx, partial, showUninstallable)
+		if resolveErr != nil {
+			return resolveErr
+		}
+		partial = resolved
+	}
+
+	// Convert partial to full DepKey (defaults version to "latest" if empty).
+	dk, err := partial.ToDepKey()
+	if err != nil {
+		return err
+	}
+
+	// --- Step 4: Check for duplicate ---
 	depKey := dk.String()
 	ref := dk.PackageRef()
 
 	if isDuplicate(cfg, ref) {
-		fmt.Printf("\n%s Dependency %s is already declared in codectx.yml\n\n",
-			tui.Warning(),
-			tui.StyleAccent.Render(ref),
-		)
+		fmt.Print(tui.WarnMsg{
+			Title: "Dependency already exists",
+			Detail: []string{
+				fmt.Sprintf("%s is already declared in %s.",
+					tui.StyleAccent.Render(ref),
+					tui.StylePath.Render("codectx.yml"),
+				),
+			},
+		}.Render())
 		return fmt.Errorf("dependency %s already exists", ref)
 	}
 
-	// --- Step 4: Determine target ---
+	// --- Step 5: Determine target ---
 	target, err := resolveTarget(cmd, cfg, projectDir)
 	if err != nil {
 		return err
@@ -138,12 +182,12 @@ func run(ctx context.Context, cmd *cli.Command) error {
 
 	inactive := cmd.Bool("inactive")
 
-	// --- Step 5: Update config file(s) ---
+	// --- Step 6: Update config file(s) ---
 	if err := applyDependency(projectDir, cfg, dk, target, inactive); err != nil {
 		return err
 	}
 
-	// --- Step 6: Install ---
+	// --- Step 7: Install ---
 	fmt.Printf("\n%s Added %s\n", tui.Success(), tui.StyleAccent.Render(depKey))
 	printTargetInfo(target)
 
@@ -155,7 +199,206 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	return shared.ResolveAndInstall(ctx, cfg, reg, rootDir, packagesDir, lockPath)
 }
 
-// isDuplicate checks if a dependency with the same name@org already exists
+// resolveAuthor searches GitHub for packages matching the partial key's name
+// and resolves the author component. If exactly one match is found, it is
+// selected automatically. If multiple matches exist, an interactive prompt
+// is shown (or an error in non-interactive mode).
+func resolveAuthor(ctx context.Context, partial registry.PartialDepKey, showUninstallable bool) (registry.PartialDepKey, error) {
+	token := registry.GitHubToken()
+	gh := registry.NewGitHubClient(token)
+	gitClient := registry.NewGitClient(token)
+
+	var results []registry.SearchResult
+	var searchErr error
+
+	if err := shared.RunWithSpinner(
+		fmt.Sprintf("Searching for %s...", tui.StyleAccent.Render(partial.Name)),
+		func() {
+			results, searchErr = gh.SearchPackages(ctx, partial.Name, 20)
+		},
+	); err != nil {
+		return partial, fmt.Errorf("spinner: %w", err)
+	}
+	if searchErr != nil {
+		fmt.Print(tui.ErrorMsg{
+			Title:  "Search failed",
+			Detail: []string{searchErr.Error()},
+			Suggestions: []tui.Suggestion{
+				{Text: "Try specifying the author directly:", Command: fmt.Sprintf("codectx add %s@<author>", partial.Name)},
+			},
+		}.Render())
+		return partial, searchErr
+	}
+
+	// Filter to exact name matches only.
+	results = filterExactName(results, partial.Name)
+
+	// Resolve versions and check release availability.
+	if len(results) > 0 {
+		_ = shared.RunWithSpinner("Checking releases...", func() {
+			for i := range results {
+				r := &results[i]
+				tags, tagErr := gitClient.ListRemoteTags(ctx, "https://github.com/"+r.FullName)
+				if tagErr != nil {
+					continue
+				}
+				resolved, verErr := registry.ResolveVersion(tags, registry.LatestVersion)
+				if verErr != nil {
+					continue
+				}
+				r.LatestVersion = registry.VersionFromTag(resolved)
+
+				tag := registry.GitTag(r.LatestVersion)
+				repoName := r.FullName[strings.Index(r.FullName, "/")+1:]
+				_, releaseErr := gh.ReleaseAssetURL(ctx, r.Author, repoName, tag)
+				r.HasRelease = releaseErr == nil
+			}
+		})
+	}
+
+	// Filter out uninstallable packages unless --show-uninstallable is set.
+	var hidden int
+	if !showUninstallable {
+		results, hidden = filterInstallable(results)
+	}
+
+	// Handle results.
+	switch len(results) {
+	case 0:
+		detail := []string{
+			fmt.Sprintf("No packages found matching %s.", tui.StyleAccent.Render(partial.Name)),
+		}
+		if hidden > 0 {
+			detail = append(detail, fmt.Sprintf(
+				"%d %s hidden (no release archive). Use %s to include them.",
+				hidden,
+				pluralize(hidden, "package", "packages"),
+				tui.StyleCommand.Render("--show-uninstallable"),
+			))
+		}
+		fmt.Print(tui.ErrorMsg{
+			Title:  "Package not found",
+			Detail: detail,
+			Suggestions: []tui.Suggestion{
+				{Text: "Search for available packages:", Command: fmt.Sprintf("codectx search %s", partial.Name)},
+				{Text: "Or specify the author directly:", Command: fmt.Sprintf("codectx add %s@<author>:latest", partial.Name)},
+			},
+		}.Render())
+		return partial, fmt.Errorf("no packages found for %q", partial.Name)
+
+	case 1:
+		// Auto-select the single result.
+		r := results[0]
+		partial.Author = r.Author
+		if partial.Version == "" && r.LatestVersion != "" {
+			partial.Version = r.LatestVersion
+		}
+
+		fmt.Printf("\n%s Found %s\n",
+			tui.Arrow(),
+			tui.StyleAccent.Render(r.Name+"@"+r.Author),
+		)
+		if r.LatestVersion != "" {
+			fmt.Printf("%s%s\n",
+				tui.Indent(1),
+				tui.KeyValue("Latest", tui.StyleBold.Render("v"+r.LatestVersion)),
+			)
+		}
+		if r.Description != "" {
+			fmt.Printf("%s%s\n", tui.Indent(1), tui.StyleMuted.Render(r.Description))
+		}
+
+		return partial, nil
+
+	default:
+		// Multiple matches — need selection.
+		interactive := term.IsTerminal(os.Stdin.Fd())
+		if !interactive {
+			fmt.Print(tui.ErrorMsg{
+				Title: "Multiple packages found (non-interactive mode)",
+				Detail: []string{
+					fmt.Sprintf("Found %d packages matching %s:",
+						len(results), tui.StyleAccent.Render(partial.Name)),
+				},
+				Suggestions: authorSuggestions(results, partial),
+			}.Render())
+			return partial, fmt.Errorf("multiple packages found for %q in non-interactive mode", partial.Name)
+		}
+
+		// Interactive prompt.
+		options := make([]huh.Option[registry.SearchResult], 0, len(results))
+		for _, r := range results {
+			label := r.Name + "@" + r.Author
+			if r.LatestVersion != "" {
+				label += " v" + r.LatestVersion
+			}
+			if r.Description != "" {
+				label += " — " + r.Description
+			}
+			options = append(options, huh.NewOption(label, r))
+		}
+
+		var selected registry.SearchResult
+		if err := huh.NewSelect[registry.SearchResult]().
+			Title(fmt.Sprintf("Multiple sources found for %q. Which one?", partial.Name)).
+			Options(options...).
+			Value(&selected).
+			Run(); err != nil {
+			return partial, err
+		}
+
+		partial.Author = selected.Author
+		if partial.Version == "" && selected.LatestVersion != "" {
+			partial.Version = selected.LatestVersion
+		}
+
+		return partial, nil
+	}
+}
+
+// filterExactName returns only results where the package name exactly matches.
+func filterExactName(results []registry.SearchResult, name string) []registry.SearchResult {
+	filtered := make([]registry.SearchResult, 0, len(results))
+	for _, r := range results {
+		if r.Name == name {
+			filtered = append(filtered, r)
+		}
+	}
+	return filtered
+}
+
+// filterInstallable removes results that don't have a release archive.
+// Returns the filtered list and the count of hidden results.
+func filterInstallable(results []registry.SearchResult) ([]registry.SearchResult, int) {
+	return shared.FilterInstallable(results)
+}
+
+// authorSuggestions builds suggestion entries listing each available author
+// for a multi-match scenario in non-interactive mode.
+func authorSuggestions(results []registry.SearchResult, partial registry.PartialDepKey) []tui.Suggestion {
+	suggestions := make([]tui.Suggestion, 0, len(results)+1)
+	suggestions = append(suggestions, tui.Suggestion{Text: "Specify the author explicitly:"})
+	for _, r := range results {
+		ver := "latest"
+		if partial.Version != "" {
+			ver = partial.Version
+		}
+		suggestions = append(suggestions, tui.Suggestion{
+			Command: fmt.Sprintf("codectx add %s@%s:%s", r.Name, r.Author, ver),
+		})
+	}
+	return suggestions
+}
+
+// pluralize returns singular when n == 1, plural otherwise.
+func pluralize(n int, singular, plural string) string {
+	if n == 1 {
+		return singular
+	}
+	return plural
+}
+
+// isDuplicate checks if a dependency with the same name@author already exists
 // in the project config (regardless of version).
 func isDuplicate(cfg *project.Config, ref string) bool {
 	for key := range cfg.Dependencies {
@@ -186,8 +429,14 @@ func resolveTarget(cmd *cli.Command, cfg *project.Config, projectDir string) (de
 	flagCount := shared.BoolCount(flagProject, flagPackage, flagBoth)
 	if flagCount > 1 {
 		fmt.Print(tui.ErrorMsg{
-			Title:  "Conflicting flags",
-			Detail: []string{"Only one of --project, --package, or --both may be specified."},
+			Title: "Conflicting flags",
+			Detail: []string{
+				fmt.Sprintf("Only one of %s, %s, or %s may be specified.",
+					tui.StyleCommand.Render("--project"),
+					tui.StyleCommand.Render("--package"),
+					tui.StyleCommand.Render("--both"),
+				),
+			},
 		}.Render())
 		return 0, fmt.Errorf("conflicting target flags")
 	}
@@ -350,21 +599,20 @@ func toSemverRange(version string) string {
 
 // printTargetInfo prints where the dependency was added.
 func printTargetInfo(target depTarget) {
+	var value string
 	switch target {
 	case targetProject:
-		fmt.Printf("%s%s\n",
-			tui.Indent(1),
-			tui.StyleMuted.Render("Added to: codectx.yml (project)"),
-		)
+		value = tui.StylePath.Render("codectx.yml") + tui.StyleMuted.Render(" (project)")
 	case targetPackage:
-		fmt.Printf("%s%s\n",
-			tui.Indent(1),
-			tui.StyleMuted.Render("Added to: package/codectx.yml (semver range) + codectx.yml (inactive, for install)"),
-		)
+		value = tui.StylePath.Render("package/codectx.yml") +
+			tui.StyleMuted.Render(" (semver range) + ") +
+			tui.StylePath.Render("codectx.yml") +
+			tui.StyleMuted.Render(" (inactive)")
 	case targetBoth:
-		fmt.Printf("%s%s\n",
-			tui.Indent(1),
-			tui.StyleMuted.Render("Added to: codectx.yml (project) + package/codectx.yml (semver range)"),
-		)
+		value = tui.StylePath.Render("codectx.yml") +
+			tui.StyleMuted.Render(" (project) + ") +
+			tui.StylePath.Render("package/codectx.yml") +
+			tui.StyleMuted.Render(" (semver range)")
 	}
+	fmt.Printf("%s%s\n", tui.Indent(1), tui.KeyValue("Added to", value))
 }

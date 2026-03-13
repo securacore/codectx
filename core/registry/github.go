@@ -41,8 +41,8 @@ type SearchResult struct {
 	// Name is the package name without the codectx- prefix.
 	Name string
 
-	// Org is the GitHub owner/organization.
-	Org string
+	// Author is the GitHub username or organization.
+	Author string
 
 	// FullName is the full "owner/repo" path on GitHub.
 	FullName string
@@ -96,14 +96,14 @@ func (gh *GitHubClient) SearchPackages(ctx context.Context, query string, limit 
 		// Strip the codectx- prefix to get the package name.
 		pkgName := name[len(RepoPrefix):]
 
-		org := ""
+		author := ""
 		if repo.GetOwner() != nil {
-			org = repo.GetOwner().GetLogin()
+			author = repo.GetOwner().GetLogin()
 		}
 
 		results = append(results, SearchResult{
 			Name:        pkgName,
-			Org:         org,
+			Author:      author,
 			FullName:    repo.GetFullName(),
 			Description: repo.GetDescription(),
 			Stars:       repo.GetStargazersCount(),

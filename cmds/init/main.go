@@ -26,9 +26,7 @@ import (
 	"charm.land/huh/v2"
 	"github.com/charmbracelet/x/term"
 	"github.com/securacore/codectx/cmds/shared"
-	"github.com/securacore/codectx/core/compile"
 	"github.com/securacore/codectx/core/detect"
-	"github.com/securacore/codectx/core/link"
 	"github.com/securacore/codectx/core/project"
 	"github.com/securacore/codectx/core/scaffold"
 	"github.com/securacore/codectx/core/tui"
@@ -431,31 +429,7 @@ func run(_ context.Context, cmd *cli.Command) error {
 
 // promptLink prompts the user to set up AI tool entry point files after init.
 func promptLink(projectDir string) error {
-	selected, err := link.PromptIntegrations(projectDir, "Set up AI tool entry points?")
-	if err != nil {
-		return err
-	}
-
-	if len(selected) == 0 {
-		return nil
-	}
-
-	// Compute the context.md relative path.
-	// At init time, the config was just written, so load it fresh.
-	cfg, err := project.LoadConfig(filepath.Join(projectDir, project.ConfigFileName))
-	if err != nil {
-		return err
-	}
-
-	contextRelPath := project.ContextRelPath(cfg.Root)
-
-	results, err := link.Write(projectDir, contextRelPath, selected)
-	if err != nil {
-		return err
-	}
-
-	fmt.Print(link.RenderLinkResults(results))
-	return nil
+	return shared.PromptAndWriteLinks(projectDir)
 }
 
 // shouldInitAutoCompile determines whether auto-compilation should run
@@ -464,59 +438,13 @@ func shouldInitAutoCompile(
 	projectDir, root string,
 	forceCompile, skipCompile bool,
 ) bool {
-	// Load the freshly written preferences to check auto_compile.
-	effectiveRoot := project.ResolveRoot(root)
-	codectxDir := filepath.Join(projectDir, effectiveRoot, project.CodectxDir)
-	prefsCfg, err := project.LoadPreferencesConfig(filepath.Join(codectxDir, project.PreferencesFile))
-	if err != nil {
-		// Preferences just written by scaffold — shouldn't fail.
-		// Default to compiling if it does.
-		prefsCfg = &project.PreferencesConfig{}
-	}
-
-	return shared.ShouldAutoCompile(prefsCfg, forceCompile, skipCompile, "initial compile")
+	return shared.ShouldPostInitCompile(projectDir, root, forceCompile, skipCompile)
 }
 
 // runInitCompile loads the freshly created project configuration and runs
 // the full compilation pipeline with a spinner.
 func runInitCompile(projectDir, root string) error {
-	cfg, err := project.LoadConfig(filepath.Join(projectDir, project.ConfigFileName))
-	if err != nil {
-		return fmt.Errorf("loading project config: %w", err)
-	}
-
-	rootDir := project.RootDir(projectDir, cfg)
-
-	aiCfg, err := project.LoadAIConfigForProject(projectDir, cfg)
-	if err != nil {
-		return fmt.Errorf("loading AI config: %w", err)
-	}
-
-	prefsCfg, err := project.LoadPreferencesConfigForProject(projectDir, cfg)
-	if err != nil {
-		return fmt.Errorf("loading preferences: %w", err)
-	}
-
-	compileCfg := compile.BuildConfig(projectDir, rootDir, cfg, aiCfg, prefsCfg)
-
-	fmt.Printf("\n%s Compiling documentation...\n", tui.Arrow())
-
-	var result *compile.Result
-	var compileErr error
-
-	if sErr := shared.RunWithSpinner("Compiling...", func() {
-		result, compileErr = compile.Run(compileCfg, nil)
-	}); sErr != nil {
-		return sErr
-	}
-	if compileErr != nil {
-		return compileErr
-	}
-
-	// Print compact summary.
-	fmt.Print(shared.RenderCompactCompileSummary(result))
-
-	return nil
+	return shared.RunPostInitCompile(projectDir)
 }
 
 // resolveTarget determines the target directory from positional arguments.
@@ -559,34 +487,13 @@ func resolveTarget(args []string) (string, bool, error) {
 // detectProviderCapabilities checks the detection results for Claude CLI
 // binary and Anthropic API key availability.
 func detectProviderCapabilities(detection detect.Result) (hasCLI, hasAPI bool) {
-	for _, t := range detection.Tools {
-		if t.Binary == "claude" {
-			hasCLI = true
-			break
-		}
-	}
-	for _, p := range detection.Providers {
-		if p.Name == "Anthropic" {
-			hasAPI = true
-			break
-		}
-	}
-	return hasCLI, hasAPI
+	return shared.DetectProviderCapabilities(detection)
 }
 
 // autoSelectProvider returns the appropriate provider string based on
-// detected capabilities. When both CLI and API are available, CLI is
-// preferred (non-interactive default). Returns empty string if neither
-// is available.
+// detected capabilities.
 func autoSelectProvider(hasCLI, hasAPI bool) string {
-	switch {
-	case hasCLI:
-		return project.ProviderCLI
-	case hasAPI:
-		return project.ProviderAPI
-	default:
-		return ""
-	}
+	return shared.AutoSelectProvider(hasCLI, hasAPI)
 }
 
 // buildSummaryTree creates the tree structure for the init summary display.

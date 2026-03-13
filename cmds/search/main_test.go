@@ -10,7 +10,7 @@ import (
 func TestRenderSearchResults_Empty(t *testing.T) {
 	t.Parallel()
 
-	output := renderSearchResults("react", nil)
+	output := renderSearchResults("react", nil, 0)
 	if !strings.Contains(output, `"react"`) {
 		t.Error("expected query string in output")
 	}
@@ -25,7 +25,7 @@ func TestRenderSearchResults_SingleResult(t *testing.T) {
 	results := []registry.SearchResult{
 		{
 			Name:          "react-patterns",
-			Org:           "community",
+			Author:        "community",
 			FullName:      "community/codectx-react-patterns",
 			Description:   "React component patterns",
 			Stars:         342,
@@ -34,7 +34,7 @@ func TestRenderSearchResults_SingleResult(t *testing.T) {
 		},
 	}
 
-	output := renderSearchResults("react", results)
+	output := renderSearchResults("react", results, 0)
 
 	// Package ref in accent.
 	if !strings.Contains(output, "react-patterns@community") {
@@ -78,7 +78,7 @@ func TestRenderSearchResults_MultipleResults(t *testing.T) {
 	results := []registry.SearchResult{
 		{
 			Name:          "react-patterns",
-			Org:           "community",
+			Author:        "community",
 			FullName:      "community/codectx-react-patterns",
 			Stars:         342,
 			LatestVersion: "2.4.0",
@@ -86,7 +86,7 @@ func TestRenderSearchResults_MultipleResults(t *testing.T) {
 		},
 		{
 			Name:          "react-testing",
-			Org:           "community",
+			Author:        "community",
 			FullName:      "community/codectx-react-testing",
 			Stars:         89,
 			LatestVersion: "1.0.0",
@@ -94,7 +94,7 @@ func TestRenderSearchResults_MultipleResults(t *testing.T) {
 		},
 	}
 
-	output := renderSearchResults("react", results)
+	output := renderSearchResults("react", results, 0)
 
 	if !strings.Contains(output, "1.") {
 		t.Error("expected numbered first result")
@@ -108,11 +108,11 @@ func TestRenderSearchResults_SummaryCountAllInstallable(t *testing.T) {
 	t.Parallel()
 
 	results := []registry.SearchResult{
-		{Name: "a", Org: "x", FullName: "x/codectx-a", LatestVersion: "1.0.0", HasRelease: true},
-		{Name: "b", Org: "x", FullName: "x/codectx-b", LatestVersion: "2.0.0", HasRelease: true},
+		{Name: "a", Author: "x", FullName: "x/codectx-a", LatestVersion: "1.0.0", HasRelease: true},
+		{Name: "b", Author: "x", FullName: "x/codectx-b", LatestVersion: "2.0.0", HasRelease: true},
 	}
 
-	output := renderSearchResults("test", results)
+	output := renderSearchResults("test", results, 0)
 
 	// When all are installable, no "(N installable)" qualifier.
 	if !strings.Contains(output, "Found 2 packages") {
@@ -127,12 +127,12 @@ func TestRenderSearchResults_SummaryCountPartialInstallable(t *testing.T) {
 	t.Parallel()
 
 	results := []registry.SearchResult{
-		{Name: "a", Org: "x", FullName: "x/codectx-a", LatestVersion: "1.0.0", HasRelease: true},
-		{Name: "b", Org: "x", FullName: "x/codectx-b", LatestVersion: "2.0.0", HasRelease: false},
-		{Name: "c", Org: "x", FullName: "x/codectx-c"},
+		{Name: "a", Author: "x", FullName: "x/codectx-a", LatestVersion: "1.0.0", HasRelease: true},
+		{Name: "b", Author: "x", FullName: "x/codectx-b", LatestVersion: "2.0.0", HasRelease: false},
+		{Name: "c", Author: "x", FullName: "x/codectx-c"},
 	}
 
-	output := renderSearchResults("test", results)
+	output := renderSearchResults("test", results, 0)
 
 	if !strings.Contains(output, "Found 3 packages (1 installable)") {
 		t.Error("expected summary with installable count")
@@ -144,7 +144,7 @@ func TestFormatResult_Installable(t *testing.T) {
 
 	r := registry.SearchResult{
 		Name:          "test-pkg",
-		Org:           "org",
+		Author:        "org",
 		FullName:      "org/codectx-test-pkg",
 		Description:   "A test package",
 		Stars:         42,
@@ -191,7 +191,7 @@ func TestFormatResult_NoReleaseArchive(t *testing.T) {
 
 	r := registry.SearchResult{
 		Name:          "test-pkg",
-		Org:           "org",
+		Author:        "org",
 		FullName:      "org/codectx-test-pkg",
 		LatestVersion: "1.0.0",
 		HasRelease:    false,
@@ -213,7 +213,7 @@ func TestFormatResult_NoVersionTags(t *testing.T) {
 
 	r := registry.SearchResult{
 		Name:     "test-pkg",
-		Org:      "org",
+		Author:   "org",
 		FullName: "org/codectx-test-pkg",
 	}
 
@@ -233,7 +233,7 @@ func TestFormatResult_NoStars(t *testing.T) {
 
 	r := registry.SearchResult{
 		Name:          "test-pkg",
-		Org:           "org",
+		Author:        "org",
 		FullName:      "org/codectx-test-pkg",
 		LatestVersion: "1.0.0",
 		HasRelease:    true,
@@ -253,7 +253,7 @@ func TestFormatResult_NoDescription(t *testing.T) {
 
 	r := registry.SearchResult{
 		Name:          "test-pkg",
-		Org:           "org",
+		Author:        "org",
 		FullName:      "org/codectx-test-pkg",
 		LatestVersion: "1.0.0",
 		HasRelease:    true,
@@ -271,9 +271,9 @@ func TestSortResults_InstallableFirst(t *testing.T) {
 	t.Parallel()
 
 	results := []registry.SearchResult{
-		{Name: "no-tags", Org: "a"},
-		{Name: "no-release", Org: "b", LatestVersion: "1.0.0", HasRelease: false},
-		{Name: "installable", Org: "c", LatestVersion: "2.0.0", HasRelease: true},
+		{Name: "no-tags", Author: "a"},
+		{Name: "no-release", Author: "b", LatestVersion: "1.0.0", HasRelease: false},
+		{Name: "installable", Author: "c", LatestVersion: "2.0.0", HasRelease: true},
 	}
 
 	sortResults(results)
@@ -293,9 +293,9 @@ func TestSortResults_PreservesStarOrder(t *testing.T) {
 	t.Parallel()
 
 	results := []registry.SearchResult{
-		{Name: "a", Org: "x", LatestVersion: "1.0.0", HasRelease: true, Stars: 100},
-		{Name: "b", Org: "x", LatestVersion: "2.0.0", HasRelease: true, Stars: 50},
-		{Name: "c", Org: "x", LatestVersion: "3.0.0", HasRelease: true, Stars: 10},
+		{Name: "a", Author: "x", LatestVersion: "1.0.0", HasRelease: true, Stars: 100},
+		{Name: "b", Author: "x", LatestVersion: "2.0.0", HasRelease: true, Stars: 50},
+		{Name: "c", Author: "x", LatestVersion: "3.0.0", HasRelease: true, Stars: 10},
 	}
 
 	sortResults(results)
@@ -310,8 +310,8 @@ func TestFirstInstallable_ReturnsInstallable(t *testing.T) {
 	t.Parallel()
 
 	results := []registry.SearchResult{
-		{Name: "no-release", Org: "a", LatestVersion: "1.0.0", HasRelease: false},
-		{Name: "installable", Org: "b", LatestVersion: "2.0.0", HasRelease: true},
+		{Name: "no-release", Author: "a", LatestVersion: "1.0.0", HasRelease: false},
+		{Name: "installable", Author: "b", LatestVersion: "2.0.0", HasRelease: true},
 	}
 
 	got := firstInstallable(results)
@@ -324,8 +324,8 @@ func TestFirstInstallable_FallsBackToFirst(t *testing.T) {
 	t.Parallel()
 
 	results := []registry.SearchResult{
-		{Name: "no-release", Org: "a", LatestVersion: "1.0.0", HasRelease: false},
-		{Name: "no-tags", Org: "b"},
+		{Name: "no-release", Author: "a", LatestVersion: "1.0.0", HasRelease: false},
+		{Name: "no-tags", Author: "b"},
 	}
 
 	got := firstInstallable(results)
@@ -338,11 +338,11 @@ func TestRenderSearchResults_InstallHintUsesInstallableResult(t *testing.T) {
 	t.Parallel()
 
 	results := []registry.SearchResult{
-		{Name: "no-release", Org: "a", FullName: "a/codectx-no-release", LatestVersion: "1.0.0", HasRelease: false},
-		{Name: "installable", Org: "b", FullName: "b/codectx-installable", LatestVersion: "2.0.0", HasRelease: true},
+		{Name: "no-release", Author: "a", FullName: "a/codectx-no-release", LatestVersion: "1.0.0", HasRelease: false},
+		{Name: "installable", Author: "b", FullName: "b/codectx-installable", LatestVersion: "2.0.0", HasRelease: true},
 	}
 
-	output := renderSearchResults("test", results)
+	output := renderSearchResults("test", results, 0)
 	if !strings.Contains(output, "codectx add installable@b:latest") {
 		t.Error("expected install hint to use the installable result")
 	}
@@ -382,6 +382,83 @@ func TestFormatSummaryLine_PartialInstallable(t *testing.T) {
 	line := formatSummaryLine(5, 2)
 	if !strings.Contains(line, "Found 5 packages (2 installable)") {
 		t.Errorf("expected summary with installable count, got: %s", line)
+	}
+}
+
+func TestFilterInstallable(t *testing.T) {
+	t.Parallel()
+
+	results := []registry.SearchResult{
+		{Name: "a", Author: "x", HasRelease: true},
+		{Name: "b", Author: "x", HasRelease: false},
+		{Name: "c", Author: "x", HasRelease: true},
+	}
+
+	filtered, hidden := filterInstallable(results)
+	if len(filtered) != 2 {
+		t.Fatalf("expected 2 installable, got %d", len(filtered))
+	}
+	if hidden != 1 {
+		t.Errorf("expected 1 hidden, got %d", hidden)
+	}
+}
+
+func TestFilterInstallable_AllHidden(t *testing.T) {
+	t.Parallel()
+
+	results := []registry.SearchResult{
+		{Name: "a", Author: "x", HasRelease: false},
+		{Name: "b", Author: "x", HasRelease: false},
+	}
+
+	filtered, hidden := filterInstallable(results)
+	if len(filtered) != 0 {
+		t.Fatalf("expected 0 installable, got %d", len(filtered))
+	}
+	if hidden != 2 {
+		t.Errorf("expected 2 hidden, got %d", hidden)
+	}
+}
+
+func TestRenderSearchResults_HiddenCount(t *testing.T) {
+	t.Parallel()
+
+	results := []registry.SearchResult{
+		{Name: "a", Author: "x", FullName: "x/codectx-a", LatestVersion: "1.0.0", HasRelease: true},
+	}
+
+	output := renderSearchResults("test", results, 3)
+	if !strings.Contains(output, "3 packages hidden") {
+		t.Error("expected hidden count note in output")
+	}
+	if !strings.Contains(output, "--show-uninstallable") {
+		t.Error("expected --show-uninstallable flag hint")
+	}
+}
+
+func TestRenderSearchResults_NoHiddenCount(t *testing.T) {
+	t.Parallel()
+
+	results := []registry.SearchResult{
+		{Name: "a", Author: "x", FullName: "x/codectx-a", LatestVersion: "1.0.0", HasRelease: true},
+	}
+
+	output := renderSearchResults("test", results, 0)
+	if strings.Contains(output, "hidden") {
+		t.Error("should not show hidden note when count is 0")
+	}
+}
+
+func TestRenderSearchResults_HiddenCountSingular(t *testing.T) {
+	t.Parallel()
+
+	results := []registry.SearchResult{
+		{Name: "a", Author: "x", FullName: "x/codectx-a", LatestVersion: "1.0.0", HasRelease: true},
+	}
+
+	output := renderSearchResults("test", results, 1)
+	if !strings.Contains(output, "1 package hidden") {
+		t.Error("expected singular 'package' for count of 1")
 	}
 }
 

@@ -168,7 +168,7 @@ func TestGenerate_AllLayers(t *testing.T) {
 			"Token expiry validation ensures that compromised tokens cannot be reused after their rotation window closes.",
 	}
 
-	got := Generate(input)
+	got := generate(input)
 	t.Logf("bridge: %s", got)
 
 	if got == "" {
@@ -193,7 +193,7 @@ func TestGenerate_SameHeading_NoContent(t *testing.T) {
 		PrevContent: "",
 	}
 
-	got := Generate(input)
+	got := generate(input)
 	if got != "" {
 		t.Errorf("expected empty bridge for same heading and no content, got: %s", got)
 	}
@@ -206,7 +206,7 @@ func TestGenerate_OnlyHeadingTransition(t *testing.T) {
 		PrevContent: "ok.",
 	}
 
-	got := Generate(input)
+	got := generate(input)
 	if !strings.Contains(got, "Completed: Setup") {
 		t.Errorf("expected heading transition, got: %s", got)
 	}

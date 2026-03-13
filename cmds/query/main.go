@@ -19,6 +19,7 @@ import (
 	"github.com/securacore/codectx/core/project"
 	corequery "github.com/securacore/codectx/core/query"
 	"github.com/securacore/codectx/core/tui"
+	"github.com/securacore/codectx/core/usage"
 	"github.com/urfave/cli/v3"
 )
 
@@ -100,9 +101,18 @@ func run(_ context.Context, cmd *cli.Command) error {
 
 	// --- Step 6: History logging (best-effort) ---
 	histDir := history.HistoryDir(projectDir, cfg)
+	compileHash, _ := history.CompileHash(compiledDir)
+	caller := history.ResolveCallerContext()
 	totalResults := len(result.Instructions) + len(result.Reasoning) + len(result.System)
-	if err := history.LogQuery(histDir, projectDir, cfg.Root, queryStr, result.ExpandedQuery, totalResults); err != nil {
-		shared.WarnHistory("logging query", err)
+
+	if logErr := history.LogQuery(histDir, projectDir, cfg.Root, queryStr, result.ExpandedQuery, totalResults, compileHash, caller); logErr != nil {
+		shared.WarnHistory("logging query", logErr)
+	}
+
+	// --- Step 7: Usage (best-effort) ---
+	usageFile := usage.LocalPath(projectDir, cfg)
+	if usageErr := usage.UpdateQuery(usageFile); usageErr != nil {
+		shared.WarnBestEffort("Updating usage metrics", usageErr)
 	}
 
 	return nil

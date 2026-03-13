@@ -17,6 +17,7 @@ import (
 
 	"github.com/securacore/codectx/core/chunk"
 	"github.com/securacore/codectx/core/project"
+	"github.com/securacore/codectx/core/usage"
 	"github.com/securacore/codectx/embed"
 )
 
@@ -249,6 +250,19 @@ func Init(opts Options) (*Result, error) {
 	}
 	result.FilesCreated++
 
+	// Create usage files (global_usage.yml is checked in, usage.yml is gitignored).
+	globalPath := filepath.Join(codectxDir, usage.GlobalFile)
+	if err := usage.InitGlobalFile(globalPath, name); err != nil {
+		return nil, fmt.Errorf("creating %s: %w", usage.GlobalFile, err)
+	}
+	result.FilesCreated++
+
+	localPath := filepath.Join(codectxDir, usage.LocalFile)
+	if err := usage.InitLocalFile(localPath); err != nil {
+		return nil, fmt.Errorf("creating %s: %w", usage.LocalFile, err)
+	}
+	result.FilesCreated++
+
 	return result, nil
 }
 
@@ -283,7 +297,9 @@ func directories(docsRoot, codectxDir string) []string {
 		// Tooling state directory.
 		filepath.Join(codectxDir, project.PackagesDir),
 
-		// History directory for query/generate logs and document snapshots.
+		// History directory for query/generate entries and document snapshots.
+		filepath.Join(codectxDir, "history", "queries"),
+		filepath.Join(codectxDir, "history", "chunks"),
 		filepath.Join(codectxDir, "history", "docs"),
 	}
 
@@ -376,8 +392,8 @@ type PackageOptions struct {
 	// Name is the package name (e.g., "react").
 	Name string
 
-	// Org is the organization namespace (e.g., "community").
-	Org string
+	// Author is the GitHub username or organization (e.g., "community").
+	Author string
 
 	// Description is a one-line package description.
 	Description string
@@ -469,7 +485,7 @@ func InitPackage(opts PackageOptions) (*PackageResult, error) {
 	}
 
 	// 2. Write package/codectx.yml.
-	manifest := project.DefaultPackageManifest(opts.Name, opts.Org, opts.Description)
+	manifest := project.DefaultPackageManifest(opts.Name, opts.Author, opts.Description)
 	manifestPath := project.PackageConfigPath(absDir)
 	if err := manifest.WriteToFile(manifestPath); err != nil {
 		return nil, fmt.Errorf("writing package manifest: %w", err)
@@ -506,7 +522,7 @@ func InitPackage(opts PackageOptions) (*PackageResult, error) {
 	}
 
 	// 5. Write README.md at repo root.
-	readmeContent := generatePackageReadme(opts.Name, opts.Org, opts.Description)
+	readmeContent := generatePackageReadme(opts.Name, opts.Author, opts.Description)
 	readmePath := filepath.Join(absDir, "README.md")
 	if err := os.WriteFile(readmePath, []byte(readmeContent), project.FilePerm); err != nil {
 		return nil, fmt.Errorf("writing README.md: %w", err)
@@ -538,9 +554,9 @@ func InitPackage(opts PackageOptions) (*PackageResult, error) {
 }
 
 // generatePackageReadme creates a README.md for a documentation package repo.
-func generatePackageReadme(name, org, description string) string {
-	ref := name + "@" + org
-	if org == "" {
+func generatePackageReadme(name, author, description string) string {
+	ref := name + "@" + author
+	if author == "" {
 		ref = name
 	}
 

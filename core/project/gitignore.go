@@ -26,10 +26,12 @@ var gitignoreTemplate = []string{
 	"{{ROOT}}/.codectx/packages/",
 	"{{ROOT}}/.codectx/history/",
 	"{{ROOT}}/.codectx/ai.local.yml",
+	"{{ROOT}}/.codectx/usage.yml",
 	"",
-	"# Force-include checked-in config",
+	"# Force-include checked-in config and lifetime metrics",
 	"!{{ROOT}}/.codectx/ai.yml",
 	"!{{ROOT}}/.codectx/preferences.yml",
+	"!{{ROOT}}/.codectx/global_usage.yml",
 }
 
 // EnsureGitignore ensures the .gitignore at the git repository root contains

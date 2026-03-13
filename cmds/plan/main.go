@@ -70,18 +70,36 @@ Examples:
 	Action: runResume,
 }
 
-// runStatus implements the plan status subcommand.
-func runStatus(_ context.Context, cmd *cli.Command) error {
-	// Discover project.
-	projectDir, cfg, err := shared.DiscoverProject()
+// discoverPlanContext resolves the project, root dir, and optional plan name
+// from the command arguments. Shared preamble for status and resume.
+func discoverPlanContext(cmd *cli.Command) (projectDir, rootDir, planName string, cfg *project.Config, err error) {
+	projectDir, cfg, err = shared.DiscoverProject()
 	if err != nil {
-		return err
+		return "", "", "", nil, err
 	}
-
-	rootDir := project.RootDir(projectDir, cfg)
-	planName := ""
+	rootDir = project.RootDir(projectDir, cfg)
 	if cmd.NArg() > 0 {
 		planName = cmd.Args().First()
+	}
+	return projectDir, rootDir, planName, cfg, nil
+}
+
+// planNotFoundError prints a styled error for a missing plan with an ls suggestion.
+func planNotFoundError(rootDir string, err error) {
+	fmt.Print(tui.ErrorMsg{
+		Title:  "Plan not found",
+		Detail: []string{err.Error()},
+		Suggestions: []tui.Suggestion{
+			{Text: "List plans in:", Command: fmt.Sprintf("ls %s/plans/", rootDir)},
+		},
+	}.Render())
+}
+
+// runStatus implements the plan status subcommand.
+func runStatus(_ context.Context, cmd *cli.Command) error {
+	projectDir, rootDir, planName, cfg, err := discoverPlanContext(cmd)
+	if err != nil {
+		return err
 	}
 
 	// Find, load, and check the plan inside a spinner.
@@ -118,13 +136,7 @@ func runStatus(_ context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("spinner: %w", err)
 	}
 	if statusErr != nil {
-		fmt.Print(tui.ErrorMsg{
-			Title:  "Plan not found",
-			Detail: []string{statusErr.Error()},
-			Suggestions: []tui.Suggestion{
-				{Text: "List plans in:", Command: fmt.Sprintf("ls %s/plans/", rootDir)},
-			},
-		}.Render())
+		planNotFoundError(rootDir, statusErr)
 		return statusErr
 	}
 
@@ -147,28 +159,15 @@ func runStatus(_ context.Context, cmd *cli.Command) error {
 
 // runResume implements the plan resume subcommand.
 func runResume(_ context.Context, cmd *cli.Command) error {
-	// Discover project.
-	projectDir, cfg, err := shared.DiscoverProject()
+	projectDir, rootDir, planName, cfg, err := discoverPlanContext(cmd)
 	if err != nil {
 		return err
-	}
-
-	rootDir := project.RootDir(projectDir, cfg)
-	planName := ""
-	if cmd.NArg() > 0 {
-		planName = cmd.Args().First()
 	}
 
 	// Find the plan.
 	_, planPath, err := coreplan.FindPlan(rootDir, planName)
 	if err != nil {
-		fmt.Print(tui.ErrorMsg{
-			Title:  "Plan not found",
-			Detail: []string{err.Error()},
-			Suggestions: []tui.Suggestion{
-				{Text: "List plans in:", Command: fmt.Sprintf("ls %s/plans/", rootDir)},
-			},
-		}.Render())
+		planNotFoundError(rootDir, err)
 		return fmt.Errorf("finding plan: %w", err)
 	}
 

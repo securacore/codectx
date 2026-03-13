@@ -263,7 +263,7 @@ func (gc *GitClient) ListRemoteTags(ctx context.Context, url string) ([]string, 
 // needed for transitive dependency resolution.
 type PackageConfig struct {
 	Name         string            `yaml:"name"`
-	Org          string            `yaml:"org"`
+	Author       string            `yaml:"author"`
 	Version      string            `yaml:"version"`
 	Description  string            `yaml:"description"`
 	Dependencies map[string]string `yaml:"dependencies"`

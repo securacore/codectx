@@ -68,6 +68,60 @@ func TestPrintConflicts(t *testing.T) {
 	})
 }
 
+func TestFilterInstallable(t *testing.T) {
+	t.Run("empty input", func(t *testing.T) {
+		filtered, hidden := FilterInstallable(nil)
+		if len(filtered) != 0 {
+			t.Errorf("expected 0 filtered, got %d", len(filtered))
+		}
+		if hidden != 0 {
+			t.Errorf("expected 0 hidden, got %d", hidden)
+		}
+	})
+
+	t.Run("all installable", func(t *testing.T) {
+		results := []registry.SearchResult{
+			{Name: "a", HasRelease: true},
+			{Name: "b", HasRelease: true},
+		}
+		filtered, hidden := FilterInstallable(results)
+		if len(filtered) != 2 {
+			t.Errorf("expected 2 filtered, got %d", len(filtered))
+		}
+		if hidden != 0 {
+			t.Errorf("expected 0 hidden, got %d", hidden)
+		}
+	})
+
+	t.Run("mixed", func(t *testing.T) {
+		results := []registry.SearchResult{
+			{Name: "a", HasRelease: true},
+			{Name: "b", HasRelease: false},
+			{Name: "c", HasRelease: true},
+		}
+		filtered, hidden := FilterInstallable(results)
+		if len(filtered) != 2 {
+			t.Errorf("expected 2 filtered, got %d", len(filtered))
+		}
+		if hidden != 1 {
+			t.Errorf("expected 1 hidden, got %d", hidden)
+		}
+	})
+
+	t.Run("none installable", func(t *testing.T) {
+		results := []registry.SearchResult{
+			{Name: "a", HasRelease: false},
+		}
+		filtered, hidden := FilterInstallable(results)
+		if len(filtered) != 0 {
+			t.Errorf("expected 0 filtered, got %d", len(filtered))
+		}
+		if hidden != 1 {
+			t.Errorf("expected 1 hidden, got %d", hidden)
+		}
+	})
+}
+
 func TestSaveLockOrError(t *testing.T) {
 	t.Run("saves lock file successfully", func(t *testing.T) {
 		tmpDir := t.TempDir()

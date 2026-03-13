@@ -24,6 +24,21 @@ func PrintConflicts(conflicts []registry.Conflict) {
 	}
 }
 
+// FilterInstallable removes search results that don't have a release archive.
+// Returns the filtered list and the count of hidden results.
+func FilterInstallable(results []registry.SearchResult) ([]registry.SearchResult, int) {
+	filtered := make([]registry.SearchResult, 0, len(results))
+	hidden := 0
+	for _, r := range results {
+		if r.HasRelease {
+			filtered = append(filtered, r)
+		} else {
+			hidden++
+		}
+	}
+	return filtered, hidden
+}
+
 // SaveLockOrError writes the lock file, printing a styled error if it fails.
 // Returns nil on success or the write error on failure.
 func SaveLockOrError(lockPath string, result *registry.ResolveResult, commitSHAs map[string]string, reg string) error {

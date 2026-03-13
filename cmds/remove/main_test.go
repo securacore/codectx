@@ -9,37 +9,127 @@ import (
 	"github.com/securacore/codectx/core/registry"
 )
 
-func TestParseRef_FullKey(t *testing.T) {
-	ref, err := parseRef("react-patterns@community:latest")
+func TestResolveDepRef_WithAuthor(t *testing.T) {
+	cfg := &project.Config{
+		Dependencies: map[string]*project.DependencyConfig{
+			"react-patterns@community:latest": {Active: true},
+		},
+	}
+
+	ref, err := resolveDepRef(cfg, registry.PartialDepKey{Name: "react-patterns", Author: "community"})
 	if err != nil {
-		t.Fatalf("parseRef: %v", err)
+		t.Fatalf("resolveDepRef: %v", err)
 	}
 	if ref != "react-patterns@community" {
 		t.Errorf("expected %q, got %q", "react-patterns@community", ref)
 	}
 }
 
-func TestParseRef_ShortRef(t *testing.T) {
-	ref, err := parseRef("react-patterns@community")
+func TestResolveDepRef_ByNameSingleMatch(t *testing.T) {
+	cfg := &project.Config{
+		Dependencies: map[string]*project.DependencyConfig{
+			"react-patterns@community:latest": {Active: true},
+			"other@acme:1.0.0":                {Active: true},
+		},
+	}
+
+	ref, err := resolveDepRef(cfg, registry.PartialDepKey{Name: "react-patterns"})
 	if err != nil {
-		t.Fatalf("parseRef: %v", err)
+		t.Fatalf("resolveDepRef: %v", err)
 	}
 	if ref != "react-patterns@community" {
 		t.Errorf("expected %q, got %q", "react-patterns@community", ref)
 	}
 }
 
-func TestParseRef_Invalid(t *testing.T) {
-	_, err := parseRef("invalid")
+func TestResolveDepRef_ByNameNoMatch(t *testing.T) {
+	cfg := &project.Config{
+		Dependencies: map[string]*project.DependencyConfig{
+			"react-patterns@community:latest": {Active: true},
+		},
+	}
+
+	_, err := resolveDepRef(cfg, registry.PartialDepKey{Name: "nonexistent"})
 	if err == nil {
-		t.Error("expected error for invalid ref")
+		t.Error("expected error for no matching dep")
 	}
 }
 
-func TestParseRef_EmptyOrg(t *testing.T) {
-	_, err := parseRef("name@")
-	if err == nil {
-		t.Error("expected error for empty org")
+func TestFindDepsByName(t *testing.T) {
+	cfg := &project.Config{
+		Dependencies: map[string]*project.DependencyConfig{
+			"react@community:latest": {Active: true},
+			"react@acme:2.0.0":       {Active: true},
+			"vue@community:1.0.0":    {Active: true},
+		},
+	}
+
+	matches := findDepsByName(cfg, "react")
+	if len(matches) != 2 {
+		t.Fatalf("expected 2 matches, got %d", len(matches))
+	}
+
+	// Both should be present (order is map-iteration-dependent).
+	found := map[string]bool{}
+	for _, m := range matches {
+		found[m] = true
+	}
+	if !found["react@community"] || !found["react@acme"] {
+		t.Errorf("unexpected matches: %v", matches)
+	}
+}
+
+func TestFindDepsByName_NoMatch(t *testing.T) {
+	cfg := &project.Config{
+		Dependencies: map[string]*project.DependencyConfig{
+			"react@community:latest": {Active: true},
+		},
+	}
+
+	matches := findDepsByName(cfg, "vue")
+	if len(matches) != 0 {
+		t.Errorf("expected 0 matches, got %d", len(matches))
+	}
+}
+
+func TestFindDepsByName_EmptyDeps(t *testing.T) {
+	cfg := &project.Config{
+		Dependencies: map[string]*project.DependencyConfig{},
+	}
+
+	matches := findDepsByName(cfg, "react")
+	if len(matches) != 0 {
+		t.Errorf("expected 0 matches, got %d", len(matches))
+	}
+}
+
+func TestDepListSuggestions_WithDeps(t *testing.T) {
+	cfg := &project.Config{
+		Dependencies: map[string]*project.DependencyConfig{
+			"react@community:latest": {Active: true},
+		},
+	}
+
+	suggestions := depListSuggestions(cfg)
+	if len(suggestions) < 2 {
+		t.Fatalf("expected at least 2 suggestions, got %d", len(suggestions))
+	}
+	if suggestions[0].Text != "Current dependencies:" {
+		t.Errorf("unexpected header: %q", suggestions[0].Text)
+	}
+}
+
+func TestDepListSuggestions_NoDeps(t *testing.T) {
+	cfg := &project.Config{
+		Dependencies: map[string]*project.DependencyConfig{},
+	}
+
+	suggestions := depListSuggestions(cfg)
+	if len(suggestions) != 1 {
+		t.Fatalf("expected 1 suggestion, got %d", len(suggestions))
+	}
+	if suggestions[0].Text != "No dependencies are currently configured." {
+		t.Errorf("unexpected text: %q", suggestions[0].Text)
 	}
 }
 

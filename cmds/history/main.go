@@ -21,6 +21,7 @@ import (
 
 	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/history"
+	corequery "github.com/securacore/codectx/core/query"
 	"github.com/securacore/codectx/core/tui"
 	"github.com/urfave/cli/v3"
 )
@@ -80,7 +81,7 @@ var clearCommand = &cli.Command{
 
 // runOverview shows recent queries and generates (default action).
 func runOverview(_ context.Context, _ *cli.Command) error {
-	histDir, err := resolveHistDir()
+	histDir, compiledDir, err := resolveHistAndCompiledDirs()
 	if err != nil {
 		return err
 	}
@@ -100,12 +101,15 @@ func runOverview(_ context.Context, _ *cli.Command) error {
 		return nil
 	}
 
+	// Get current compile hash for staleness display.
+	currentCompileHash, _ := history.CompileHash(compiledDir)
+
 	if len(queries) > 0 {
 		fmt.Printf("\n%s %s\n\n",
 			tui.Arrow(),
 			tui.StyleBold.Render(fmt.Sprintf("Recent queries (last %d)", len(queries))),
 		)
-		printQueryEntries(queries)
+		printQueryEntries(queries, currentCompileHash)
 	}
 
 	if len(chunks) > 0 {
@@ -113,7 +117,7 @@ func runOverview(_ context.Context, _ *cli.Command) error {
 			tui.Arrow(),
 			tui.StyleBold.Render(fmt.Sprintf("Recent generates (last %d)", len(chunks))),
 		)
-		printChunksEntries(chunks)
+		printChunksEntries(chunks, currentCompileHash)
 	}
 
 	fmt.Println()
@@ -122,7 +126,7 @@ func runOverview(_ context.Context, _ *cli.Command) error {
 
 // runQueries shows query history.
 func runQueries(_ context.Context, _ *cli.Command) error {
-	histDir, err := resolveHistDir()
+	histDir, compiledDir, err := resolveHistAndCompiledDirs()
 	if err != nil {
 		return err
 	}
@@ -137,18 +141,20 @@ func runQueries(_ context.Context, _ *cli.Command) error {
 		return nil
 	}
 
+	currentCompileHash, _ := history.CompileHash(compiledDir)
+
 	fmt.Printf("\n%s %s\n\n",
 		tui.Arrow(),
 		tui.StyleBold.Render(fmt.Sprintf("Query history (%d entries)", len(entries))),
 	)
-	printQueryEntries(entries)
+	printQueryEntries(entries, currentCompileHash)
 	fmt.Println()
 	return nil
 }
 
 // runChunks shows generate/chunks history.
 func runChunks(_ context.Context, _ *cli.Command) error {
-	histDir, err := resolveHistDir()
+	histDir, compiledDir, err := resolveHistAndCompiledDirs()
 	if err != nil {
 		return err
 	}
@@ -163,11 +169,13 @@ func runChunks(_ context.Context, _ *cli.Command) error {
 		return nil
 	}
 
+	currentCompileHash, _ := history.CompileHash(compiledDir)
+
 	fmt.Printf("\n%s %s\n\n",
 		tui.Arrow(),
 		tui.StyleBold.Render(fmt.Sprintf("Generate history (%d entries)", len(entries))),
 	)
-	printChunksEntries(entries)
+	printChunksEntries(entries, currentCompileHash)
 	fmt.Println()
 	return nil
 }
@@ -236,9 +244,7 @@ func runClear(_ context.Context, _ *cli.Command) error {
 		return err
 	}
 	if !confirmed {
-		fmt.Printf("\n%s Clear canceled.\n\n",
-			tui.StyleMuted.Render("-"),
-		)
+		fmt.Printf("\n  %s\n\n", tui.StyleMuted.Render("Clear canceled."))
 		return nil
 	}
 
@@ -262,45 +268,119 @@ func resolveHistDir() (string, error) {
 	return histDir, nil
 }
 
+// resolveHistAndCompiledDirs discovers the project and returns both the
+// history directory and compiled directory paths.
+func resolveHistAndCompiledDirs() (histDir, compiledDir string, err error) {
+	projectDir, cfg, discErr := shared.DiscoverProject()
+	if discErr != nil {
+		return "", "", discErr
+	}
+	histDir = history.HistoryDir(projectDir, cfg)
+	compiledDir = corequery.CompiledDir(projectDir, cfg)
+	return histDir, compiledDir, nil
+}
+
 // printQueryEntries formats and prints query history entries.
-func printQueryEntries(entries []history.QueryEntry) {
-	for _, e := range entries {
-		ts := time.Unix(0, e.Timestamp)
-		fmt.Printf("%s%s  %s  %s\n",
+//
+// Layout per entry:
+//
+//  1. "search terms"  15 results  2h ago
+//     Expanded: jwt auth token authentication
+//     Caller: claude-code
+//     Session: sess_abc123
+//     Compile: a1b2c3d4e5f6 (current)
+func printQueryEntries(entries []history.QueryEntry, currentCompileHash string) {
+	for i, e := range entries {
+		ts := time.Unix(0, e.Ts)
+		ago := tui.FormatTimeAgo(ts)
+
+		// Primary line: number, query, result count, relative time.
+		fmt.Printf("%s%s %s  %s  %s\n",
 			tui.Indent(1),
-			tui.StyleMuted.Render(ts.Format("2006-01-02 15:04")),
-			tui.StyleBold.Render(fmt.Sprintf("%q", e.RawQuery)),
+			tui.StyleMuted.Render(fmt.Sprintf("%d.", i+1)),
+			tui.StyleBold.Render(fmt.Sprintf("%q", e.Raw)),
 			tui.StyleMuted.Render(fmt.Sprintf("%d results", e.ResultCount)),
+			tui.StyleMuted.Render(ago),
 		)
-		if e.ExpandedQuery != "" && e.ExpandedQuery != e.RawQuery {
-			fmt.Printf("%s%s\n",
-				tui.Indent(2),
-				tui.KeyValue("Expanded", tui.StyleMuted.Render(e.ExpandedQuery)),
-			)
+
+		// Expanded query (only if different from raw).
+		if e.Expanded != "" && e.Expanded != e.Raw {
+			fmt.Printf("%s%s\n", tui.Indent(3),
+				tui.KeyValue("Expanded", tui.StyleMuted.Render(e.Expanded)))
 		}
+
+		// Metadata lines — one per line for readability.
+		fmt.Printf("%s%s\n", tui.Indent(3),
+			tui.KeyValue("Caller", e.Caller))
+		if e.SessionID != "" && e.SessionID != "unknown" {
+			fmt.Printf("%s%s\n", tui.Indent(3),
+				tui.KeyValue("Session", e.SessionID))
+		}
+		fmt.Printf("%s%s\n", tui.Indent(3),
+			tui.KeyValue("Compile", compileStatusLabel(e.CompileHash, currentCompileHash)))
 	}
 }
 
 // printChunksEntries formats and prints chunks/generate history entries.
-func printChunksEntries(entries []history.ChunksEntry) {
-	for _, e := range entries {
-		ts := time.Unix(0, e.Timestamp)
+//
+// Layout per entry:
+//
+//  1. a1b2c3d4e5f6  1,438 tokens  2h ago
+//     Chunks: obj:a1b2c3.03, spec:f7g8h9.02
+//     Caller: cursor
+//     Session: cursor-sess-42
+//     Cache: no
+//     Compile: a1b2c3d4e5f6 (current)
+func printChunksEntries(entries []history.ChunksEntry, currentCompileHash string) {
+	for i, e := range entries {
+		ts := time.Unix(0, e.Ts)
+		ago := tui.FormatTimeAgo(ts)
 		hash := history.ShortHash(e.ContentHash)
-		fmt.Printf("%s%s  %s  %s\n",
+
+		// Primary line: number, content hash, token count, relative time.
+		fmt.Printf("%s%s %s  %s  %s\n",
 			tui.Indent(1),
-			tui.StyleMuted.Render(ts.Format("2006-01-02 15:04")),
+			tui.StyleMuted.Render(fmt.Sprintf("%d.", i+1)),
 			tui.StyleAccent.Render(hash),
 			tui.StyleMuted.Render(fmt.Sprintf("%s tokens", tui.FormatNumber(e.TokenCount))),
+			tui.StyleMuted.Render(ago),
 		)
 
-		// Show chunk IDs on a second line for readability.
-		styledIDs := make([]string, len(e.ChunkIDs))
-		for i, id := range e.ChunkIDs {
-			styledIDs[i] = tui.StyleAccent.Render(id)
+		// Chunk IDs.
+		styledIDs := make([]string, len(e.Chunks))
+		for j, id := range e.Chunks {
+			styledIDs[j] = tui.StyleAccent.Render(id)
 		}
-		fmt.Printf("%s%s\n",
-			tui.Indent(2),
-			tui.KeyValue("Chunks", strings.Join(styledIDs, ", ")),
-		)
+		fmt.Printf("%s%s\n", tui.Indent(3),
+			tui.KeyValue("Chunks", strings.Join(styledIDs, ", ")))
+
+		// Metadata lines — one per line for readability.
+		fmt.Printf("%s%s\n", tui.Indent(3),
+			tui.KeyValue("Caller", e.Caller))
+		if e.SessionID != "" && e.SessionID != "unknown" {
+			fmt.Printf("%s%s\n", tui.Indent(3),
+				tui.KeyValue("Session", e.SessionID))
+		}
+
+		cacheLabel := "no"
+		if e.CacheHit {
+			cacheLabel = "yes"
+		}
+		fmt.Printf("%s%s\n", tui.Indent(3),
+			tui.KeyValue("Cache", cacheLabel))
+		fmt.Printf("%s%s\n", tui.Indent(3),
+			tui.KeyValue("Compile", compileStatusLabel(e.CompileHash, currentCompileHash)))
 	}
+}
+
+// compileStatusLabel returns a display label for compile hash staleness.
+func compileStatusLabel(entryHash, currentHash string) string {
+	if currentHash == "" {
+		return tui.StyleMuted.Render("unknown")
+	}
+	shortHash := history.ShortHash(entryHash)
+	if entryHash == currentHash {
+		return tui.StyleMuted.Render(shortHash + " (current)")
+	}
+	return tui.StyleWarning.Render(shortHash + " (stale)")
 }

@@ -12,7 +12,7 @@ import (
 // which can be used to download the archive without authentication.
 //
 // Parameters:
-//   - owner: GitHub owner/org (e.g. "community")
+//   - owner: GitHub owner/author (e.g. "community")
 //   - repo: GitHub repo name without the codectx- prefix will be added (e.g. "codectx-react-patterns")
 //   - tag: git tag including "v" prefix (e.g. "v2.0.0")
 //
@@ -35,7 +35,7 @@ func (gh *GitHubClient) ReleaseAssetURL(ctx context.Context, owner, repo, tag st
 // ReleaseAssetURLForDep is a convenience wrapper that takes a DepKey and
 // constructs the owner/repo/tag from it.
 func (gh *GitHubClient) ReleaseAssetURLForDep(ctx context.Context, dk DepKey, version string) (string, error) {
-	owner := dk.Org
+	owner := dk.Author
 	repo := dk.RepoName()
 	tag := GitTag(version)
 	return gh.ReleaseAssetURL(ctx, owner, repo, tag)
@@ -82,7 +82,7 @@ type ArchiveConfigReader struct {
 // ReadDeps downloads the package archive, extracts it, and reads the
 // dependency map from its codectx.yml.
 func (ar *ArchiveConfigReader) ReadDeps(ctx context.Context, dk DepKey, version string, reg string) (map[string]string, error) {
-	destDir := filepath.Join(ar.CacheDir, dk.Name+"@"+dk.Org+"-"+version)
+	destDir := filepath.Join(ar.CacheDir, dk.Name+"@"+dk.Author+"-"+version)
 
 	// Check if already cached.
 	cfgPath := filepath.Join(destDir, "codectx.yml")

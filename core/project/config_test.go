@@ -44,7 +44,7 @@ func TestConfig_WriteAndLoad_Roundtrip(t *testing.T) {
 	path := filepath.Join(dir, project.ConfigFileName)
 
 	original := project.DefaultConfig("roundtrip-test", "docs", "")
-	original.Org = "testorg"
+	original.Author = "testorg"
 	original.Description = "A test project"
 	original.Dependencies = map[string]*project.DependencyConfig{
 		"react-patterns@community:latest": {Active: true},
@@ -62,8 +62,8 @@ func TestConfig_WriteAndLoad_Roundtrip(t *testing.T) {
 	if loaded.Name != original.Name {
 		t.Errorf("name: expected %q, got %q", original.Name, loaded.Name)
 	}
-	if loaded.Org != original.Org {
-		t.Errorf("org: expected %q, got %q", original.Org, loaded.Org)
+	if loaded.Author != original.Author {
+		t.Errorf("author: expected %q, got %q", original.Author, loaded.Author)
 	}
 	if loaded.Root != original.Root {
 		t.Errorf("root: expected %q, got %q", original.Root, loaded.Root)
@@ -897,8 +897,8 @@ func TestDefaultPackageManifest(t *testing.T) {
 	if m.Name != "my-pkg" {
 		t.Errorf("Name = %q, want %q", m.Name, "my-pkg")
 	}
-	if m.Org != "myorg" {
-		t.Errorf("Org = %q, want %q", m.Org, "myorg")
+	if m.Author != "myorg" {
+		t.Errorf("Author = %q, want %q", m.Author, "myorg")
 	}
 	if m.Version != "0.1.0" {
 		t.Errorf("Version = %q, want %q", m.Version, "0.1.0")
@@ -931,8 +931,8 @@ func TestPackageManifest_WriteAndLoad_Roundtrip(t *testing.T) {
 	if loaded.Name != original.Name {
 		t.Errorf("Name: got %q, want %q", loaded.Name, original.Name)
 	}
-	if loaded.Org != original.Org {
-		t.Errorf("Org: got %q, want %q", loaded.Org, original.Org)
+	if loaded.Author != original.Author {
+		t.Errorf("Author: got %q, want %q", loaded.Author, original.Author)
 	}
 	if loaded.Version != original.Version {
 		t.Errorf("Version: got %q, want %q", loaded.Version, original.Version)
@@ -969,5 +969,73 @@ func TestDefaultConfig_ProjectType(t *testing.T) {
 	}
 	if cfg.IsPackage() {
 		t.Error("IsPackage() should return false for default project")
+	}
+}
+
+func TestEffectiveShowUninstallable_NilDefaultsFalse(t *testing.T) {
+	cfg := &project.SearchConfig{ShowUninstallable: nil}
+	if got := cfg.EffectiveShowUninstallable(); got {
+		t.Error("EffectiveShowUninstallable() with nil should return false")
+	}
+}
+
+func TestEffectiveShowUninstallable_ExplicitTrue(t *testing.T) {
+	cfg := &project.SearchConfig{ShowUninstallable: project.BoolPtr(true)}
+	if got := cfg.EffectiveShowUninstallable(); !got {
+		t.Error("EffectiveShowUninstallable() with explicit true should return true")
+	}
+}
+
+func TestEffectiveShowUninstallable_ExplicitFalse(t *testing.T) {
+	cfg := &project.SearchConfig{ShowUninstallable: project.BoolPtr(false)}
+	if got := cfg.EffectiveShowUninstallable(); got {
+		t.Error("EffectiveShowUninstallable() with explicit false should return false")
+	}
+}
+
+func TestSearchConfig_Roundtrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "preferences.yml")
+
+	original := project.DefaultPreferencesConfig()
+	original.Search.ShowUninstallable = project.BoolPtr(true)
+
+	if err := original.WriteToFile(path); err != nil {
+		t.Fatalf("writing preferences config: %v", err)
+	}
+
+	loaded, err := project.LoadPreferencesConfig(path)
+	if err != nil {
+		t.Fatalf("loading preferences config: %v", err)
+	}
+
+	if loaded.Search.ShowUninstallable == nil {
+		t.Fatal("expected ShowUninstallable to be non-nil after roundtrip")
+	}
+	if !*loaded.Search.ShowUninstallable {
+		t.Error("expected ShowUninstallable to be true after roundtrip")
+	}
+}
+
+func TestSearchConfig_MissingField_DefaultsFalse(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "preferences.yml")
+
+	// Write a preferences file WITHOUT the search section.
+	content := "chunking:\n  target_tokens: 450\n"
+	if err := os.WriteFile(path, []byte(content), project.FilePerm); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := project.LoadPreferencesConfig(path)
+	if err != nil {
+		t.Fatalf("loading preferences config: %v", err)
+	}
+
+	if loaded.Search.ShowUninstallable != nil {
+		t.Error("expected ShowUninstallable to be nil when field is missing")
+	}
+	if loaded.Search.EffectiveShowUninstallable() {
+		t.Error("effective ShowUninstallable should be false when field is missing")
 	}
 }

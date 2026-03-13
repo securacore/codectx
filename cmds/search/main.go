@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/securacore/codectx/cmds/shared"
+	"github.com/securacore/codectx/core/project"
 	"github.com/securacore/codectx/core/registry"
 	"github.com/securacore/codectx/core/tui"
 	"github.com/urfave/cli/v3"
@@ -35,6 +36,10 @@ Example:
 			Name:  "limit",
 			Usage: "Maximum number of results",
 			Value: 10,
+		},
+		&cli.BoolFlag{
+			Name:  "show-uninstallable",
+			Usage: "Include packages without a release archive in results",
 		},
 	},
 	Action: run,
@@ -81,7 +86,10 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	if len(results) == 0 {
-		fmt.Printf("\n%s No packages found for: %q\n\n", tui.Warning(), query)
+		fmt.Printf("\n%s No packages found for: %s\n\n",
+			tui.Warning(),
+			tui.StyleBold.Render(fmt.Sprintf("%q", query)),
+		)
 		return nil
 	}
 
@@ -101,18 +109,30 @@ func run(ctx context.Context, cmd *cli.Command) error {
 
 			// Check if a GitHub Release with package.tar.gz exists.
 			tag := registry.GitTag(r.LatestVersion)
-			_, releaseErr := gh.ReleaseAssetURL(ctx, r.Org, r.FullName[strings.Index(r.FullName, "/")+1:], tag)
+			_, releaseErr := gh.ReleaseAssetURL(ctx, r.Author, r.FullName[strings.Index(r.FullName, "/")+1:], tag)
 			r.HasRelease = releaseErr == nil
 		}
 	}); err != nil {
 		return fmt.Errorf("spinner: %w", err)
 	}
 
+	// Filter out uninstallable packages unless --show-uninstallable is set
+	// or the preference is enabled.
+	showUninstallable := cmd.Bool("show-uninstallable")
+	if !showUninstallable {
+		showUninstallable = shouldShowUninstallable()
+	}
+
+	var hiddenCount int
+	if !showUninstallable {
+		results, hiddenCount = filterInstallable(results)
+	}
+
 	// Sort: installable results first, then no-release, then no-tags.
 	sortResults(results)
 
 	// Render results.
-	fmt.Print(renderSearchResults(query, results))
+	fmt.Print(renderSearchResults(query, results, hiddenCount))
 
 	return nil
 }
@@ -150,6 +170,27 @@ func countInstallable(results []registry.SearchResult) int {
 	return n
 }
 
+// filterInstallable removes results that don't have a release archive.
+// Returns the filtered list and the count of hidden results.
+func filterInstallable(results []registry.SearchResult) ([]registry.SearchResult, int) {
+	return shared.FilterInstallable(results)
+}
+
+// shouldShowUninstallable checks the project preferences for the
+// show_uninstallable setting. Returns false if no project is found
+// or if the preference is not set.
+func shouldShowUninstallable() bool {
+	projectDir, cfg, err := shared.DiscoverProject()
+	if err != nil {
+		return false
+	}
+	prefs, err := project.LoadPreferencesConfigForProject(projectDir, cfg)
+	if err != nil {
+		return false
+	}
+	return prefs.Search.EffectiveShowUninstallable()
+}
+
 // renderSearchResults formats the search results for terminal display.
 //
 // Output format:
@@ -166,7 +207,7 @@ func countInstallable(results []registry.SearchResult) int {
 //	     Repo: community/codectx-react-testing (* 89)
 //
 //	  Add with: codectx add react-patterns@community:latest
-func renderSearchResults(query string, results []registry.SearchResult) string {
+func renderSearchResults(query string, results []registry.SearchResult, hiddenCount int) string {
 	var b strings.Builder
 
 	// Header — matches query command pattern.
@@ -181,6 +222,21 @@ func renderSearchResults(query string, results []registry.SearchResult) string {
 		tui.Indent(1)+formatSummaryLine(len(results), installable),
 	)
 
+	// Hidden packages note.
+	if hiddenCount > 0 {
+		noun := "packages"
+		if hiddenCount == 1 {
+			noun = "package"
+		}
+		fmt.Fprintf(&b, "%s%s %s\n",
+			tui.Indent(1),
+			tui.StyleMuted.Render(
+				fmt.Sprintf("%d %s hidden (no release archive).", hiddenCount, noun),
+			),
+			tui.StyleMuted.Render("Use ")+tui.StyleCommand.Render("--show-uninstallable")+tui.StyleMuted.Render(" to include."),
+		)
+	}
+
 	// Result entries.
 	for i, r := range results {
 		b.WriteString(formatResult(i+1, r))
@@ -192,7 +248,7 @@ func renderSearchResults(query string, results []registry.SearchResult) string {
 		fmt.Fprintf(&b, "%s\n\n",
 			tui.Indent(1)+tui.KeyValue("Add with",
 				tui.StyleCommand.Render(
-					fmt.Sprintf("codectx add %s@%s:latest", example.Name, example.Org),
+					fmt.Sprintf("codectx add %s@%s:latest", example.Name, example.Author),
 				),
 			),
 		)
@@ -244,7 +300,7 @@ func formatResult(index int, r registry.SearchResult) string {
 	fmt.Fprintf(&b, "\n%s%d. %s",
 		tui.Indent(1),
 		index,
-		tui.StyleAccent.Render(r.Name+"@"+r.Org),
+		tui.StyleAccent.Render(r.Name+"@"+r.Author),
 	)
 
 	if r.LatestVersion != "" {
@@ -272,7 +328,7 @@ func formatResult(index int, r registry.SearchResult) string {
 
 	// Line 3: Description (if present).
 	if r.Description != "" {
-		fmt.Fprintf(&b, "%s%s\n", tui.Indent(2), r.Description)
+		fmt.Fprintf(&b, "%s%s\n", tui.Indent(2), tui.StyleMuted.Render(r.Description))
 	}
 
 	return b.String()

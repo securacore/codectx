@@ -81,13 +81,13 @@ func installFromLock(ctx context.Context, lf *registry.LockFile, packagesDir str
 		pkg := lf.Packages[ref]
 
 		// Parse the ref to get a DepKey.
-		name, org, parseErr := registry.ParsePackageRef(ref)
+		name, author, parseErr := registry.ParsePackageRef(ref)
 		if parseErr != nil {
 			fmt.Printf("%s%s %s: %v\n", tui.Indent(1), tui.ErrorIcon(), tui.StyleAccent.Render(ref), parseErr)
 			continue
 		}
 
-		dk := registry.DepKey{Name: name, Org: org, Version: pkg.ResolvedVersion}
+		dk := registry.DepKey{Name: name, Author: author, Version: pkg.ResolvedVersion}
 		destDir := filepath.Join(packagesDir, ref)
 
 		var installErr error

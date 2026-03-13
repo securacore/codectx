@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 // TreeNode represents a node in a directory tree for display purposes.
@@ -131,4 +132,32 @@ func FormatDuration(seconds float64) string {
 	mins := int(seconds) / 60
 	secs := seconds - float64(mins*60)
 	return fmt.Sprintf("%dm%.1fs", mins, secs)
+}
+
+// FormatTimeAgo returns a compact human-readable relative time string.
+// E.g., "just now", "3m ago", "2h ago", "5d ago".
+func FormatTimeAgo(t time.Time) string {
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		mins := int(d.Minutes())
+		if mins == 1 {
+			return "1m ago"
+		}
+		return fmt.Sprintf("%dm ago", mins)
+	case d < 24*time.Hour:
+		hours := int(d.Hours())
+		if hours == 1 {
+			return "1h ago"
+		}
+		return fmt.Sprintf("%dh ago", hours)
+	default:
+		days := int(d.Hours() / 24)
+		if days == 1 {
+			return "1d ago"
+		}
+		return fmt.Sprintf("%dd ago", days)
+	}
 }

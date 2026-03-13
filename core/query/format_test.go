@@ -173,7 +173,7 @@ func TestFormatGenerateSummary_Basic(t *testing.T) {
 	}
 
 	histPath := "docs/.codectx/history/docs/a1b2c3d4e5f6.1700000000000000000.md"
-	got := query.FormatGenerateSummary(r, histPath, "")
+	got := query.FormatGenerateSummary(r, histPath, "", false)
 
 	if !strings.Contains(got, histPath) {
 		t.Error("missing history path")
@@ -200,7 +200,7 @@ func TestFormatGenerateSummary_WithRelated(t *testing.T) {
 		},
 	}
 
-	got := query.FormatGenerateSummary(r, "docs/.codectx/history/docs/test.md", "")
+	got := query.FormatGenerateSummary(r, "docs/.codectx/history/docs/test.md", "", false)
 
 	if !strings.Contains(got, "Related chunks not included") {
 		t.Error("missing related section")
@@ -221,7 +221,7 @@ func TestFormatGenerateSummary_NoRelated(t *testing.T) {
 		Sources:     []string{"topics/test.md"},
 	}
 
-	got := query.FormatGenerateSummary(r, "", "")
+	got := query.FormatGenerateSummary(r, "", "", false)
 
 	if strings.Contains(got, "Related") {
 		t.Error("unexpected related section when no related chunks")
@@ -236,7 +236,7 @@ func TestFormatGenerateSummary_WithFilePath(t *testing.T) {
 		Sources:     []string{"topics/test.md"},
 	}
 
-	got := query.FormatGenerateSummary(r, "", "/path/to/output.md")
+	got := query.FormatGenerateSummary(r, "", "/path/to/output.md", false)
 
 	if !strings.Contains(got, "/path/to/output.md") {
 		t.Error("missing file path in output")
@@ -256,12 +256,27 @@ func TestFormatGenerateSummary_HistoryAndFilePath(t *testing.T) {
 
 	histPath := "docs/.codectx/history/docs/a1b2c3.md"
 	filePath := "/tmp/output.md"
-	got := query.FormatGenerateSummary(r, histPath, filePath)
+	got := query.FormatGenerateSummary(r, histPath, filePath, false)
 
 	if !strings.Contains(got, histPath) {
 		t.Error("missing history path")
 	}
 	if !strings.Contains(got, filePath) {
 		t.Error("missing file path")
+	}
+}
+
+func TestFormatGenerateSummary_CacheHit(t *testing.T) {
+	r := &query.GenerateResult{
+		TotalTokens: 500,
+		ContentHash: "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+		ChunkIDs:    []string{"obj:abc123.01"},
+		Sources:     []string{"topics/test.md"},
+	}
+
+	got := query.FormatGenerateSummary(r, "", "", true)
+
+	if !strings.Contains(got, "[from cache]") {
+		t.Error("missing [from cache] annotation")
 	}
 }

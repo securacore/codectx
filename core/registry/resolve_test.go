@@ -9,7 +9,7 @@ import (
 
 // mockTagLister provides canned tag responses for testing.
 type mockTagLister struct {
-	// tags maps "name@org" to available tags.
+	// tags maps "name@author" to available tags.
 	tags map[string][]string
 }
 
@@ -23,7 +23,7 @@ func (m *mockTagLister) AvailableTags(_ context.Context, dk DepKey, _ string) ([
 
 // mockConfigReader provides canned package dependency responses for testing.
 type mockConfigReader struct {
-	// deps maps "name@org:version" to its transitive dependency map.
+	// deps maps "name@author:version" to its transitive dependency map.
 	deps map[string]map[string]string
 }
 
@@ -291,13 +291,13 @@ func TestToLockFile(t *testing.T) {
 	result := &ResolveResult{
 		Packages: map[string]*ResolvedPackage{
 			"react-patterns@community": {
-				Key:             DepKey{Name: "react-patterns", Org: "community", Version: "2.3.1"},
+				Key:             DepKey{Name: "react-patterns", Author: "community", Version: "2.3.1"},
 				ResolvedVersion: "2.3.1",
 				ResolvedTag:     "v2.3.1",
 				Source:          SourceDirect,
 			},
 			"javascript-fundamentals@community": {
-				Key:             DepKey{Name: "javascript-fundamentals", Org: "community", Version: "1.3.0"},
+				Key:             DepKey{Name: "javascript-fundamentals", Author: "community", Version: "1.3.0"},
 				ResolvedVersion: "1.3.0",
 				ResolvedTag:     "v1.3.0",
 				Source:          SourceTransitive,

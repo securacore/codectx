@@ -11,12 +11,12 @@ package repair
 import (
 	"context"
 	"fmt"
-	"strconv"
 
 	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/project"
 	"github.com/securacore/codectx/core/scaffold"
 	"github.com/securacore/codectx/core/tui"
+	"github.com/securacore/codectx/core/usage"
 	"github.com/urfave/cli/v3"
 )
 
@@ -67,7 +67,23 @@ func run(_ context.Context, _ *cli.Command) error {
 		}.Render())
 	}
 
-	// --- Step 4: Display summary ---
+	// --- Step 4: Ensure usage files exist ---
+	localUsage := usage.LocalPath(projectDir, cfg)
+	if initErr := usage.InitLocalFile(localUsage); initErr != nil {
+		fmt.Print(tui.WarnMsg{
+			Title:  "Local usage file creation failed",
+			Detail: []string{initErr.Error()},
+		}.Render())
+	}
+	globalUsage := usage.GlobalPath(projectDir, cfg)
+	if initErr := usage.InitGlobalFile(globalUsage, cfg.Name); initErr != nil {
+		fmt.Print(tui.WarnMsg{
+			Title:  "Global usage file creation failed",
+			Detail: []string{initErr.Error()},
+		}.Render())
+	}
+
+	// --- Step 5: Display summary ---
 	if !result.HasActions() {
 		fmt.Printf("\n%s %s\n\n",
 			tui.Success(),
@@ -80,17 +96,18 @@ func run(_ context.Context, _ *cli.Command) error {
 		tui.Success(),
 		tui.StyleBold.Render("Scaffold repaired"),
 	)
-	if result.DirsCreated > 0 {
-		fmt.Printf("%s%s\n", tui.Indent(1), tui.KeyValue("Directories restored", strconv.Itoa(result.DirsCreated)))
-	}
-	if result.FilesRestored > 0 {
-		fmt.Printf("%s%s\n", tui.Indent(1), tui.KeyValue("System files restored", strconv.Itoa(result.FilesRestored)))
-	}
-	if result.GitkeepsAdded > 0 {
-		fmt.Printf("%s%s\n", tui.Indent(1), tui.KeyValue(".gitkeep added", strconv.Itoa(result.GitkeepsAdded)))
-	}
-	if result.GitkeepsRemoved > 0 {
-		fmt.Printf("%s%s\n", tui.Indent(1), tui.KeyValue(".gitkeep removed", strconv.Itoa(result.GitkeepsRemoved)))
+	for _, item := range []struct {
+		label string
+		count int
+	}{
+		{"Directories restored", result.DirsCreated},
+		{"System files restored", result.FilesRestored},
+		{".gitkeep added", result.GitkeepsAdded},
+		{".gitkeep removed", result.GitkeepsRemoved},
+	} {
+		if item.count > 0 {
+			fmt.Printf("%s%s\n", tui.Indent(1), tui.KeyValue(item.label, tui.FormatNumber(item.count)))
+		}
 	}
 	fmt.Println()
 

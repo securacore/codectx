@@ -3,6 +3,7 @@ package tui_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/securacore/codectx/core/tui"
 )
@@ -372,5 +373,67 @@ func TestFormatBudget_NegativeTotal(t *testing.T) {
 	got := tui.FormatBudget(5000, -1)
 	if !strings.Contains(got, "5,000 tokens") {
 		t.Errorf("FormatBudget with negative total: %q", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// FormatTimeAgo
+// ---------------------------------------------------------------------------
+
+func TestFormatTimeAgo_JustNow(t *testing.T) {
+	got := tui.FormatTimeAgo(time.Now())
+	if got != "just now" {
+		t.Errorf("FormatTimeAgo(now) = %q, want %q", got, "just now")
+	}
+}
+
+func TestFormatTimeAgo_Minutes(t *testing.T) {
+	tests := []struct {
+		ago  time.Duration
+		want string
+	}{
+		{1 * time.Minute, "1m ago"},
+		{5 * time.Minute, "5m ago"},
+		{59 * time.Minute, "59m ago"},
+	}
+	for _, tt := range tests {
+		got := tui.FormatTimeAgo(time.Now().Add(-tt.ago))
+		if got != tt.want {
+			t.Errorf("FormatTimeAgo(%v ago) = %q, want %q", tt.ago, got, tt.want)
+		}
+	}
+}
+
+func TestFormatTimeAgo_Hours(t *testing.T) {
+	tests := []struct {
+		ago  time.Duration
+		want string
+	}{
+		{1 * time.Hour, "1h ago"},
+		{2 * time.Hour, "2h ago"},
+		{23 * time.Hour, "23h ago"},
+	}
+	for _, tt := range tests {
+		got := tui.FormatTimeAgo(time.Now().Add(-tt.ago))
+		if got != tt.want {
+			t.Errorf("FormatTimeAgo(%v ago) = %q, want %q", tt.ago, got, tt.want)
+		}
+	}
+}
+
+func TestFormatTimeAgo_Days(t *testing.T) {
+	tests := []struct {
+		ago  time.Duration
+		want string
+	}{
+		{24 * time.Hour, "1d ago"},
+		{48 * time.Hour, "2d ago"},
+		{7 * 24 * time.Hour, "7d ago"},
+	}
+	for _, tt := range tests {
+		got := tui.FormatTimeAgo(time.Now().Add(-tt.ago))
+		if got != tt.want {
+			t.Errorf("FormatTimeAgo(%v ago) = %q, want %q", tt.ago, got, tt.want)
+		}
 	}
 }

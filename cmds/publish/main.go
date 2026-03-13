@@ -1,9 +1,9 @@
 // Package publish implements the `codectx publish` command which tags and
 // pushes a documentation package to GitHub.
 //
-// The command reads codectx.yml for name, org, and version, validates the
+// The command reads codectx.yml for name, author, and version, validates the
 // directory structure, creates a git tag v[version], and pushes to the
-// remote repository at github.com/[org]/codectx-[name].
+// remote repository at github.com/[author]/codectx-[name].
 package publish
 
 import (
@@ -27,7 +27,7 @@ var Command = &cli.Command{
 	Description: `Publish a documentation package by tagging the current commit and
 pushing to GitHub. The repo must already exist on GitHub.
 
-Reads codectx.yml for name, org, and version. Validates directory structure.
+Reads codectx.yml for name, author, and version. Validates directory structure.
 Tags the current commit as v[version] and pushes the tag.
 
 For package authoring projects (type: "package"), validates the package/
@@ -65,7 +65,7 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	// For package authoring projects, validate the package/ directory.
 	// For standard projects, validate the documentation root.
 	name := cfg.Name
-	org := cfg.Org
+	author := cfg.Author
 	version := cfg.Version
 	var structureDir string
 
@@ -85,7 +85,7 @@ func run(ctx context.Context, cmd *cli.Command) error {
 					fmt.Sprintf("Expected at: %s", tui.StylePath.Render(manifestPath)),
 				},
 				Suggestions: []tui.Suggestion{
-					{Text: "Ensure package/codectx.yml exists with name, org, and version fields"},
+					{Text: "Ensure package/codectx.yml exists with name, author, and version fields"},
 				},
 			}.Render())
 			return fmt.Errorf("missing package manifest: %w", loadErr)
@@ -93,7 +93,7 @@ func run(ctx context.Context, cmd *cli.Command) error {
 
 		// Use manifest fields as source of truth for publishing identity.
 		name = manifest.Name
-		org = manifest.Org
+		author = manifest.Author
 		version = manifest.Version
 
 		// Validate version consistency.
@@ -119,12 +119,14 @@ func run(ctx context.Context, cmd *cli.Command) error {
 		}.Render())
 		return fmt.Errorf("missing package name")
 	}
-	if org == "" {
+	if author == "" {
 		fmt.Print(tui.ErrorMsg{
-			Title:  "Missing organization",
-			Detail: []string{"codectx.yml must have an 'org' field for publishing."},
+			Title: "Missing author",
+			Detail: []string{
+				"codectx.yml must have an 'author' field for publishing.",
+			},
 		}.Render())
-		return fmt.Errorf("missing org")
+		return fmt.Errorf("missing author")
 	}
 	if version == "" {
 		fmt.Print(tui.ErrorMsg{
@@ -136,7 +138,7 @@ func run(ctx context.Context, cmd *cli.Command) error {
 
 	tagName := registry.GitTag(version)
 	repoName := registry.RepoPrefix + name
-	remoteURL := fmt.Sprintf("https://github.com/%s/%s", org, repoName)
+	remoteURL := fmt.Sprintf("https://github.com/%s/%s", author, repoName)
 
 	// Step 4: Validate directory structure.
 	if err := validatePackageStructure(structureDir); err != nil {
@@ -168,7 +170,7 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	// If validate-only, print summary and exit.
 	if validateOnly {
 		fmt.Printf("\n%s Package validation passed\n\n", tui.Success())
-		fmt.Printf("%s%s\n", tui.Indent(1), tui.KeyValue("Name", name+"@"+org))
+		fmt.Printf("%s%s\n", tui.Indent(1), tui.KeyValue("Name", name+"@"+author))
 		fmt.Printf("%s%s\n", tui.Indent(1), tui.KeyValue("Version", version))
 		fmt.Printf("%s%s\n", tui.Indent(1), tui.KeyValue("Tag", tagName))
 		fmt.Printf("%s%s\n", tui.Indent(1), tui.KeyValue("Repo", remoteURL))
@@ -211,7 +213,7 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	// Step 7: Create tag and push.
 	fmt.Printf("\n%s Publishing %s v%s\n",
 		tui.Arrow(),
-		tui.StyleBold.Render(name+"@"+org),
+		tui.StyleBold.Render(name+"@"+author),
 		version,
 	)
 	fmt.Printf("%s%s\n", tui.Indent(1), tui.KeyValue("Repo", tui.StyleMuted.Render(remoteURL)))
@@ -231,7 +233,7 @@ func run(ctx context.Context, cmd *cli.Command) error {
 		return tagErr
 	}
 
-	if err = shared.RunWithSpinner(fmt.Sprintf("Pushing %s to %s...", tagName, org+"/"+repoName), func() {
+	if err = shared.RunWithSpinner(fmt.Sprintf("Pushing %s to %s...", tagName, author+"/"+repoName), func() {
 		pushErr = gc.PushTag(ctx, repo, tagName)
 	}); err != nil {
 		return fmt.Errorf("spinner: %w", err)
@@ -258,12 +260,12 @@ func run(ctx context.Context, cmd *cli.Command) error {
 
 	fmt.Printf("\n%s Published %s v%s (%s)\n\n",
 		tui.Success(),
-		tui.StyleBold.Render(name+"@"+org), version, sha,
+		tui.StyleBold.Render(name+"@"+author), version, sha,
 	)
 	fmt.Printf("%sInstall with: %s\n\n",
 		tui.Indent(1),
 		tui.StyleCommand.Render(
-			fmt.Sprintf("codectx add %s@%s:%s", name, org, version),
+			fmt.Sprintf("codectx add %s@%s:%s", name, author, version),
 		),
 	)
 

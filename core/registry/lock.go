@@ -35,7 +35,7 @@ type LockFile struct {
 	// ResolvedAt is the ISO 8601 timestamp of when resolution was performed.
 	ResolvedAt string `yaml:"resolved_at"`
 
-	// Packages maps "name@org" to the locked package details.
+	// Packages maps "name@author" to the locked package details.
 	Packages map[string]*LockedPackage `yaml:"packages"`
 }
 
@@ -54,7 +54,7 @@ type LockedPackage struct {
 	Source string `yaml:"source"`
 
 	// RequiredBy lists which packages require this transitive dependency.
-	// Only populated for transitive packages. Each entry is "name@org:version".
+	// Only populated for transitive packages. Each entry is "name@author:version".
 	RequiredBy []string `yaml:"required_by,omitempty"`
 }
 

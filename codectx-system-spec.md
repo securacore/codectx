@@ -140,10 +140,14 @@ A **package** is a publishable subset — just curated documentation content. Pa
         react-patterns@community:2.1.0/
         tailwind-guide@designteam:latest/
       history/                 # Query and generate audit trail (gitignored)
-        query.history          # TSV log of query invocations
-        chunks.history         # TSV log of generate invocations
+        queries/               # Per-invocation query JSON files
+          [nanoTs].[queryHash12].json
+        chunks/                # Per-invocation generate JSON files
+          [nanoTs].[chunkSetHash12].json
         docs/                  # Archived generated documents
-          [hash12].[nanoTs].md
+          [nanoTs].[contentHash12].md
+      usage.yml                # Local machine usage metrics (gitignored)
+      global_usage.yml         # Project lifetime usage metrics (checked in)
       compiled/                # All compiled output (gitignored)
         context.md             # Pre-assembled always-loaded foundations
         metadata.yaml          # Document relationship graph
@@ -1557,8 +1561,8 @@ Sub-subcommands:
 - `codectx history clear` — delete all history data (requires interactive confirmation via huh prompt; refuses in non-interactive mode)
 
 History data is stored in `.codectx/history/`:
-- `query.history` — TSV log of query invocations
-- `chunks.history` — TSV log of generate invocations
+- `queries/` — per-invocation JSON files for query invocations
+- `chunks/` — per-invocation JSON files for generate invocations (also used as generate cache index)
 - `docs/` — archived copies of generated documents
 
 All history operations are best-effort. History errors never block query or generate commands — they warn to stderr and continue.
@@ -1950,67 +1954,125 @@ No enforcement of cross-package terminology consistency is needed. Each package'
 
 ---
 
-## Phase 9: History System
+## Phase 9: History, Cache, and Usage
+
+> Full design specification: `history-cache-spec.md` (adjacent to this file)
 
 ### Purpose
 
-The history system provides an audit trail of all query and generate invocations within a project. It serves three roles:
+The history system provides an audit trail, a deterministic generate cache, and dual-scope usage metrics for all query and generate invocations within a project. It serves five roles:
 
-1. **Recall**: When a user or AI needs to revisit a previously generated document — perhaps to re-examine context from an earlier task or compare with updated documentation — the archived document is available without re-running the generate pipeline.
+1. **Recall**: When a user or AI needs to revisit a previously generated document, the archived document is available without re-running the generate pipeline.
 
-2. **Audit**: The TSV logs record what was searched for, what was expanded to, how many results came back, which chunks were assembled, and what content hash was produced. This creates a traceable record of AI-documentation interactions.
+2. **Audit**: Per-invocation JSON files record what was searched for, what was expanded to, how many results came back, which chunks were assembled, what content hash was produced, and who called it (caller context).
 
 3. **Continuity**: If a session ends and the user returns later asking "what did I look at before?", the history provides the answer without relying on the AI's memory or the user's recollection.
 
+4. **Caching**: The generate cache uses `chunk_set_hash + compile_hash` as a composite key. When the same chunk IDs are requested against the same compilation state, the cached document is returned instantly without re-assembling. The `--no-cache` flag bypasses cache lookup.
+
+5. **Usage**: Dual-scope metrics track invocations and token consumption at both local (per-machine, gitignored) and global (per-project, checked in) levels.
+
 ### Storage Layout
 
-All history data lives in `.codectx/history/` (gitignored):
+All history data lives in `.codectx/history/` (gitignored). Usage files live in `.codectx/`:
 
 ```
 .codectx/history/
-  query.history          # TSV log of query invocations
-  chunks.history         # TSV log of generate invocations
-  docs/                  # Archived copies of generated documents
-    [hash12].[nanoTs].md # e.g., a1b2c3d4e5f6.1741532400000000000.md
+  queries/                        # Per-invocation query JSON files
+    [nanoTs].[queryHash12].json   # e.g., 1741532400000000000.a1b2c3d4e5f6.json
+  chunks/                         # Per-invocation generate JSON files
+    [nanoTs].[chunkSetHash12].json
+  docs/                           # Archived generated documents
+    [nanoTs].[contentHash12].md
+.codectx/usage.yml                # Local machine usage (gitignored)
+.codectx/global_usage.yml         # Project lifetime usage (checked in)
 ```
 
-### TSV Format
+Filenames use timestamp-first ordering so lexicographic sort equals chronological sort.
 
-**query.history** — one line per `codectx query` invocation:
-```
-<nanosecondTimestamp>\t<rawQuery>\t<expandedQuery>\t<resultCount>
+### Per-File JSON Format
+
+**Query entry** (`queries/*.json`):
+```json
+{
+  "ts": 1741532400000000000,
+  "query_hash": "sha256:...",
+  "raw": "jwt authentication",
+  "expanded": "jwt authentication token verify",
+  "result_count": 15,
+  "compile_hash": "sha256:...",
+  "caller": "claude-code",
+  "session_id": "sess_abc123",
+  "model": "claude-sonnet"
+}
 ```
 
-**chunks.history** — one line per `codectx generate` invocation:
-```
-<nanosecondTimestamp>\t<chunkID1,chunkID2,...>\t<tokenCount>\t<contentHash>
+**Chunks entry** (`chunks/*.json`):
+```json
+{
+  "ts": 1741532400000000000,
+  "chunk_set_hash": "sha256:...",
+  "chunks": ["obj:auth.01", "spec:jwt.02"],
+  "token_count": 1500,
+  "content_hash": "sha256:...",
+  "compile_hash": "sha256:...",
+  "doc_file": "1741532400000000000.a1b2c3d4e5f6.md",
+  "cache_hit": false,
+  "caller": "cursor",
+  "session_id": "cursor-sess-42",
+  "model": "gpt-4o"
+}
 ```
 
-Tabs and newlines in field values are escaped to spaces. Nanosecond timestamps provide unique ordering even for rapid successive invocations.
+### Caller Context Detection
+
+Every invocation resolves caller metadata using a priority chain:
+1. Explicit env vars: `CODECTX_CALLER`, `CODECTX_SESSION_ID`, `CODECTX_MODEL`
+2. Tool-specific env vars: `CLAUDE_CODE_ENTRYPOINT`, `CLAUDE_CODE_SESSION_ID`, `CURSOR_SESSION_ID`, `ANTHROPIC_MODEL`
+3. Parent process detection via gopsutil
+4. Fallback: `"unknown"`
+
+### Generate Cache
+
+Cache lookup is step 0 of `codectx generate`:
+1. Compute `chunk_set_hash` from sorted chunk IDs
+2. Compute `compile_hash` from `hashes.yml`
+3. Glob `chunks/` for entries matching the short hash
+4. Verify full `chunk_set_hash` and `compile_hash` match
+5. Verify the `docs/` file still exists (not pruned)
+6. On hit: serve cached document, skip LLM assembly
+
+The `--no-cache` flag bypasses this lookup entirely.
+
+### Usage Metrics
+
+Two YAML files track invocation and token usage at different scopes:
+- `usage.yml` — gitignored, local machine, updated on every query/generate
+- `global_usage.yml` — checked in, project lifetime, updated on `codectx compile`
+
+`codectx compile` merges local metrics into global via `SyncGlobal`, then resets the local file. The `codectx usage` command displays both scopes.
 
 ### Document Archival
 
-Every `codectx generate` invocation saves a copy of the assembled document to `history/docs/`. The filename is `<shortHash12>.<nanoTs>.md` where `shortHash12` is the first 12 characters of the SHA-256 content hash and `nanoTs` is the nanosecond timestamp.
+Every `codectx generate` invocation saves a copy of the assembled document to `history/docs/`. The filename is `<nanoTs>.<shortHash12>.md` where `shortHash12` is the first 12 characters of the SHA-256 content hash.
 
-The `codectx history show <hash>` command accepts a prefix match against the short hash, so `codectx history show a1b2` matches `a1b2c3d4e5f6.1741532400000000000.md`.
+The `codectx history show <hash>` command accepts a prefix match against the short hash.
 
 ### Error Handling
 
-History operations are best-effort. If writing to a `.history` file fails or saving a document fails, the command warns to stderr and continues normally. If a document was saved successfully but the chunks.history write fails, the saved document is annotated with an HTML comment recording the error:
+History, cache, and usage operations are best-effort. Failures warn to stderr and never block the primary command. If a document was saved successfully but the chunks entry write fails, the saved document is annotated with an HTML comment:
 
 ```markdown
-<!-- codectx:warning chunks.history write failed: <error details> -->
+<!-- codectx:warning chunks entry write failed: <error details> -->
 ```
-
-This ensures the document remains useful even if its index entry is missing.
 
 ### Pruning
 
-The history directory is capped at 100MB. When the limit is exceeded, pruning retains the last 5 entries in each `.history` file and the 5 most recent documents (by timestamp extracted from filename). Pruning runs automatically after each generate invocation via `CheckAndPrune`.
+The history directory is capped at 100MB. When the limit is exceeded, pruning retains the 5 most recent files in each subdirectory (queries/, chunks/, docs/). Timestamp-first filenames mean lexicographic sort equals chronological order, so pruning simply deletes the oldest entries. Pruning runs automatically after each invocation via `CheckAndPrune`.
 
 ### Directory Creation
 
-The history directory is created lazily via `EnsureDir` on the first query or generate invocation. It is also created during `codectx init` (as part of the scaffold) and repaired by `codectx repair`. `EnsureDir` also calls `EnsureGitignore` to ensure the history directory is gitignored in existing projects that may have been initialized before the history feature existed.
+The history directories (queries/, chunks/, docs/) are created lazily via `EnsureDir` on the first query or generate invocation. They are also created during `codectx init` (as part of the scaffold) and repaired by `codectx repair`. `EnsureDir` also calls `EnsureGitignore` to ensure the history directory is gitignored.
 
 ---
 
@@ -2114,7 +2176,7 @@ Implementation uses a `*bool` pointer to distinguish between "not set" (nil, def
 | Plan context tracking | Per-step queries and chunk IDs with dependency hash drift detection | Directory-path-only references or global chunk lists | Per-step keeps context scoped — resuming step 3 doesn't load step 1's chunks. Stored queries enable re-search when docs drift. Stored chunks enable instant replay when docs haven't changed. Hash comparison bridges the two modes automatically. |
 | Compilation report | heuristics.yaml in compiled/ — regenerated every compile | No report, or stdout-only logging | Machine-parseable diagnostics let the AI orient itself on the documentation landscape. Humans get timing, budget utilization, and quality signals. Snapshot, not cumulative — always reflects current state. |
 | Generate output destination | stdout (default) with `--file` flag | Write to /tmp/codectx/ | stdout is pipeable, composable, and doesn't leave temp files. AI tools read stdout directly. `--file` flag covers cases where a persistent file is needed. Summary goes to stderr (stdout mode) or stdout (`--file` mode) so it never mixes with document content. |
-| History storage format | TSV flat files + archived markdown documents | SQLite database or structured JSON | TSV is append-only, trivially parseable, grep-friendly, and has no library dependencies. Documents are saved as-is for instant retrieval. No query language needed — history is a simple chronological log, not a relational dataset. |
+| History storage format | Per-file JSON in subdirectories + archived markdown documents + deterministic generate cache | SQLite database or TSV flat files | Per-file JSON enables cache lookup by glob on filename hash, supports structured fields (caller, session, model), and avoids append-contention on shared files. Timestamp-first filenames (`[nanoTs].[hash12].ext`) ensure lexicographic sort equals chronological sort. Cache uses `chunk_set_hash + compile_hash` as composite key for instant replay. |
 | History error policy | Best-effort with stderr warnings | Fail-fast or silent | History must never block the primary command. Warnings let users know something went wrong without interrupting their workflow. Document annotation preserves context when index writes fail. |
 | Scaffold maintenance trigger | Automatic on compile (when enabled) + manual via `codectx repair` | Only manual, or only automatic | Automatic catches drift early without user intervention. Manual provides an escape hatch when automatic is disabled or for one-off repairs. Two triggers, same underlying function. |
 | `.gitkeep` scope | Top-level content dirs only (foundation, topics, plans, prompts) | All empty dirs, or no `.gitkeep` management | Only content dirs need git tracking when empty (they define the project structure). System dirs and tooling dirs are recreated by scaffold maintenance and don't need git tracking. |

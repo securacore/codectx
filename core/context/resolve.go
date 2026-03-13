@@ -82,7 +82,7 @@ type ResolvedEntry struct {
 // Returns (refType, packageName, subpath).
 //
 // Format rules:
-//   - Contains "@" -> package reference: "name@org" or "name@org/path/..."
+//   - Contains "@" -> package reference: "name@author" or "name@author/path/..."
 //   - No "@" -> local path
 func ParseRef(ref string) (RefType, string, string) {
 	atIdx := strings.Index(ref, "@")
@@ -94,7 +94,7 @@ func ParseRef(ref string) (RefType, string, string) {
 	// Package reference: everything before "@" is the package name.
 	pkgName := ref[:atIdx]
 
-	// Everything after "@org" — find the first "/" after the org segment.
+	// Everything after "@author" — find the first "/" after the author segment.
 	afterAt := ref[atIdx+1:]
 	slashIdx := strings.Index(afterAt, "/")
 

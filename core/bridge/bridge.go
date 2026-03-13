@@ -25,13 +25,13 @@ type BridgeInput struct {
 	PrevContent string
 }
 
-// Generate produces a deterministic one-line bridge summary from three layers:
+// generate produces a deterministic one-line bridge summary from three layers:
 //   - Heading transition (when heading paths diverge between chunks)
 //   - RAKE key phrase extraction (top terms from the tail of the previous chunk)
 //   - Last sentence (concluding prose sentence when available)
 //
 // Returns empty string if no layers produce output.
-func Generate(input BridgeInput) string {
+func generate(input BridgeInput) string {
 	var parts []string
 
 	// Layer 1: heading transition.
@@ -108,7 +108,7 @@ func GenerateAll(chunks []chunk.Chunk, mfst *manifest.Manifest) map[string]strin
 				continue
 			}
 
-			bridge := Generate(BridgeInput{
+			bridge := generate(BridgeInput{
 				PrevHeading: prev.heading,
 				NextHeading: next.heading,
 				PrevContent: prev.content,

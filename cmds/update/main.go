@@ -234,11 +234,8 @@ func run(ctx context.Context, cmd *cli.Command) error {
 		}
 	}
 
-	// Archives don't provide commit SHAs.
-	commitSHAs := make(map[string]string)
-
-	// Step 5: Write lock file.
-	if err := shared.SaveLockOrError(lockPath, result, commitSHAs, reg); err != nil {
+	// Step 5: Write lock file (no commit SHAs for archive-based installs).
+	if err := shared.SaveLockOrError(lockPath, result, nil, reg); err != nil {
 		return err
 	}
 

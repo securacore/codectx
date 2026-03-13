@@ -1043,7 +1043,7 @@ func TestInitPackage_CreatesPackageStructure(t *testing.T) {
 		ProjectDir:  dir,
 		Root:        "docs",
 		Name:        "react-patterns",
-		Org:         "community",
+		Author:      "community",
 		Description: "React component patterns",
 	})
 	if err != nil {
@@ -1085,7 +1085,7 @@ func TestInitPackage_CreatesPackageStructure(t *testing.T) {
 		t.Error("manifest should contain package name")
 	}
 	if !strings.Contains(string(data), "community") {
-		t.Error("manifest should contain org")
+		t.Error("manifest should contain author")
 	}
 
 	// Verify README.md.
@@ -1146,7 +1146,7 @@ func TestInitPackage_GitInit(t *testing.T) {
 		ProjectDir: dir,
 		Root:       "docs",
 		Name:       "test-pkg",
-		Org:        "org",
+		Author:     "org",
 		GitInit:    true,
 	})
 	if err != nil {

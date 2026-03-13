@@ -94,7 +94,7 @@ func TestReleaseAssetURLForDep(t *testing.T) {
 	})
 
 	gh, _ := newTestGitHubClient(t, mux)
-	dk := DepKey{Name: "react-patterns", Org: "community"}
+	dk := DepKey{Name: "react-patterns", Author: "community"}
 	url, err := gh.ReleaseAssetURLForDep(context.Background(), dk, "2.0.0")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -114,7 +114,7 @@ func TestArchiveConfigReader_ReadDeps(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfgContent := `name: test
-org: org
+author: org
 version: 1.0.0
 dependencies:
   dep-a@other: ">=1.0.0"
@@ -125,7 +125,7 @@ dependencies:
 
 	// ArchiveConfigReader with nil GH/HTTP — should use cache, not network.
 	reader := &ArchiveConfigReader{CacheDir: cacheDir}
-	dk := DepKey{Name: "test", Org: "org"}
+	dk := DepKey{Name: "test", Author: "org"}
 
 	deps, err := reader.ReadDeps(context.Background(), dk, "1.0.0", "github.com")
 	if err != nil {
@@ -156,7 +156,7 @@ func TestArchiveConfigReader_ReadDeps_CacheMiss(t *testing.T) {
 		CacheDir: t.TempDir(),
 	}
 
-	dk := DepKey{Name: "test", Org: "org"}
+	dk := DepKey{Name: "test", Author: "org"}
 	_, err := reader.ReadDeps(context.Background(), dk, "1.0.0", "github.com")
 	if err == nil {
 		t.Fatal("expected error when release not found and cache empty")
@@ -168,7 +168,7 @@ func TestLoadPackageConfigFromFile(t *testing.T) {
 	cfgPath := filepath.Join(dir, "codectx.yml")
 
 	content := `name: my-pkg
-org: myorg
+author: myorg
 version: 2.0.0
 dependencies:
   dep-a@other: ">=1.0.0"

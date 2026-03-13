@@ -399,7 +399,7 @@ func TestReadPackageConfig(t *testing.T) {
 
 	// Write a codectx.yml into the repo and commit it.
 	configContent := `name: test-package
-org: testorg
+author: testorg
 version: "1.0.0"
 description: A test package
 dependencies:
@@ -435,8 +435,8 @@ dependencies:
 	if cfg.Name != "test-package" {
 		t.Errorf("name: got %q, want %q", cfg.Name, "test-package")
 	}
-	if cfg.Org != "testorg" {
-		t.Errorf("org: got %q, want %q", cfg.Org, "testorg")
+	if cfg.Author != "testorg" {
+		t.Errorf("author: got %q, want %q", cfg.Author, "testorg")
 	}
 	if cfg.Version != "1.0.0" {
 		t.Errorf("version: got %q, want %q", cfg.Version, "1.0.0")

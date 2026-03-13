@@ -14,7 +14,7 @@ import (
 // TagLister provides version tags for a package. Implemented by GitClient
 // (local) and GitHubClient (remote).
 type TagLister interface {
-	// AvailableTags returns the semver tags for a package identified by org/name.
+	// AvailableTags returns the semver tags for a package identified by author/name.
 	// Tags should include the "v" prefix (e.g. "v1.0.0").
 	AvailableTags(ctx context.Context, dk DepKey, registry string) ([]string, error)
 }
@@ -23,7 +23,7 @@ type TagLister interface {
 // discover transitive dependencies.
 type PackageConfigReader interface {
 	// ReadDeps returns the dependency map from a package's codectx.yml.
-	// The map key is "name@org" and the value is a version constraint string
+	// The map key is "name@author" and the value is a version constraint string
 	// (e.g. ">=1.0.0", "latest", "2.0.0").
 	ReadDeps(ctx context.Context, dk DepKey, version string, registry string) (map[string]string, error)
 }
@@ -44,17 +44,17 @@ type ResolvedPackage struct {
 	Source string
 
 	// RequiredBy lists the packages that required this transitive dependency.
-	// Each entry is "name@org:version". Empty for direct dependencies.
+	// Each entry is "name@author:version". Empty for direct dependencies.
 	RequiredBy []string
 }
 
 // Conflict represents an incompatible version requirement detected during
 // dependency resolution.
 type Conflict struct {
-	// PackageRef is the "name@org" of the conflicting package.
+	// PackageRef is the "name@author" of the conflicting package.
 	PackageRef string
 
-	// Versions maps the requester ("name@org:version" or "direct") to the
+	// Versions maps the requester ("name@author:version" or "direct") to the
 	// version constraint they requested.
 	Versions map[string]string
 }
@@ -94,7 +94,7 @@ func Resolve(
 	}
 
 	// Track version constraints per package ref for conflict detection.
-	// Key: "name@org", Value: map of requester -> version constraint.
+	// Key: "name@author", Value: map of requester -> version constraint.
 	constraints := make(map[string]map[string]string)
 
 	// Step 1: Resolve direct dependencies.
@@ -157,7 +157,7 @@ func Resolve(
 		requiredBy := item.pkg.Key.PackageRef() + ":" + item.pkg.ResolvedVersion
 
 		for depRef, constraint := range transDeps {
-			name, org, parseErr := ParsePackageRef(depRef)
+			name, author, parseErr := ParsePackageRef(depRef)
 			if parseErr != nil {
 				continue
 			}
@@ -168,7 +168,7 @@ func Resolve(
 			}
 			constraints[transRef][requiredBy] = constraint
 
-			dk := DepKey{Name: name, Org: org, Version: constraint}
+			dk := DepKey{Name: name, Author: author, Version: constraint}
 
 			existing, exists := result.Packages[transRef]
 			if exists {
@@ -278,7 +278,7 @@ func resolveOne(
 	}
 
 	return &ResolvedPackage{
-		Key:             DepKey{Name: dk.Name, Org: dk.Org, Version: VersionFromTag(resolvedTag)},
+		Key:             DepKey{Name: dk.Name, Author: dk.Author, Version: VersionFromTag(resolvedTag)},
 		ResolvedVersion: VersionFromTag(resolvedTag),
 		ResolvedTag:     resolvedTag,
 	}, nil
@@ -311,7 +311,7 @@ func appendUnique(slice []string, s string) []string {
 }
 
 // ToLockFile converts a ResolveResult into a LockFile.
-// The commitSHAs map provides the git commit SHA for each "name@org" ref.
+// The commitSHAs map provides the git commit SHA for each "name@author" ref.
 func ToLockFile(result *ResolveResult, commitSHAs map[string]string, registry string) *LockFile {
 	lf := &LockFile{
 		LockfileVersion: LockVersion,
@@ -322,7 +322,7 @@ func ToLockFile(result *ResolveResult, commitSHAs map[string]string, registry st
 	for ref, pkg := range result.Packages {
 		lp := &LockedPackage{
 			ResolvedVersion: pkg.ResolvedVersion,
-			Repo:            registry + "/" + pkg.Key.Org + "/" + RepoPrefix + pkg.Key.Name,
+			Repo:            registry + "/" + pkg.Key.Author + "/" + RepoPrefix + pkg.Key.Name,
 			Commit:          commitSHAs[ref],
 			Source:          pkg.Source,
 		}

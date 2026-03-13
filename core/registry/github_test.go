@@ -78,8 +78,8 @@ func TestSearchPackages(t *testing.T) {
 	if r1.Name != "react-patterns" {
 		t.Errorf("name: got %q, want %q", r1.Name, "react-patterns")
 	}
-	if r1.Org != "community" {
-		t.Errorf("org: got %q, want %q", r1.Org, "community")
+	if r1.Author != "community" {
+		t.Errorf("author: got %q, want %q", r1.Author, "community")
 	}
 	if r1.Stars != 342 {
 		t.Errorf("stars: got %d, want %d", r1.Stars, 342)

@@ -1,265 +1,198 @@
 package history
 
 import (
-	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 )
 
-func TestEscapeTSV(t *testing.T) {
-	tests := []struct {
-		input string
-		want  string
-	}{
-		{"hello world", "hello world"},
-		{"hello\tworld", "hello world"},
-		{"hello\nworld", "hello world"},
-		{"hello\r\nworld", "hello world"},
-		{"tabs\tand\nnewlines\there", "tabs and newlines here"},
-	}
-	for _, tt := range tests {
-		got := escapeTSV(tt.input)
-		if got != tt.want {
-			t.Errorf("escapeTSV(%q) = %q, want %q", tt.input, got, tt.want)
-		}
-	}
-}
+// --- ShortHash ---
 
-func TestExtractTimestamp(t *testing.T) {
+func TestShortHash(t *testing.T) {
 	tests := []struct {
 		name string
-		want int64
+		in   string
+		want string
 	}{
-		{"a1b2c3d4e5f6.1741532400123456789.md", 1741532400123456789},
-		{"abcdef012345.9223372036854775807.md", 9223372036854775807},
-		{"notsplit.md", 0},
-		{"", 0},
-		{"a1b2c3d4e5f6.notanumber.md", 0},
+		{"full hex hash", "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4", "a1b2c3d4e5f6"},
+		{"with prefix", "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4", "a1b2c3d4e5f6"},
+		{"short input", "abcdef", "abcdef"},
+		{"exactly 12", "a1b2c3d4e5f6", "a1b2c3d4e5f6"},
+		{"empty", "", ""},
 	}
+
 	for _, tt := range tests {
-		got := extractTimestamp(tt.name)
-		if got != tt.want {
-			t.Errorf("extractTimestamp(%q) = %d, want %d", tt.name, got, tt.want)
+		t.Run(tt.name, func(t *testing.T) {
+			got := ShortHash(tt.in)
+			if got != tt.want {
+				t.Errorf("ShortHash(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+// --- Hash computation ---
+
+func TestQueryHash(t *testing.T) {
+	h := QueryHash("jwt authentication")
+	if !strings.HasPrefix(h, "sha256:") {
+		t.Errorf("QueryHash should have sha256: prefix, got %q", h)
+	}
+	if len(h) != 7+64 { // "sha256:" + 64 hex chars
+		t.Errorf("QueryHash length = %d, want %d", len(h), 71)
+	}
+
+	// Same input should produce same hash.
+	h2 := QueryHash("jwt authentication")
+	if h != h2 {
+		t.Error("QueryHash not deterministic")
+	}
+
+	// Different input should produce different hash.
+	h3 := QueryHash("different query")
+	if h == h3 {
+		t.Error("different inputs produced same hash")
+	}
+}
+
+func TestChunkSetHash(t *testing.T) {
+	// Order should not matter.
+	h1 := ChunkSetHash([]string{"obj:abc.01", "spec:def.02"})
+	h2 := ChunkSetHash([]string{"spec:def.02", "obj:abc.01"})
+	if h1 != h2 {
+		t.Error("ChunkSetHash should be order-independent")
+	}
+
+	if !strings.HasPrefix(h1, "sha256:") {
+		t.Errorf("ChunkSetHash should have sha256: prefix, got %q", h1)
+	}
+}
+
+func TestContentHash(t *testing.T) {
+	h := ContentHash([]byte("hello world"))
+	if !strings.HasPrefix(h, "sha256:") {
+		t.Errorf("ContentHash should have sha256: prefix, got %q", h)
+	}
+
+	// Deterministic.
+	h2 := ContentHash([]byte("hello world"))
+	if h != h2 {
+		t.Error("ContentHash not deterministic")
+	}
+}
+
+// --- EnsureDir ---
+
+func TestEnsureDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	histDir := filepath.Join(tmpDir, "history")
+
+	// Create a minimal .gitignore target.
+	if err := os.WriteFile(filepath.Join(tmpDir, ".gitignore"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := EnsureDir(histDir, tmpDir, "docs"); err != nil {
+		t.Fatalf("EnsureDir: %v", err)
+	}
+
+	for _, sub := range []string{QueriesDir, ChunksDir, DocsDir} {
+		path := filepath.Join(histDir, sub)
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Errorf("subdirectory %q not created: %v", sub, err)
+			continue
+		}
+		if !info.IsDir() {
+			t.Errorf("%q is not a directory", sub)
 		}
 	}
 }
 
-func TestAppendQuery(t *testing.T) {
-	dir := t.TempDir()
+// --- WriteQueryEntry / ReadQueryHistory ---
 
-	if err := AppendQuery(dir, "jwt auth", "jwt auth authentication", 5); err != nil {
-		t.Fatalf("AppendQuery: %v", err)
-	}
-	if err := AppendQuery(dir, "api endpoints", "api endpoints routes", 3); err != nil {
-		t.Fatalf("AppendQuery second: %v", err)
+func TestWriteAndReadQueryEntries(t *testing.T) {
+	histDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(histDir, QueriesDir), 0755); err != nil {
+		t.Fatal(err)
 	}
 
-	data, err := os.ReadFile(filepath.Join(dir, QueryHistoryFile))
-	if err != nil {
-		t.Fatalf("reading query.history: %v", err)
-	}
-
-	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
-	if len(lines) != 2 {
-		t.Fatalf("expected 2 lines, got %d", len(lines))
-	}
-
-	// Verify first line has correct fields.
-	fields := strings.SplitN(lines[0], "\t", 4)
-	if len(fields) != 4 {
-		t.Fatalf("expected 4 fields, got %d", len(fields))
-	}
-	if fields[1] != "jwt auth" {
-		t.Errorf("raw query = %q, want %q", fields[1], "jwt auth")
-	}
-	if fields[2] != "jwt auth authentication" {
-		t.Errorf("expanded query = %q, want %q", fields[2], "jwt auth authentication")
-	}
-	if fields[3] != "5" {
-		t.Errorf("result count = %q, want %q", fields[3], "5")
-	}
-}
-
-func TestAppendChunks(t *testing.T) {
-	dir := t.TempDir()
-
-	ids := []string{"obj:abc123.01", "spec:def456.02"}
-	if err := AppendChunks(dir, ids, 1500, "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"); err != nil {
-		t.Fatalf("AppendChunks: %v", err)
-	}
-
-	data, err := os.ReadFile(filepath.Join(dir, ChunksHistoryFile))
-	if err != nil {
-		t.Fatalf("reading chunks.history: %v", err)
-	}
-
-	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
-	if len(lines) != 1 {
-		t.Fatalf("expected 1 line, got %d", len(lines))
-	}
-
-	fields := strings.SplitN(lines[0], "\t", 4)
-	if len(fields) != 4 {
-		t.Fatalf("expected 4 fields, got %d", len(fields))
-	}
-	if fields[1] != "obj:abc123.01,spec:def456.02" {
-		t.Errorf("chunk IDs = %q, want %q", fields[1], "obj:abc123.01,spec:def456.02")
-	}
-	if fields[2] != "1500" {
-		t.Errorf("token count = %q, want %q", fields[2], "1500")
-	}
-}
-
-func TestSaveDocument(t *testing.T) {
-	dir := t.TempDir()
-	docsDir := filepath.Join(dir, DocsDir)
-	if err := os.MkdirAll(docsDir, 0o755); err != nil {
-		t.Fatalf("creating docs dir: %v", err)
-	}
-
-	content := "# Test Document\n\nThis is a test."
-
-	shortHash, contentHash, filePath, err := SaveDocument(dir, content)
-	if err != nil {
-		t.Fatalf("SaveDocument: %v", err)
-	}
-
-	// Short hash should be 12 hex chars.
-	if len(shortHash) != ShortHashLen {
-		t.Errorf("short hash length = %d, want %d", len(shortHash), ShortHashLen)
-	}
-
-	// Content hash should be 64 hex chars (full SHA-256).
-	if len(contentHash) != 64 {
-		t.Errorf("content hash length = %d, want 64", len(contentHash))
-	}
-
-	// Short hash should be prefix of content hash.
-	if !strings.HasPrefix(contentHash, shortHash) {
-		t.Errorf("content hash %q does not start with short hash %q", contentHash, shortHash)
-	}
-
-	// File should exist and contain the content.
-	got, err := os.ReadFile(filePath)
-	if err != nil {
-		t.Fatalf("reading saved document: %v", err)
-	}
-	if string(got) != content {
-		t.Errorf("saved content mismatch:\ngot:  %q\nwant: %q", string(got), content)
-	}
-
-	// Filename should follow the expected pattern.
-	base := filepath.Base(filePath)
-	if !strings.HasPrefix(base, shortHash+".") || !strings.HasSuffix(base, ".md") {
-		t.Errorf("unexpected filename format: %s", base)
-	}
-}
-
-func TestSaveDocument_DeterministicHash(t *testing.T) {
-	dir := t.TempDir()
-	docsDir := filepath.Join(dir, DocsDir)
-	if err := os.MkdirAll(docsDir, 0o755); err != nil {
-		t.Fatalf("creating docs dir: %v", err)
-	}
-
-	content := "same content"
-
-	hash1, _, _, err := SaveDocument(dir, content)
-	if err != nil {
-		t.Fatalf("SaveDocument first: %v", err)
-	}
-
-	hash2, _, _, err := SaveDocument(dir, content)
-	if err != nil {
-		t.Fatalf("SaveDocument second: %v", err)
-	}
-
-	if hash1 != hash2 {
-		t.Errorf("same content produced different hashes: %q vs %q", hash1, hash2)
-	}
-}
-
-func TestAnnotateDocument(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "test.md")
-	if err := os.WriteFile(path, []byte("# Doc\n"), 0o644); err != nil {
-		t.Fatalf("writing test file: %v", err)
-	}
-
-	if err := AnnotateDocument(path, "chunks.history write failed: permission denied"); err != nil {
-		t.Fatalf("AnnotateDocument: %v", err)
-	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("reading annotated file: %v", err)
-	}
-
-	got := string(data)
-	if !strings.Contains(got, "<!-- codectx:warning chunks.history write failed: permission denied -->") {
-		t.Errorf("annotation not found in file content:\n%s", got)
-	}
-	if !strings.HasPrefix(got, "# Doc\n") {
-		t.Error("original content was modified")
-	}
-}
-
-func TestReadQueryHistory(t *testing.T) {
-	dir := t.TempDir()
-
-	// Write 5 query entries.
-	for i := range 5 {
-		line := strings.Join([]string{
-			"100000000000000000" + string(rune('0'+i)),
-			"query " + string(rune('a'+i)),
-			"expanded " + string(rune('a'+i)),
-			"3",
-		}, "\t") + "\n"
-		if err := appendToFile(filepath.Join(dir, QueryHistoryFile), line); err != nil {
-			t.Fatalf("writing entry %d: %v", i, err)
+	// Write 3 entries with distinct timestamps.
+	for i, raw := range []string{"first query", "second query", "third query"} {
+		entry := QueryEntry{
+			Ts:          int64(1000000000000000000 + i*1000000000),
+			QueryHash:   QueryHash(raw),
+			Raw:         raw,
+			Expanded:    raw + " expanded",
+			ResultCount: (i + 1) * 10,
+			CompileHash: "sha256:compilehash000000000000000000000000000000000000000000000000",
+			Caller:      "test",
+			SessionID:   "sess_test",
+			Model:       "test-model",
+		}
+		if err := WriteQueryEntry(histDir, entry); err != nil {
+			t.Fatalf("WriteQueryEntry %d: %v", i, err)
 		}
 	}
 
-	entries, err := ReadQueryHistory(dir, 3)
+	// Read all.
+	entries, err := ReadQueryHistory(histDir, 0)
 	if err != nil {
 		t.Fatalf("ReadQueryHistory: %v", err)
 	}
 	if len(entries) != 3 {
 		t.Fatalf("expected 3 entries, got %d", len(entries))
 	}
-	// Should be the last 3 entries.
-	if entries[0].RawQuery != "query c" {
-		t.Errorf("first entry query = %q, want %q", entries[0].RawQuery, "query c")
-	}
-	if entries[2].RawQuery != "query e" {
-		t.Errorf("last entry query = %q, want %q", entries[2].RawQuery, "query e")
-	}
-}
 
-func TestReadQueryHistory_Empty(t *testing.T) {
-	dir := t.TempDir()
-	entries, err := ReadQueryHistory(dir, 10)
+	// Should be sorted newest first.
+	if entries[0].Raw != "third query" {
+		t.Errorf("first entry should be newest, got %q", entries[0].Raw)
+	}
+	if entries[2].Raw != "first query" {
+		t.Errorf("last entry should be oldest, got %q", entries[2].Raw)
+	}
+
+	// Read with limit.
+	limited, err := ReadQueryHistory(histDir, 2)
 	if err != nil {
-		t.Fatalf("ReadQueryHistory on empty dir: %v", err)
+		t.Fatalf("ReadQueryHistory with limit: %v", err)
 	}
-	if len(entries) != 0 {
-		t.Errorf("expected 0 entries, got %d", len(entries))
+	if len(limited) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(limited))
 	}
 }
 
-func TestReadChunksHistory(t *testing.T) {
-	dir := t.TempDir()
+// --- WriteChunksEntry / ReadChunksHistory ---
 
-	line := "1741532400123456789\tobj:abc123.01,spec:def456.02\t1500\tabcdef0123456789\n"
-	if err := appendToFile(filepath.Join(dir, ChunksHistoryFile), line); err != nil {
-		t.Fatalf("writing entry: %v", err)
+func TestWriteAndReadChunksEntries(t *testing.T) {
+	histDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(histDir, ChunksDir), 0755); err != nil {
+		t.Fatal(err)
 	}
 
-	entries, err := ReadChunksHistory(dir, 0)
+	chunks := []string{"obj:abc.01", "spec:def.02"}
+	entry := ChunksEntry{
+		Ts:           1700000000000000000,
+		ChunkSetHash: ChunkSetHash(chunks),
+		Chunks:       chunks,
+		TokenCount:   1500,
+		ContentHash:  "sha256:contenthash00000000000000000000000000000000000000000000000000",
+		CompileHash:  "sha256:compilehash000000000000000000000000000000000000000000000000",
+		DocFile:      "1700000000000000000.contenthash0.md",
+		CacheHit:     false,
+		Caller:       "claude",
+		SessionID:    "sess_abc",
+		Model:        "claude-sonnet",
+	}
+
+	if err := WriteChunksEntry(histDir, entry); err != nil {
+		t.Fatalf("WriteChunksEntry: %v", err)
+	}
+
+	entries, err := ReadChunksHistory(histDir, 0)
 	if err != nil {
 		t.Fatalf("ReadChunksHistory: %v", err)
 	}
@@ -267,655 +200,665 @@ func TestReadChunksHistory(t *testing.T) {
 		t.Fatalf("expected 1 entry, got %d", len(entries))
 	}
 
-	e := entries[0]
-	if e.Timestamp != 1741532400123456789 {
-		t.Errorf("timestamp = %d, want 1741532400123456789", e.Timestamp)
+	got := entries[0]
+	if got.TokenCount != 1500 {
+		t.Errorf("TokenCount = %d, want 1500", got.TokenCount)
 	}
-	if len(e.ChunkIDs) != 2 || e.ChunkIDs[0] != "obj:abc123.01" {
-		t.Errorf("chunk IDs = %v, want [obj:abc123.01 spec:def456.02]", e.ChunkIDs)
+	if got.Caller != "claude" {
+		t.Errorf("Caller = %q, want %q", got.Caller, "claude")
 	}
-	if e.TokenCount != 1500 {
-		t.Errorf("token count = %d, want 1500", e.TokenCount)
-	}
-	if e.ContentHash != "abcdef0123456789" {
-		t.Errorf("content hash = %q, want %q", e.ContentHash, "abcdef0123456789")
+	if len(got.Chunks) != 2 {
+		t.Errorf("Chunks length = %d, want 2", len(got.Chunks))
 	}
 }
 
+// --- SaveDocument ---
+
+func TestSaveDocument(t *testing.T) {
+	histDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(histDir, DocsDir), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	content := []byte("# Test Document\n\nSome content.")
+	contentHash := ContentHash(content)
+	ts := int64(1700000000000000000)
+
+	filename, err := SaveDocument(histDir, content, contentHash, ts)
+	if err != nil {
+		t.Fatalf("SaveDocument: %v", err)
+	}
+
+	// Verify filename format.
+	if !strings.HasPrefix(filename, "1700000000000000000.") {
+		t.Errorf("filename should start with timestamp, got %q", filename)
+	}
+	if !strings.HasSuffix(filename, ".md") {
+		t.Errorf("filename should end with .md, got %q", filename)
+	}
+
+	// Verify content was written correctly.
+	path := filepath.Join(histDir, DocsDir, filename)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading saved document: %v", err)
+	}
+	if string(data) != string(content) {
+		t.Error("saved content does not match")
+	}
+}
+
+// --- ShowDocument ---
+
 func TestShowDocument(t *testing.T) {
-	dir := t.TempDir()
-	docsDir := filepath.Join(dir, DocsDir)
-	if err := os.MkdirAll(docsDir, 0o755); err != nil {
-		t.Fatalf("creating docs dir: %v", err)
+	histDir := t.TempDir()
+	docsDir := filepath.Join(histDir, DocsDir)
+	if err := os.MkdirAll(docsDir, 0755); err != nil {
+		t.Fatal(err)
 	}
 
-	// Write a document with known hash prefix.
-	content := "# Test"
-	if err := os.WriteFile(filepath.Join(docsDir, "a1b2c3d4e5f6.1741532400123456789.md"), []byte(content), 0o644); err != nil {
-		t.Fatalf("writing test doc: %v", err)
+	// Write a doc with known hash in filename.
+	content := "test document content"
+	hash := "a1b2c3d4e5f6"
+	filename := "1700000000000000000." + hash + ".md"
+	if err := os.WriteFile(filepath.Join(docsDir, filename), []byte(content), 0644); err != nil {
+		t.Fatal(err)
 	}
 
-	got, err := ShowDocument(dir, "a1b2c3d4e5f6")
+	got, err := ShowDocument(histDir, "a1b2c3")
 	if err != nil {
 		t.Fatalf("ShowDocument: %v", err)
 	}
 	if got != content {
-		t.Errorf("ShowDocument content = %q, want %q", got, content)
-	}
-}
-
-func TestShowDocument_PartialHash(t *testing.T) {
-	dir := t.TempDir()
-	docsDir := filepath.Join(dir, DocsDir)
-	if err := os.MkdirAll(docsDir, 0o755); err != nil {
-		t.Fatalf("creating docs dir: %v", err)
-	}
-
-	content := "# Partial Match"
-	if err := os.WriteFile(filepath.Join(docsDir, "a1b2c3d4e5f6.1741532400123456789.md"), []byte(content), 0o644); err != nil {
-		t.Fatalf("writing test doc: %v", err)
-	}
-
-	got, err := ShowDocument(dir, "a1b2c3")
-	if err != nil {
-		t.Fatalf("ShowDocument partial: %v", err)
-	}
-	if got != content {
-		t.Errorf("content = %q, want %q", got, content)
+		t.Errorf("content mismatch: got %q", got)
 	}
 }
 
 func TestShowDocument_NotFound(t *testing.T) {
-	dir := t.TempDir()
-	docsDir := filepath.Join(dir, DocsDir)
-	if err := os.MkdirAll(docsDir, 0o755); err != nil {
-		t.Fatalf("creating docs dir: %v", err)
+	histDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(histDir, DocsDir), 0755); err != nil {
+		t.Fatal(err)
 	}
 
-	_, err := ShowDocument(dir, "nonexistent")
+	_, err := ShowDocument(histDir, "nonexistent")
 	if err == nil {
-		t.Fatal("expected error for nonexistent hash, got nil")
+		t.Fatal("expected error for missing document")
 	}
 }
 
-func TestShowDocument_MultipleMatches_PicksNewest(t *testing.T) {
-	dir := t.TempDir()
-	docsDir := filepath.Join(dir, DocsDir)
-	if err := os.MkdirAll(docsDir, 0o755); err != nil {
-		t.Fatalf("creating docs dir: %v", err)
-	}
-
-	// Two documents with same hash prefix but different timestamps.
-	if err := os.WriteFile(filepath.Join(docsDir, "a1b2c3d4e5f6.1000000000000000000.md"), []byte("old"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(docsDir, "a1b2c3d4e5f6.2000000000000000000.md"), []byte("new"), 0o644); err != nil {
+func TestShowDocument_MultipleMatches(t *testing.T) {
+	histDir := t.TempDir()
+	docsDir := filepath.Join(histDir, DocsDir)
+	if err := os.MkdirAll(docsDir, 0755); err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := ShowDocument(dir, "a1b2c3d4e5f6")
+	hash := "a1b2c3d4e5f6"
+	// Older document.
+	if err := os.WriteFile(filepath.Join(docsDir, "1700000000000000000."+hash+".md"), []byte("old"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Newer document.
+	if err := os.WriteFile(filepath.Join(docsDir, "1700000001000000000."+hash+".md"), []byte("new"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := ShowDocument(histDir, "a1b2c3")
 	if err != nil {
 		t.Fatalf("ShowDocument: %v", err)
 	}
 	if got != "new" {
-		t.Errorf("expected newest document, got %q", got)
+		t.Errorf("should return newest document, got %q", got)
 	}
 }
+
+// --- AnnotateDocument ---
+
+func TestAnnotateDocument(t *testing.T) {
+	histDir := t.TempDir()
+	docsDir := filepath.Join(histDir, DocsDir)
+	if err := os.MkdirAll(docsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	docFile := "1700000000000000000.a1b2c3d4e5f6.md"
+	if err := os.WriteFile(filepath.Join(docsDir, docFile), []byte("original"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := AnnotateDocument(histDir, docFile, "test warning"); err != nil {
+		t.Fatalf("AnnotateDocument: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(docsDir, docFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "codectx:warning test warning") {
+		t.Error("annotation not found in document")
+	}
+}
+
+// --- Clear ---
 
 func TestClear(t *testing.T) {
-	dir := t.TempDir()
-	docsDir := filepath.Join(dir, DocsDir)
-	if err := os.MkdirAll(docsDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	// Write history files and a doc.
-	if err := appendToFile(filepath.Join(dir, QueryHistoryFile), "line1\n"); err != nil {
-		t.Fatal(err)
-	}
-	if err := appendToFile(filepath.Join(dir, ChunksHistoryFile), "line1\n"); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(docsDir, "test.md"), []byte("content"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := Clear(dir); err != nil {
-		t.Fatalf("Clear: %v", err)
-	}
-
-	// History files should be gone.
-	if _, err := os.Stat(filepath.Join(dir, QueryHistoryFile)); !os.IsNotExist(err) {
-		t.Error("query.history should not exist after clear")
-	}
-	if _, err := os.Stat(filepath.Join(dir, ChunksHistoryFile)); !os.IsNotExist(err) {
-		t.Error("chunks.history should not exist after clear")
-	}
-
-	// Docs should be empty.
-	entries, _ := os.ReadDir(docsDir)
-	if len(entries) != 0 {
-		t.Errorf("docs/ should be empty after clear, has %d entries", len(entries))
-	}
-}
-
-func TestClear_EmptyDir(t *testing.T) {
-	dir := t.TempDir()
-	// Clear on empty dir should not error.
-	if err := Clear(dir); err != nil {
-		t.Fatalf("Clear on empty dir: %v", err)
-	}
-}
-
-func TestTruncateToLastN(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "test.txt")
-
-	// Write 10 lines.
-	var content string
-	for i := range 10 {
-		content += "line" + string(rune('0'+i)) + "\n"
-	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := truncateToLastN(path, 3); err != nil {
-		t.Fatalf("truncateToLastN: %v", err)
-	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
-	if len(lines) != 3 {
-		t.Fatalf("expected 3 lines, got %d: %v", len(lines), lines)
-	}
-	if lines[0] != "line7" {
-		t.Errorf("first kept line = %q, want %q", lines[0], "line7")
-	}
-}
-
-func TestTruncateToLastN_FewerThanN(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "test.txt")
-
-	if err := os.WriteFile(path, []byte("line1\nline2\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := truncateToLastN(path, 5); err != nil {
-		t.Fatalf("truncateToLastN: %v", err)
-	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Should be unchanged.
-	if string(data) != "line1\nline2\n" {
-		t.Errorf("content changed unexpectedly: %q", string(data))
-	}
-}
-
-func TestTruncateToLastN_NonexistentFile(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "nonexistent.txt")
-
-	// Should be a no-op.
-	if err := truncateToLastN(path, 5); err != nil {
-		t.Fatalf("truncateToLastN on nonexistent file: %v", err)
-	}
-}
-
-func TestPruneDocuments(t *testing.T) {
-	dir := t.TempDir()
-
-	// Create 8 documents with different timestamps.
-	for i := range 8 {
-		name := "a1b2c3d4e5f6." + strings.Repeat(string(rune('0'+i)), 19) + ".md"
-		if err := os.WriteFile(filepath.Join(dir, name), []byte("content"), 0o644); err != nil {
+	histDir := t.TempDir()
+	for _, sub := range []string{QueriesDir, ChunksDir, DocsDir} {
+		dir := filepath.Join(histDir, sub)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "test.json"), []byte("{}"), 0644); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	if err := pruneDocuments(dir, 3); err != nil {
-		t.Fatalf("pruneDocuments: %v", err)
+	if err := Clear(histDir); err != nil {
+		t.Fatalf("Clear: %v", err)
 	}
 
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatal(err)
+	for _, sub := range []string{QueriesDir, ChunksDir, DocsDir} {
+		entries, _ := os.ReadDir(filepath.Join(histDir, sub))
+		if len(entries) != 0 {
+			t.Errorf("%s should be empty after clear, has %d files", sub, len(entries))
+		}
 	}
+}
+
+// --- PruneDirectory ---
+
+func TestPruneDirectory(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create 8 files with ascending timestamps.
+	for i := 0; i < 8; i++ {
+		ts := 1700000000000000000 + i*1000000000
+		fname := filepath.Join(dir, fmt.Sprintf("%019d.a1b2c3d4e5f6.json", ts))
+		if err := os.WriteFile(fname, []byte("{}"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	err := PruneDirectory(dir, 3)
+	if err != nil {
+		t.Fatalf("PruneDirectory: %v", err)
+	}
+
+	entries, _ := os.ReadDir(dir)
 	if len(entries) != 3 {
 		t.Errorf("expected 3 files after pruning, got %d", len(entries))
 	}
-}
 
-func TestPruneDocuments_NonexistentDir(t *testing.T) {
-	if err := pruneDocuments("/nonexistent/path", 5); err != nil {
-		t.Fatalf("pruneDocuments on nonexistent dir: %v", err)
+	// Verify the 3 newest files survived.
+	for _, e := range entries {
+		name := e.Name()
+		// The 3 newest should have timestamps >= 1700000005000000000.
+		if name < "1700000005" {
+			t.Errorf("old file %q should have been pruned", name)
+		}
 	}
 }
 
-func TestCheckAndPrune_UnderLimit(t *testing.T) {
+func TestPruneDirectory_BelowThreshold(t *testing.T) {
 	dir := t.TempDir()
-	docsDir := filepath.Join(dir, DocsDir)
-	if err := os.MkdirAll(docsDir, 0o755); err != nil {
-		t.Fatal(err)
+	for i := 0; i < 3; i++ {
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("%019d.hash.json", i)), []byte("{}"), 0644); err != nil {
+			t.Fatal(err)
+		}
 	}
 
-	// Write a small file — well under 100MB.
-	if err := os.WriteFile(filepath.Join(docsDir, "small.md"), []byte("small"), 0o644); err != nil {
-		t.Fatal(err)
+	err := PruneDirectory(dir, 5)
+	if err != nil {
+		t.Fatalf("PruneDirectory: %v", err)
 	}
 
-	if err := CheckAndPrune(dir); err != nil {
-		t.Fatalf("CheckAndPrune: %v", err)
-	}
-
-	// File should still exist.
-	if _, err := os.Stat(filepath.Join(docsDir, "small.md")); os.IsNotExist(err) {
-		t.Error("file was pruned despite being under limit")
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 3 {
+		t.Errorf("should not prune when below threshold, got %d files", len(entries))
 	}
 }
+
+// --- GenerateCacheLookup ---
+
+func TestGenerateCacheLookup_Hit(t *testing.T) {
+	histDir := t.TempDir()
+	compiledDir := t.TempDir()
+
+	if err := os.MkdirAll(filepath.Join(histDir, ChunksDir), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(histDir, DocsDir), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write a hashes.yml for compile hash.
+	hashesContent := "test: data"
+	if err := os.WriteFile(filepath.Join(compiledDir, "hashes.yml"), []byte(hashesContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	chunkIDs := []string{"obj:abc.01", "spec:def.02"}
+	chunkSetHash := ChunkSetHash(chunkIDs)
+	compileHash := ContentHash([]byte(hashesContent))
+
+	// Create a doc file.
+	docFile := "1700000000000000000.a1b2c3d4e5f6.md"
+	if err := os.WriteFile(filepath.Join(histDir, DocsDir, docFile), []byte("cached content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a matching chunks entry.
+	entry := ChunksEntry{
+		Ts:           1700000000000000000,
+		ChunkSetHash: chunkSetHash,
+		Chunks:       chunkIDs,
+		TokenCount:   500,
+		ContentHash:  "sha256:a1b2c3d4e5f6000000000000000000000000000000000000000000000000",
+		CompileHash:  compileHash,
+		DocFile:      docFile,
+		CacheHit:     false,
+		Caller:       "test",
+		SessionID:    "unknown",
+		Model:        "unknown",
+	}
+	if err := WriteChunksEntry(histDir, entry); err != nil {
+		t.Fatalf("WriteChunksEntry: %v", err)
+	}
+
+	// Lookup should hit.
+	path, hit := GenerateCacheLookup(histDir, chunkIDs, compiledDir)
+	if !hit {
+		t.Fatal("expected cache hit")
+	}
+	if path == "" {
+		t.Fatal("expected non-empty path on cache hit")
+	}
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "cached content" {
+		t.Errorf("cached content mismatch: got %q", string(content))
+	}
+}
+
+func TestGenerateCacheLookup_Miss_CompileChanged(t *testing.T) {
+	histDir := t.TempDir()
+	compiledDir := t.TempDir()
+
+	if err := os.MkdirAll(filepath.Join(histDir, ChunksDir), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(histDir, DocsDir), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Current hashes.yml.
+	if err := os.WriteFile(filepath.Join(compiledDir, "hashes.yml"), []byte("new data"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	chunkIDs := []string{"obj:abc.01"}
+	chunkSetHash := ChunkSetHash(chunkIDs)
+
+	// Create entry with OLD compile hash.
+	docFile := "1700000000000000000.a1b2c3d4e5f6.md"
+	if err := os.WriteFile(filepath.Join(histDir, DocsDir, docFile), []byte("old content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	entry := ChunksEntry{
+		Ts:           1700000000000000000,
+		ChunkSetHash: chunkSetHash,
+		Chunks:       chunkIDs,
+		TokenCount:   500,
+		ContentHash:  "sha256:a1b2c3d4e5f6000000000000000000000000000000000000000000000000",
+		CompileHash:  "sha256:oldcompilehash00000000000000000000000000000000000000000000",
+		DocFile:      docFile,
+		Caller:       "test",
+		SessionID:    "unknown",
+		Model:        "unknown",
+	}
+	if err := WriteChunksEntry(histDir, entry); err != nil {
+		t.Fatalf("WriteChunksEntry: %v", err)
+	}
+
+	_, hit := GenerateCacheLookup(histDir, chunkIDs, compiledDir)
+	if hit {
+		t.Fatal("expected cache miss when compile hash changed")
+	}
+}
+
+func TestGenerateCacheLookup_Miss_DocPruned(t *testing.T) {
+	histDir := t.TempDir()
+	compiledDir := t.TempDir()
+
+	if err := os.MkdirAll(filepath.Join(histDir, ChunksDir), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(histDir, DocsDir), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	hashesContent := "test data"
+	if err := os.WriteFile(filepath.Join(compiledDir, "hashes.yml"), []byte(hashesContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	chunkIDs := []string{"obj:abc.01"}
+	chunkSetHash := ChunkSetHash(chunkIDs)
+	compileHash := ContentHash([]byte(hashesContent))
+
+	// Create chunks entry but NO doc file (simulates pruning).
+	entry := ChunksEntry{
+		Ts:           1700000000000000000,
+		ChunkSetHash: chunkSetHash,
+		Chunks:       chunkIDs,
+		TokenCount:   500,
+		ContentHash:  "sha256:a1b2c3d4e5f6000000000000000000000000000000000000000000000000",
+		CompileHash:  compileHash,
+		DocFile:      "1700000000000000000.a1b2c3d4e5f6.md",
+		Caller:       "test",
+		SessionID:    "unknown",
+		Model:        "unknown",
+	}
+	if err := WriteChunksEntry(histDir, entry); err != nil {
+		t.Fatalf("WriteChunksEntry: %v", err)
+	}
+
+	_, hit := GenerateCacheLookup(histDir, chunkIDs, compiledDir)
+	if hit {
+		t.Fatal("expected cache miss when doc file is pruned")
+	}
+}
+
+func TestGenerateCacheLookup_Miss_NoEntries(t *testing.T) {
+	histDir := t.TempDir()
+	compiledDir := t.TempDir()
+
+	if err := os.MkdirAll(filepath.Join(histDir, ChunksDir), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(compiledDir, "hashes.yml"), []byte("test"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, hit := GenerateCacheLookup(histDir, []string{"obj:abc.01"}, compiledDir)
+	if hit {
+		t.Fatal("expected cache miss with no entries")
+	}
+}
+
+// --- LogGenerate ---
+
+func TestLogGenerate(t *testing.T) {
+	tmpDir := t.TempDir()
+	histDir := filepath.Join(tmpDir, "history")
+	projectDir := tmpDir
+
+	// Create .gitignore.
+	if err := os.WriteFile(filepath.Join(tmpDir, ".gitignore"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	content := []byte("# Generated Document")
+	contentHash := ContentHash(content)
+	compileHash := "sha256:compilehash000000000000000000000000000000000000000000000000"
+	caller := CallerContext{Caller: "test", SessionID: "sess_123", Model: "test-model"}
+
+	docFile, err := LogGenerate(histDir, projectDir, "docs", content,
+		[]string{"obj:abc.01"}, 500, contentHash, compileHash, false, caller)
+	if err != nil {
+		t.Fatalf("LogGenerate: %v", err)
+	}
+
+	if docFile == "" {
+		t.Fatal("expected non-empty docFile")
+	}
+
+	// Verify doc was written.
+	docPath := filepath.Join(histDir, DocsDir, docFile)
+	data, err := os.ReadFile(docPath)
+	if err != nil {
+		t.Fatalf("doc not written: %v", err)
+	}
+	if string(data) != string(content) {
+		t.Error("doc content mismatch")
+	}
+
+	// Verify chunks entry was written.
+	entries, err := ReadChunksHistory(histDir, 0)
+	if err != nil {
+		t.Fatalf("ReadChunksHistory: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 chunks entry, got %d", len(entries))
+	}
+	if entries[0].Caller != "test" {
+		t.Errorf("entry.Caller = %q, want %q", entries[0].Caller, "test")
+	}
+}
+
+// --- LogQuery ---
+
+func TestLogQuery(t *testing.T) {
+	tmpDir := t.TempDir()
+	histDir := filepath.Join(tmpDir, "history")
+	projectDir := tmpDir
+
+	if err := os.WriteFile(filepath.Join(tmpDir, ".gitignore"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	compileHash := "sha256:compilehash000000000000000000000000000000000000000000000000"
+	caller := CallerContext{Caller: "claude", SessionID: "sess_abc", Model: "claude-sonnet"}
+
+	if err := LogQuery(histDir, projectDir, "docs", "jwt auth", "jwt auth token", 15, compileHash, caller); err != nil {
+		t.Fatalf("LogQuery: %v", err)
+	}
+
+	entries, err := ReadQueryHistory(histDir, 0)
+	if err != nil {
+		t.Fatalf("ReadQueryHistory: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 query entry, got %d", len(entries))
+	}
+	if entries[0].Raw != "jwt auth" {
+		t.Errorf("entry.Raw = %q, want %q", entries[0].Raw, "jwt auth")
+	}
+	if entries[0].Caller != "claude" {
+		t.Errorf("entry.Caller = %q, want %q", entries[0].Caller, "claude")
+	}
+}
+
+// --- JSON format verification ---
+
+func TestEntryJSON_QueryRoundTrip(t *testing.T) {
+	entry := QueryEntry{
+		Ts:          1700000000000000000,
+		QueryHash:   "sha256:abc123",
+		Raw:         "test query",
+		Expanded:    "test query expanded",
+		ResultCount: 5,
+		CompileHash: "sha256:xyz789",
+		Caller:      "test",
+		SessionID:   "sess_1",
+		Model:       "model-1",
+	}
+
+	data, err := json.MarshalIndent(entry, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var decoded QueryEntry
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatal(err)
+	}
+
+	if decoded.Ts != entry.Ts || decoded.Raw != entry.Raw || decoded.Caller != entry.Caller {
+		t.Error("JSON round-trip failed")
+	}
+}
+
+func TestEntryJSON_ChunksRoundTrip(t *testing.T) {
+	entry := ChunksEntry{
+		Ts:           1700000000000000000,
+		ChunkSetHash: "sha256:abc123",
+		Chunks:       []string{"obj:abc.01", "spec:def.02"},
+		TokenCount:   1500,
+		ContentHash:  "sha256:content123",
+		CompileHash:  "sha256:compile789",
+		DocFile:      "1700000000000000000.abc123456789.md",
+		CacheHit:     true,
+		Caller:       "claude",
+		SessionID:    "sess_abc",
+		Model:        "claude-sonnet",
+	}
+
+	data, err := json.MarshalIndent(entry, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var decoded ChunksEntry
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatal(err)
+	}
+
+	if decoded.CacheHit != true {
+		t.Error("CacheHit not preserved through JSON round-trip")
+	}
+	if len(decoded.Chunks) != 2 {
+		t.Errorf("Chunks length = %d, want 2", len(decoded.Chunks))
+	}
+}
+
+// --- dirSize ---
 
 func TestDirSize(t *testing.T) {
 	dir := t.TempDir()
-
-	data := []byte("hello world") // 11 bytes
-	if err := os.WriteFile(filepath.Join(dir, "a.txt"), data, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "b.txt"), data, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("world!"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
 	size, err := dirSize(dir)
 	if err != nil {
-		t.Fatalf("dirSize: %v", err)
+		t.Fatal(err)
 	}
-
-	if size != 22 {
-		t.Errorf("dirSize = %d, want 22", size)
+	if size != 11 { // 5 + 6
+		t.Errorf("dirSize = %d, want 11", size)
 	}
 }
 
-func TestParseQueryLine(t *testing.T) {
-	line := "1741532400123456789\tjwt auth\tjwt auth authentication\t5"
-	entry, err := parseQueryLine(line)
+// --- ReadQueryHistory / ReadChunksHistory empty dir ---
+
+func TestReadQueryHistory_EmptyDir(t *testing.T) {
+	histDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(histDir, QueriesDir), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := ReadQueryHistory(histDir, 0)
 	if err != nil {
-		t.Fatalf("parseQueryLine: %v", err)
+		t.Fatal(err)
 	}
-	if entry.Timestamp != 1741532400123456789 {
-		t.Errorf("timestamp = %d", entry.Timestamp)
-	}
-	if entry.RawQuery != "jwt auth" {
-		t.Errorf("raw query = %q", entry.RawQuery)
-	}
-	if entry.ExpandedQuery != "jwt auth authentication" {
-		t.Errorf("expanded query = %q", entry.ExpandedQuery)
-	}
-	if entry.ResultCount != 5 {
-		t.Errorf("result count = %d", entry.ResultCount)
+	if entries != nil {
+		t.Errorf("expected nil entries for empty dir, got %d", len(entries))
 	}
 }
 
-func TestParseQueryLine_BadFormat(t *testing.T) {
-	_, err := parseQueryLine("only\ttwo\tfields")
+func TestReadChunksHistory_EmptyDir(t *testing.T) {
+	histDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(histDir, ChunksDir), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := ReadChunksHistory(histDir, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entries != nil {
+		t.Errorf("expected nil entries for empty dir, got %d", len(entries))
+	}
+}
+
+// --- Filename format verification ---
+
+func TestFilenameFormat_TimestampFirst(t *testing.T) {
+	histDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(histDir, QueriesDir), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	entry := QueryEntry{
+		Ts:          1700000000000000000,
+		QueryHash:   "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6abcd",
+		Raw:         "test",
+		ResultCount: 1,
+		CompileHash: "sha256:xyz",
+		Caller:      "test",
+		SessionID:   "unknown",
+		Model:       "unknown",
+	}
+
+	if err := WriteQueryEntry(histDir, entry); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, _ := os.ReadDir(filepath.Join(histDir, QueriesDir))
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 file, got %d", len(entries))
+	}
+
+	name := entries[0].Name()
+	// Should start with timestamp.
+	if !strings.HasPrefix(name, "1700000000000000000.") {
+		t.Errorf("filename should start with timestamp, got %q", name)
+	}
+	// Should end with .json.
+	if !strings.HasSuffix(name, ".json") {
+		t.Errorf("filename should end with .json, got %q", name)
+	}
+	// Should contain hash.
+	if !strings.Contains(name, "a1b2c3d4e5f6") {
+		t.Errorf("filename should contain short hash, got %q", name)
+	}
+}
+
+// --- CompileHash ---
+
+func TestCompileHash(t *testing.T) {
+	dir := t.TempDir()
+	content := "compiled_at: 2025-01-01\nfiles:\n  docs/test.md: sha256:abc\n"
+	if err := os.WriteFile(filepath.Join(dir, "hashes.yml"), []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	hash, err := CompileHash(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(hash, "sha256:") {
+		t.Errorf("CompileHash should have prefix, got %q", hash)
+	}
+
+	// Same content = same hash.
+	hash2, _ := CompileHash(dir)
+	if hash != hash2 {
+		t.Error("CompileHash not deterministic")
+	}
+}
+
+func TestCompileHash_MissingFile(t *testing.T) {
+	dir := t.TempDir()
+	_, err := CompileHash(dir)
 	if err == nil {
-		t.Error("expected error for malformed line")
-	}
-}
-
-func TestParseChunksLine(t *testing.T) {
-	line := "1741532400123456789\tobj:abc.01,spec:def.02\t1500\tabcdef0123456789"
-	entry, err := parseChunksLine(line)
-	if err != nil {
-		t.Fatalf("parseChunksLine: %v", err)
-	}
-	if entry.Timestamp != 1741532400123456789 {
-		t.Errorf("timestamp = %d", entry.Timestamp)
-	}
-	if len(entry.ChunkIDs) != 2 {
-		t.Errorf("chunk IDs count = %d, want 2", len(entry.ChunkIDs))
-	}
-	if entry.TokenCount != 1500 {
-		t.Errorf("token count = %d", entry.TokenCount)
-	}
-	if entry.ContentHash != "abcdef0123456789" {
-		t.Errorf("content hash = %q", entry.ContentHash)
-	}
-}
-
-func TestParseChunksLine_BadFormat(t *testing.T) {
-	_, err := parseChunksLine("bad")
-	if err == nil {
-		t.Error("expected error for malformed line")
-	}
-}
-
-func TestReadLastN_AllEntries(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "test.txt")
-	if err := os.WriteFile(path, []byte("a\nb\nc\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	lines, err := readLastN(path, 0)
-	if err != nil {
-		t.Fatalf("readLastN: %v", err)
-	}
-	if len(lines) != 3 {
-		t.Errorf("expected 3 lines, got %d", len(lines))
-	}
-}
-
-func TestReadLastN_SkipsEmptyLines(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "test.txt")
-	if err := os.WriteFile(path, []byte("a\n\nb\n\nc\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	lines, err := readLastN(path, 0)
-	if err != nil {
-		t.Fatalf("readLastN: %v", err)
-	}
-	if len(lines) != 3 {
-		t.Errorf("expected 3 lines (skipping empty), got %d: %v", len(lines), lines)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// ShortHash
-// ---------------------------------------------------------------------------
-
-func TestShortHash(t *testing.T) {
-	tests := []struct {
-		input string
-		want  string
-	}{
-		{"abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890", "abcdef123456"},
-		{"abcdef123456", "abcdef123456"}, // exactly ShortHashLen
-		{"short", "short"},               // shorter than ShortHashLen
-		{"", ""},                         // empty
-	}
-	for _, tt := range tests {
-		got := ShortHash(tt.input)
-		if got != tt.want {
-			t.Errorf("ShortHash(%q) = %q, want %q", tt.input, got, tt.want)
-		}
-	}
-}
-
-// ---------------------------------------------------------------------------
-// EnsureDir
-// ---------------------------------------------------------------------------
-
-func TestEnsureDir(t *testing.T) {
-	projectDir := t.TempDir()
-	histDir := filepath.Join(projectDir, "docs", ".codectx", "history")
-
-	if err := EnsureDir(histDir, projectDir, "docs"); err != nil {
-		t.Fatalf("EnsureDir: %v", err)
-	}
-
-	// history/ should exist.
-	info, err := os.Stat(histDir)
-	if err != nil {
-		t.Fatalf("history dir missing: %v", err)
-	}
-	if !info.IsDir() {
-		t.Error("history path is not a directory")
-	}
-
-	// history/docs/ should exist.
-	docsPath := filepath.Join(histDir, DocsDir)
-	info, err = os.Stat(docsPath)
-	if err != nil {
-		t.Fatalf("history/docs dir missing: %v", err)
-	}
-	if !info.IsDir() {
-		t.Error("history/docs path is not a directory")
-	}
-}
-
-func TestEnsureDir_Idempotent(t *testing.T) {
-	projectDir := t.TempDir()
-	histDir := filepath.Join(projectDir, "docs", ".codectx", "history")
-
-	// Call twice — should not error.
-	if err := EnsureDir(histDir, projectDir, "docs"); err != nil {
-		t.Fatalf("EnsureDir first: %v", err)
-	}
-	if err := EnsureDir(histDir, projectDir, "docs"); err != nil {
-		t.Fatalf("EnsureDir second: %v", err)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// AppendQuery edge cases
-// ---------------------------------------------------------------------------
-
-func TestAppendQuery_EmptyFields(t *testing.T) {
-	dir := t.TempDir()
-
-	if err := AppendQuery(dir, "", "", 0); err != nil {
-		t.Fatalf("AppendQuery with empty fields: %v", err)
-	}
-
-	data, err := os.ReadFile(filepath.Join(dir, QueryHistoryFile))
-	if err != nil {
-		t.Fatalf("reading: %v", err)
-	}
-
-	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
-	if len(lines) != 1 {
-		t.Fatalf("expected 1 line, got %d", len(lines))
-	}
-
-	fields := strings.SplitN(lines[0], "\t", 4)
-	if len(fields) != 4 {
-		t.Fatalf("expected 4 fields, got %d", len(fields))
-	}
-	if fields[1] != "" {
-		t.Errorf("raw query = %q, want empty", fields[1])
-	}
-	if fields[3] != "0" {
-		t.Errorf("result count = %q, want \"0\"", fields[3])
-	}
-}
-
-// ---------------------------------------------------------------------------
-// AppendChunks edge cases
-// ---------------------------------------------------------------------------
-
-func TestAppendChunks_EmptyIDs(t *testing.T) {
-	dir := t.TempDir()
-
-	if err := AppendChunks(dir, nil, 0, ""); err != nil {
-		t.Fatalf("AppendChunks with nil IDs: %v", err)
-	}
-
-	data, err := os.ReadFile(filepath.Join(dir, ChunksHistoryFile))
-	if err != nil {
-		t.Fatalf("reading: %v", err)
-	}
-
-	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
-	if len(lines) != 1 {
-		t.Fatalf("expected 1 line, got %d", len(lines))
-	}
-
-	fields := strings.SplitN(lines[0], "\t", 4)
-	if fields[1] != "" {
-		t.Errorf("chunk IDs = %q, want empty", fields[1])
-	}
-}
-
-// ---------------------------------------------------------------------------
-// SaveDocument — verify hash correctness
-// ---------------------------------------------------------------------------
-
-func TestSaveDocument_HashMatchesContent(t *testing.T) {
-	dir := t.TempDir()
-	docsDir := filepath.Join(dir, DocsDir)
-	if err := os.MkdirAll(docsDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	content := "verify hash matches"
-	expectedHash := fmt.Sprintf("%x", sha256.Sum256([]byte(content)))
-
-	_, contentHash, _, err := SaveDocument(dir, content)
-	if err != nil {
-		t.Fatalf("SaveDocument: %v", err)
-	}
-
-	if contentHash != expectedHash {
-		t.Errorf("content hash = %q, want %q", contentHash, expectedHash)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// CheckAndPrune — over limit (actual pruning)
-// ---------------------------------------------------------------------------
-
-func TestCheckAndPrune_OverLimit(t *testing.T) {
-	dir := t.TempDir()
-	docsDir := filepath.Join(dir, DocsDir)
-	if err := os.MkdirAll(docsDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	// Write 10 query history lines.
-	for i := range 10 {
-		line := strconv.FormatInt(int64(1000000000000000000+i), 10) +
-			"\tquery" + strconv.Itoa(i) + "\texpanded\t1\n"
-		if err := appendToFile(filepath.Join(dir, QueryHistoryFile), line); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	// Write 10 chunks history lines.
-	for i := range 10 {
-		line := strconv.FormatInt(int64(1000000000000000000+i), 10) +
-			"\tobj:abc.0" + strconv.Itoa(i) + "\t100\thash" + strconv.Itoa(i) + "\n"
-		if err := appendToFile(filepath.Join(dir, ChunksHistoryFile), line); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	// Write 10 documents. Make them large enough so total > MaxSize.
-	// Each file ~11MB to exceed 100MB total.
-	bigContent := strings.Repeat("x", 11*1024*1024)
-	for i := range 10 {
-		ts := strconv.FormatInt(int64(1000000000000000000+i), 10)
-		name := "a1b2c3d4e5f6." + ts + ".md"
-		if err := os.WriteFile(filepath.Join(docsDir, name), []byte(bigContent), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	if err := CheckAndPrune(dir); err != nil {
-		t.Fatalf("CheckAndPrune: %v", err)
-	}
-
-	// After pruning, both history files should have at most PruneKeep lines.
-	queryData, err := os.ReadFile(filepath.Join(dir, QueryHistoryFile))
-	if err != nil {
-		t.Fatalf("reading query.history: %v", err)
-	}
-	queryLines := strings.Split(strings.TrimRight(string(queryData), "\n"), "\n")
-	if len(queryLines) != PruneKeep {
-		t.Errorf("query.history: expected %d lines, got %d", PruneKeep, len(queryLines))
-	}
-
-	chunksData, err := os.ReadFile(filepath.Join(dir, ChunksHistoryFile))
-	if err != nil {
-		t.Fatalf("reading chunks.history: %v", err)
-	}
-	chunksLines := strings.Split(strings.TrimRight(string(chunksData), "\n"), "\n")
-	if len(chunksLines) != PruneKeep {
-		t.Errorf("chunks.history: expected %d lines, got %d", PruneKeep, len(chunksLines))
-	}
-
-	// After pruning, docs/ should have at most PruneKeep documents.
-	entries, err := os.ReadDir(docsDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) != PruneKeep {
-		t.Errorf("docs/: expected %d files, got %d", PruneKeep, len(entries))
-	}
-
-	// The kept lines should be the last PruneKeep (highest timestamps).
-	if !strings.Contains(queryLines[0], "query5") {
-		t.Errorf("first kept query line should be query5, got: %s", queryLines[0])
-	}
-}
-
-// ---------------------------------------------------------------------------
-// LogGenerate
-// ---------------------------------------------------------------------------
-
-func TestLogGenerate(t *testing.T) {
-	projectDir := t.TempDir()
-	histDir := filepath.Join(projectDir, "docs", ".codectx", "history")
-
-	docContent := "# Generated document"
-	chunkIDs := []string{"obj:abc.01", "spec:def.02"}
-	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(docContent)))
-
-	docPath, err := LogGenerate(histDir, projectDir, "docs", docContent, chunkIDs, 500, hash)
-	if err != nil {
-		t.Fatalf("LogGenerate: %v", err)
-	}
-
-	// Document should be saved.
-	if docPath == "" {
-		t.Fatal("expected non-empty docPath")
-	}
-	saved, err := os.ReadFile(docPath)
-	if err != nil {
-		t.Fatalf("reading saved doc: %v", err)
-	}
-	if string(saved) != docContent {
-		t.Errorf("saved content mismatch")
-	}
-
-	// chunks.history should have an entry.
-	data, err := os.ReadFile(filepath.Join(histDir, ChunksHistoryFile))
-	if err != nil {
-		t.Fatalf("reading chunks.history: %v", err)
-	}
-	if !strings.Contains(string(data), "obj:abc.01,spec:def.02") {
-		t.Error("chunks.history missing chunk IDs")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// LogQuery
-// ---------------------------------------------------------------------------
-
-func TestLogQuery(t *testing.T) {
-	projectDir := t.TempDir()
-	histDir := filepath.Join(projectDir, "docs", ".codectx", "history")
-
-	if err := LogQuery(histDir, projectDir, "docs", "jwt auth", "jwt authentication", 5); err != nil {
-		t.Fatalf("LogQuery: %v", err)
-	}
-
-	// query.history should have an entry.
-	data, err := os.ReadFile(filepath.Join(histDir, QueryHistoryFile))
-	if err != nil {
-		t.Fatalf("reading query.history: %v", err)
-	}
-	if !strings.Contains(string(data), "jwt auth") {
-		t.Error("query.history missing query")
+		t.Fatal("expected error for missing hashes.yml")
 	}
 }

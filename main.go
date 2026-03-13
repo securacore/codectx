@@ -22,6 +22,7 @@ import (
 	selfcmd "github.com/securacore/codectx/cmds/self"
 	sessioncmd "github.com/securacore/codectx/cmds/session"
 	updatecmd "github.com/securacore/codectx/cmds/update"
+	usagecmd "github.com/securacore/codectx/cmds/usage"
 	versioncmd "github.com/securacore/codectx/cmds/version"
 	"github.com/urfave/cli/v3"
 )
@@ -48,6 +49,7 @@ func main() {
 			selfcmd.Command,
 			sessioncmd.Command,
 			updatecmd.Command,
+			usagecmd.Command,
 			versioncmd.Command,
 		},
 	}

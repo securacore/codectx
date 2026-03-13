@@ -5,6 +5,10 @@
 // loads the corresponding chunk content and manifest metadata, groups by type
 // (Instructions, System, Reasoning), and outputs the assembled document.
 //
+// Before assembly, the command checks the generate cache. If the same chunk
+// set was previously assembled against the current compilation state, the
+// cached document is served directly. Use --no-cache to bypass this.
+//
 // By default, the document is printed to stdout and the summary goes to
 // stderr (Unix pipe-friendly). Use --file to write the document to a file
 // instead, in which case the summary prints to stdout.
@@ -16,6 +20,7 @@
 //
 //	codectx generate "obj:a1b2c3.03,obj:a1b2c3.04,spec:f7g8h9.02"
 //	codectx generate --file output.md "obj:a1b2c3.03,spec:f7g8h9.02"
+//	codectx generate --no-cache "obj:a1b2c3.03,spec:f7g8h9.02"
 package generate
 
 import (
@@ -23,12 +28,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/history"
 	"github.com/securacore/codectx/core/project"
 	corequery "github.com/securacore/codectx/core/query"
 	"github.com/securacore/codectx/core/tui"
+	"github.com/securacore/codectx/core/usage"
 	"github.com/urfave/cli/v3"
 )
 
@@ -42,6 +49,10 @@ var Command = &cli.Command{
 			Name:  "file",
 			Usage: "Write document to file instead of stdout",
 		},
+		&cli.BoolFlag{
+			Name:  "no-cache",
+			Usage: "Bypass cache lookup and always run the full generate pipeline",
+		},
 	},
 	Description: `Assemble specific chunks into a single coherent reading document.
 Accepts obj:, spec:, and sys: prefixed chunk IDs from codectx query output.
@@ -51,7 +62,8 @@ stderr. Use --file to write the document to a specific path.
 
 Examples:
   codectx generate "obj:a1b2c3.03,spec:f7g8h9.02"
-  codectx generate --file context.md "obj:a1b2c3.03,spec:f7g8h9.02"`,
+  codectx generate --file context.md "obj:a1b2c3.03,spec:f7g8h9.02"
+  codectx generate --no-cache "obj:a1b2c3.03,spec:f7g8h9.02"`,
 	Action: run,
 }
 
@@ -87,6 +99,7 @@ func run(_ context.Context, cmd *cli.Command) error {
 	}
 
 	filePath := cmd.String("file")
+	noCache := cmd.Bool("no-cache")
 
 	// --- Step 1: Discover and load the project ---
 	projectDir, cfg, err := shared.DiscoverProject()
@@ -94,11 +107,21 @@ func run(_ context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	// --- Step 2: Resolve compiled directory and load encoding ---
+	// --- Step 2: Resolve paths ---
 	compiledDir := corequery.CompiledDir(projectDir, cfg)
 	encoding := project.ResolveEncoding(projectDir, cfg)
+	histDir := history.HistoryDir(projectDir, cfg)
+	usageFile := usage.LocalPath(projectDir, cfg)
+	caller := history.ResolveCallerContext()
 
-	// --- Step 3: Run generate ---
+	// --- Step 3: Cache lookup (unless --no-cache) ---
+	if !noCache {
+		if docPath, hit := history.GenerateCacheLookup(histDir, chunkIDs, compiledDir); hit {
+			return serveCacheHit(docPath, filePath, histDir, chunkIDs, compiledDir, usageFile, caller)
+		}
+	}
+
+	// --- Step 4: Run generate ---
 	var result *corequery.GenerateResult
 	var genErr error
 
@@ -121,45 +144,124 @@ func run(_ context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("generate failed: %w", genErr)
 	}
 
-	// --- Step 4: History (best-effort) ---
-	histDir := history.HistoryDir(projectDir, cfg)
-	historyPath, histErr := history.LogGenerate(
+	// --- Step 5: History (best-effort) ---
+	compileHash, _ := history.CompileHash(compiledDir)
+	contentHash := history.ContentHash([]byte(result.Document))
+
+	docFile, histErr := history.LogGenerate(
 		histDir, projectDir, cfg.Root,
-		result.Document, result.ChunkIDs, result.TotalTokens, result.ContentHash,
+		[]byte(result.Document), result.ChunkIDs, result.TotalTokens,
+		contentHash, compileHash, false, caller,
 	)
 	if histErr != nil {
 		shared.WarnHistory("saving generate result", histErr)
 	}
 
-	// Make history path relative to CWD for cleaner display.
-	// Use EvalSymlinks on CWD to handle macOS /tmp -> /private/tmp symlinks.
-	if historyPath != "" {
-		if cwd, cwdErr := os.Getwd(); cwdErr == nil {
-			if realCwd, evalErr := filepath.EvalSymlinks(cwd); evalErr == nil {
-				cwd = realCwd
-			}
-			if rel, relErr := filepath.Rel(cwd, historyPath); relErr == nil {
-				historyPath = rel
+	// --- Step 6: Usage (best-effort) ---
+	if usageErr := usage.UpdateGenerate(usageFile, result.TotalTokens, false, caller); usageErr != nil {
+		shared.WarnBestEffort("Updating usage metrics", usageErr)
+	}
+
+	// --- Step 7: Output ---
+	historyPath := buildHistoryPath(histDir, docFile)
+	summary := corequery.FormatGenerateSummary(result, historyPath, filePath, false)
+
+	return outputDocument([]byte(result.Document), summary, filePath)
+}
+
+// serveCacheHit handles a generate cache hit: reads the cached document,
+// outputs it, writes a chunks entry with cache_hit=true, and updates usage.
+func serveCacheHit(docPath, filePath, histDir string, chunkIDs []string, compiledDir, usageFile string, caller history.CallerContext) error {
+	content, err := os.ReadFile(docPath)
+	if err != nil {
+		return fmt.Errorf("reading cached document: %w", err)
+	}
+
+	// Compute hashes for the entry.
+	contentHash := history.ContentHash(content)
+	compileHash, _ := history.CompileHash(compiledDir)
+
+	// Recover token count from the most recent matching chunks entry.
+	tokenCount := 0
+	if entries, readErr := history.ReadChunksHistory(histDir, 0); readErr == nil {
+		for _, e := range entries {
+			if e.ContentHash == contentHash {
+				tokenCount = e.TokenCount
+				break
 			}
 		}
 	}
 
-	// --- Step 5: Output ---
+	// Write chunks entry recording the cache hit (best-effort).
+	docFile := filepath.Base(docPath)
+	entry := history.ChunksEntry{
+		Ts:           time.Now().UnixNano(),
+		ChunkSetHash: history.ChunkSetHash(chunkIDs),
+		Chunks:       chunkIDs,
+		TokenCount:   tokenCount,
+		ContentHash:  contentHash,
+		CompileHash:  compileHash,
+		DocFile:      docFile,
+		CacheHit:     true,
+		Caller:       caller.Caller,
+		SessionID:    caller.SessionID,
+		Model:        caller.Model,
+	}
+	if writeErr := history.WriteChunksEntry(histDir, entry); writeErr != nil {
+		shared.WarnBestEffort("Writing cache-hit entry", writeErr)
+	}
+
+	// Update usage (best-effort).
+	if usageErr := usage.UpdateGenerate(usageFile, tokenCount, true, caller); usageErr != nil {
+		shared.WarnBestEffort("Updating usage metrics", usageErr)
+	}
+
+	// Build a GenerateResult for the shared summary formatter.
+	cacheResult := &corequery.GenerateResult{
+		TotalTokens: tokenCount,
+		ContentHash: contentHash,
+		ChunkIDs:    chunkIDs,
+	}
+	historyPath := buildHistoryPath(histDir, docFile)
+	summary := corequery.FormatGenerateSummary(cacheResult, historyPath, filePath, true)
+
+	// Output.
+	return outputDocument(content, summary, filePath)
+}
+
+// outputDocument writes the generated document to the appropriate destination.
+// In --file mode, the document is written to a file and the summary to stdout.
+// In default mode, the document goes to stdout and the summary to stderr.
+func outputDocument(content []byte, summary, filePath string) error {
 	if filePath != "" {
-		// --file mode: write document to file, summary to stdout.
-		if err := os.WriteFile(filePath, []byte(result.Document), project.FilePerm); err != nil {
+		if err := os.WriteFile(filePath, content, project.FilePerm); err != nil {
 			fmt.Print(tui.ErrorMsg{
 				Title:  "Failed to write file",
 				Detail: []string{err.Error()},
 			}.Render())
 			return fmt.Errorf("writing file: %w", err)
 		}
-		fmt.Print(corequery.FormatGenerateSummary(result, historyPath, filePath))
+		fmt.Print(summary)
 	} else {
-		// Default mode: document to stdout, summary to stderr.
-		fmt.Print(result.Document)
-		fmt.Fprint(os.Stderr, corequery.FormatGenerateSummary(result, historyPath, ""))
+		fmt.Print(string(content))
+		fmt.Fprint(os.Stderr, summary)
 	}
-
 	return nil
+}
+
+// buildHistoryPath builds a relative path to a history doc file for display.
+func buildHistoryPath(histDir, docFile string) string {
+	if docFile == "" {
+		return ""
+	}
+	fullPath := filepath.Join(histDir, history.DocsDir, docFile)
+	if cwd, cwdErr := os.Getwd(); cwdErr == nil {
+		if realCwd, evalErr := filepath.EvalSymlinks(cwd); evalErr == nil {
+			cwd = realCwd
+		}
+		if rel, relErr := filepath.Rel(cwd, fullPath); relErr == nil {
+			return rel
+		}
+	}
+	return fullPath
 }

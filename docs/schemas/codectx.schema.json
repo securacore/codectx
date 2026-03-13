@@ -20,9 +20,9 @@
       "type": "string",
       "description": "Package or project name."
     },
-    "org": {
+    "author": {
       "type": "string",
-      "description": "GitHub organization or user namespace. Required for publishing."
+      "description": "GitHub username or organization that owns this package. Required for publishing. Used to construct the package URL: github.com/<author>/codectx-<name>."
     },
     "version": {
       "type": "string",
@@ -53,7 +53,7 @@
     },
     "dependencies": {
       "type": "object",
-      "description": "Package dependencies. In project context, keys are 'name@org:version' with object values containing an 'active' boolean. In published package context, keys are 'name@org' with string values containing semver range constraints (e.g., '>=1.0.0').",
+      "description": "Package dependencies. In project context, keys are 'name@author:version' with object values containing an 'active' boolean. In published package context, keys are 'name@author' with string values containing semver range constraints (e.g., '>=1.0.0').",
       "additionalProperties": {
         "oneOf": [
           {

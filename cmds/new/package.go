@@ -6,14 +6,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"charm.land/huh/v2"
 	"github.com/charmbracelet/x/term"
 	"github.com/securacore/codectx/cmds/shared"
-	"github.com/securacore/codectx/core/compile"
 	"github.com/securacore/codectx/core/detect"
-	"github.com/securacore/codectx/core/link"
 	"github.com/securacore/codectx/core/project"
+	"github.com/securacore/codectx/core/registry"
 	"github.com/securacore/codectx/core/scaffold"
 	"github.com/securacore/codectx/core/tui"
 	"github.com/urfave/cli/v3"
@@ -38,8 +38,8 @@ With a directory name, creates the directory and initializes inside it.`,
 			Usage: "Package name (default: directory name)",
 		},
 		&cli.StringFlag{
-			Name:  "org",
-			Usage: "Organization or author namespace",
+			Name:  "author",
+			Usage: "GitHub username or organization that owns this package",
 		},
 		&cli.StringFlag{
 			Name:  "description",
@@ -78,7 +78,7 @@ func runPackage(_ context.Context, cmd *cli.Command) error {
 	}
 
 	name := cmd.String("name")
-	org := cmd.String("org")
+	author := cmd.String("author")
 	description := cmd.String("description")
 	root := cmd.String("root")
 	model := cmd.String("model")
@@ -87,6 +87,34 @@ func runPackage(_ context.Context, cmd *cli.Command) error {
 	skipCompile := cmd.IsSet("no-compile") && cmd.Bool("no-compile")
 
 	interactive := term.IsTerminal(os.Stdin.Fd()) && !autoYes
+
+	// --- Step 1b: Warn if directory doesn't follow codectx- convention ---
+	dirBase := filepath.Base(targetDir)
+	if !strings.HasPrefix(dirBase, registry.RepoPrefix) {
+		fmt.Print(tui.WarnMsg{
+			Title: "Directory name missing codectx- prefix",
+			Detail: []string{
+				fmt.Sprintf("The directory %s does not follow the %s naming convention.",
+					tui.StylePath.Render(dirBase),
+					tui.StyleAccent.Render("codectx-<name>")),
+				"Packages must be hosted in a GitHub repository named codectx-<name>",
+				"to be discoverable and installable via codectx add.",
+			},
+		}.Render())
+
+		if interactive {
+			var proceed bool
+			if err := huh.NewConfirm().
+				Title("Continue anyway?").
+				Value(&proceed).
+				Run(); err != nil {
+				return err
+			}
+			if !proceed {
+				return errors.New("initialization canceled")
+			}
+		}
+	}
 
 	// --- Step 2: Pre-scaffold checks ---
 	check, err := scaffold.Check(targetDir, root)
@@ -175,11 +203,16 @@ func runPackage(_ context.Context, cmd *cli.Command) error {
 		}
 	}
 
-	// --- Step 6: Resolve org ---
-	if org == "" && interactive {
+	// Always strip the codectx- prefix from the name — the config stores
+	// the bare name (e.g., "react" not "codectx-react"), matching DepKey.Name.
+	name = stripPackagePrefix(name)
+
+	// --- Step 6: Resolve author ---
+	if author == "" && interactive {
 		if err := huh.NewInput().
-			Title("Organization (GitHub user or org):").
-			Value(&org).
+			Title("Author (GitHub username or organization):").
+			Description("Used to construct the package URL: github.com/<author>/codectx-<name>").
+			Value(&author).
 			Run(); err != nil {
 			return err
 		}
@@ -291,7 +324,7 @@ func runPackage(_ context.Context, cmd *cli.Command) error {
 		ProjectDir:  targetDir,
 		Root:        root,
 		Name:        name,
-		Org:         org,
+		Author:      author,
 		Description: description,
 		GitInit:     needGitInit,
 		Model:       effectiveModel,
@@ -328,8 +361,8 @@ func runPackage(_ context.Context, cmd *cli.Command) error {
 	}
 
 	ref := name
-	if org != "" {
-		ref = name + "@" + org
+	if author != "" {
+		ref = name + "@" + author
 	}
 
 	fmt.Print(tui.InitSummary(ref, tree, nextSteps))
@@ -386,6 +419,10 @@ func runPackage(_ context.Context, cmd *cli.Command) error {
 }
 
 // resolveTarget determines the target directory from positional arguments.
+// For package repositories, bare names (no path separators, not ".", not an
+// existing directory) are automatically prefixed with "codectx-" to follow
+// the naming convention (e.g., "react" → "codectx-react").
+//
 // Returns (absolutePath, createdNewDir, error).
 func resolveTarget(args []string) (string, bool, error) {
 	if len(args) == 0 || args[0] == "." {
@@ -398,6 +435,7 @@ func resolveTarget(args []string) (string, bool, error) {
 
 	target := args[0]
 
+	// If the path already exists, use it as-is.
 	if info, err := os.Stat(target); err == nil {
 		if !info.IsDir() {
 			return "", false, fmt.Errorf("%q exists but is not a directory", target)
@@ -407,6 +445,11 @@ func resolveTarget(args []string) (string, bool, error) {
 			return "", false, err
 		}
 		return abs, false, nil
+	}
+
+	// Bare name (no path separators): apply codectx- prefix.
+	if !strings.Contains(target, string(filepath.Separator)) && !strings.Contains(target, "/") {
+		target = ensurePackagePrefix(target)
 	}
 
 	if err := os.MkdirAll(target, project.DirPerm); err != nil {
@@ -422,32 +465,13 @@ func resolveTarget(args []string) (string, bool, error) {
 // detectProviderCapabilities checks the detection results for Claude CLI
 // binary and Anthropic API key availability.
 func detectProviderCapabilities(detection detect.Result) (hasCLI, hasAPI bool) {
-	for _, t := range detection.Tools {
-		if t.Binary == "claude" {
-			hasCLI = true
-			break
-		}
-	}
-	for _, p := range detection.Providers {
-		if p.Name == "Anthropic" {
-			hasAPI = true
-			break
-		}
-	}
-	return hasCLI, hasAPI
+	return shared.DetectProviderCapabilities(detection)
 }
 
 // autoSelectProvider returns the appropriate provider string based on
 // detected capabilities.
 func autoSelectProvider(hasCLI, hasAPI bool) string {
-	switch {
-	case hasCLI:
-		return project.ProviderCLI
-	case hasAPI:
-		return project.ProviderAPI
-	default:
-		return ""
-	}
+	return shared.AutoSelectProvider(hasCLI, hasAPI)
 }
 
 // buildPackageSummaryTree creates the tree structure for the package init summary.
@@ -491,29 +515,7 @@ func buildPackageSummaryTree(root string) []tui.TreeNode {
 
 // promptLink prompts the user to set up AI tool entry point files.
 func promptLink(projectDir string) error {
-	selected, err := link.PromptIntegrations(projectDir, "Set up AI tool entry points?")
-	if err != nil {
-		return err
-	}
-
-	if len(selected) == 0 {
-		return nil
-	}
-
-	cfg, err := project.LoadConfig(filepath.Join(projectDir, project.ConfigFileName))
-	if err != nil {
-		return err
-	}
-
-	contextRelPath := project.ContextRelPath(cfg.Root)
-
-	results, err := link.Write(projectDir, contextRelPath, selected)
-	if err != nil {
-		return err
-	}
-
-	fmt.Print(link.RenderLinkResults(results))
-	return nil
+	return shared.PromptAndWriteLinks(projectDir)
 }
 
 // shouldPackageAutoCompile determines whether auto-compilation should run
@@ -522,53 +524,24 @@ func shouldPackageAutoCompile(
 	projectDir, root string,
 	forceCompile, skipCompile bool,
 ) bool {
-	effectiveRoot := project.ResolveRoot(root)
-	codectxDir := filepath.Join(projectDir, effectiveRoot, project.CodectxDir)
-	prefsCfg, err := project.LoadPreferencesConfig(filepath.Join(codectxDir, project.PreferencesFile))
-	if err != nil {
-		prefsCfg = &project.PreferencesConfig{}
-	}
-
-	return shared.ShouldAutoCompile(prefsCfg, forceCompile, skipCompile, "initial compile")
+	return shared.ShouldPostInitCompile(projectDir, root, forceCompile, skipCompile)
 }
 
 // runPackageCompile loads the freshly created project configuration and runs
 // the full compilation pipeline.
 func runPackageCompile(projectDir, root string) error {
-	cfg, err := project.LoadConfig(filepath.Join(projectDir, project.ConfigFileName))
-	if err != nil {
-		return fmt.Errorf("loading project config: %w", err)
+	return shared.RunPostInitCompile(projectDir)
+}
+
+// ensurePackagePrefix prepends the "codectx-" prefix if not already present.
+func ensurePackagePrefix(s string) string {
+	if strings.HasPrefix(s, registry.RepoPrefix) {
+		return s
 	}
+	return registry.RepoPrefix + s
+}
 
-	rootDir := project.RootDir(projectDir, cfg)
-
-	aiCfg, err := project.LoadAIConfigForProject(projectDir, cfg)
-	if err != nil {
-		return fmt.Errorf("loading AI config: %w", err)
-	}
-
-	prefsCfg, err := project.LoadPreferencesConfigForProject(projectDir, cfg)
-	if err != nil {
-		return fmt.Errorf("loading preferences: %w", err)
-	}
-
-	compileCfg := compile.BuildConfig(projectDir, rootDir, cfg, aiCfg, prefsCfg)
-
-	fmt.Printf("\n%s Compiling documentation...\n", tui.Arrow())
-
-	var result *compile.Result
-	var compileErr error
-
-	if sErr := shared.RunWithSpinner("Compiling...", func() {
-		result, compileErr = compile.Run(compileCfg, nil)
-	}); sErr != nil {
-		return sErr
-	}
-	if compileErr != nil {
-		return compileErr
-	}
-
-	fmt.Print(shared.RenderCompactCompileSummary(result))
-
-	return nil
+// stripPackagePrefix removes the "codectx-" prefix if present.
+func stripPackagePrefix(s string) string {
+	return strings.TrimPrefix(s, registry.RepoPrefix)
 }
