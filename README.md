@@ -9,7 +9,7 @@
 <h1 align="center">codectx</h1>
 
 <p align="center">
-  The package manager for AI code documentation.
+  A package manager, compiler, indexer, crawler, and manager of AI-driven documentation management and package creation and distribution.
 </p>
 
 <p align="center">
@@ -44,21 +44,6 @@ The install script detects your architecture, downloads the correct
 binary, and verifies its SHA256 checksum. Set `INSTALL_DIR` to
 override the install location.
 
-## Usage
-
-```bash
-codectx new my-project     # Scaffold a new documentation package
-codectx add react@org      # Install a package from GitHub
-codectx compile            # Compile all packages into .codectx/
-codectx link               # Symlink compiled output to tool-specific files
-codectx search react       # Search the registry for packages
-codectx watch              # Watch for changes and recompile automatically
-codectx version            # Print the installed version
-```
-
-The `codectx-` prefix is always implied. When you type `react@org`,
-the CLI resolves it to `codectx-react` owned by `org` on GitHub.
-
 ## Development
 
 ### Prerequisites
@@ -66,7 +51,15 @@ the CLI resolves it to `codectx-react` owned by `org` on GitHub.
 - [devbox](https://www.jetify.com/devbox)
 - [just](https://github.com/casey/just)
 
-### Setup
+### Getting Started
+
+> See what commands are avialable, if you want.
+
+```bash
+just
+```
+
+> Install and setup the project for development.
 
 ```bash
 just install
@@ -90,27 +83,6 @@ Or connect to the container directly:
 just connect
 ```
 
-### Testing
-
-```bash
-go test ./... -count=1
-```
-
-### Linting
-
-```bash
-golangci-lint run ./...
-```
-
-Both run automatically on pre-commit via lefthook.
-
-### Commands
-
-```bash
-just          # List all available commands
-just docker   # List Docker-specific commands
-```
-
 ## Releasing
 
 Releases are created by pushing a semver tag, which triggers a GitHub
@@ -118,9 +90,13 @@ Actions workflow that runs tests and lint before building binaries for
 all platforms via GoReleaser.
 
 ```bash
-bin/release          # Bump patch version (v0.1.0 -> v0.1.1)
-bin/release minor    # Bump minor version (v0.1.0 -> v0.2.0)
-bin/release major    # Bump major version (v0.1.0 -> v1.0.0)
+# Two ways to generate a patch version update.
+just release          # Bump patch version (v0.1.0 -> v0.1.1)
+just release patch    # Bump patch version (v0.1.0 -> v0.1.1)
+
+# How to increment minor and major versions.
+just release minor    # Bump minor version (v0.1.0 -> v0.2.0)
+just release major    # Bump major version (v0.1.0 -> v1.0.0)
 ```
 
 The script requires a clean working tree on the `main` branch,
@@ -134,20 +110,6 @@ confirms the version bump, then pushes the tag to trigger the pipeline.
    `darwin/arm64` binaries with version injected via ldflags
 4. GitHub Release is created with tarballs and SHA256 checksums
 
-### Secrets Required
+## Feedback
 
-| Secret | Purpose |
-|---|---|
-| `GITHUB_TOKEN` | Automatic, used by GoReleaser to create releases |
-
-## Update Notifications
-
-The CLI checks for newer versions in the background (once per 24 hours)
-and displays a message after command output when an update is available.
-This check never blocks command execution.
-
-Disable with:
-
-```bash
-export CODECTX_NO_UPDATE_CHECK=1
-```
+For any feedback or issues, please open an issue against the repo or contact the author (Jon Tech). Feedback is welcome to improve the CLI over time as features are added and refined.
