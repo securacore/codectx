@@ -1,5 +1,9 @@
 <p align="center">
-  <img src=".assets/logo.svg" alt="codectx" width="180" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".assets/logo.dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset=".assets/logo.light.svg">
+    <img alt="codectx" src=".assets/logo.light.svg" width="180" />
+  </picture>
 </p>
 
 <h1 align="center">codectx</h1>
