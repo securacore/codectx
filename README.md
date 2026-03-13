@@ -8,6 +8,14 @@
   The package manager for AI code documentation.
 </p>
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".assets/knowledge-base-diagram.dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset=".assets/knowledge-base-diagram.light.svg">
+    <img alt="How codectx compiles documentation packages into AI-optimized context" src=".assets/knowledge-base-diagram.light.svg" width="720">
+  </picture>
+</p>
+
 ---
 
 For a full overview of what codectx does and how it works, see the
