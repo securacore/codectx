@@ -28,7 +28,19 @@ var Command = &cli.Command{
 pushing to GitHub. The repo must already exist on GitHub.
 
 Reads codectx.yml for name, org, and version. Validates directory structure.
-Tags the current commit as v[version] and pushes the tag.`,
+Tags the current commit as v[version] and pushes the tag.
+
+For package authoring projects (type: "package"), validates the package/
+directory and uses the package manifest for identity fields.
+
+Use --validate to run all validation checks without publishing.`,
+	Flags: []cli.Flag{
+		&cli.BoolFlag{
+			Name:    "validate",
+			Usage:   "Validate package structure without publishing (dry run)",
+			Aliases: []string{"dry-run"},
+		},
+	},
 	Action: run,
 }
 
@@ -40,29 +52,81 @@ var validPackageDirs = []string{
 	"prompts",
 }
 
-func run(ctx context.Context, _ *cli.Command) error {
+func run(ctx context.Context, cmd *cli.Command) error {
+	validateOnly := cmd.Bool("validate")
+
 	// Step 1: Find and load project config.
 	projectDir, cfg, err := shared.DiscoverProject()
 	if err != nil {
 		return err
 	}
 
-	// Step 2: Validate required fields.
-	if cfg.Name == "" {
+	// Step 2: Determine validation source.
+	// For package authoring projects, validate the package/ directory.
+	// For standard projects, validate the documentation root.
+	name := cfg.Name
+	org := cfg.Org
+	version := cfg.Version
+	var structureDir string
+
+	if cfg.IsPackage() {
+		// Package authoring project — validate package/ directory.
+		pkgContentDir := project.PackageContentPath(projectDir)
+		structureDir = pkgContentDir
+
+		// Load and validate the package manifest.
+		manifestPath := project.PackageConfigPath(projectDir)
+		manifest, loadErr := project.LoadPackageManifest(manifestPath)
+		if loadErr != nil {
+			fmt.Print(tui.ErrorMsg{
+				Title: "Missing package manifest",
+				Detail: []string{
+					loadErr.Error(),
+					fmt.Sprintf("Expected at: %s", tui.StylePath.Render(manifestPath)),
+				},
+				Suggestions: []tui.Suggestion{
+					{Text: "Ensure package/codectx.yml exists with name, org, and version fields"},
+				},
+			}.Render())
+			return fmt.Errorf("missing package manifest: %w", loadErr)
+		}
+
+		// Use manifest fields as source of truth for publishing identity.
+		name = manifest.Name
+		org = manifest.Org
+		version = manifest.Version
+
+		// Validate version consistency.
+		if cfg.Version != "" && cfg.Version != manifest.Version {
+			fmt.Print(tui.WarnMsg{
+				Title: "Version mismatch",
+				Detail: []string{
+					fmt.Sprintf("Root codectx.yml version: %s", cfg.Version),
+					fmt.Sprintf("Package manifest version: %s", manifest.Version),
+					"The package manifest version will be used for publishing.",
+				},
+			}.Render())
+		}
+	} else {
+		structureDir = project.RootDir(projectDir, cfg)
+	}
+
+	// Step 3: Validate required fields.
+	if name == "" {
 		fmt.Print(tui.ErrorMsg{
 			Title:  "Missing package name",
 			Detail: []string{"codectx.yml must have a 'name' field for publishing."},
 		}.Render())
 		return fmt.Errorf("missing package name")
 	}
-	if cfg.Org == "" {
+	if org == "" {
 		fmt.Print(tui.ErrorMsg{
 			Title:  "Missing organization",
 			Detail: []string{"codectx.yml must have an 'org' field for publishing."},
 		}.Render())
 		return fmt.Errorf("missing org")
 	}
-	if cfg.Version == "" {
+	if version == "" {
 		fmt.Print(tui.ErrorMsg{
 			Title:  "Missing version",
 			Detail: []string{"codectx.yml must have a 'version' field for publishing."},
@@ -70,13 +134,12 @@ func run(ctx context.Context, _ *cli.Command) error {
 		return fmt.Errorf("missing version")
 	}
 
-	tagName := registry.GitTag(cfg.Version)
-	repoName := registry.RepoPrefix + cfg.Name
-	remoteURL := fmt.Sprintf("https://github.com/%s/%s", cfg.Org, repoName)
+	tagName := registry.GitTag(version)
+	repoName := registry.RepoPrefix + name
+	remoteURL := fmt.Sprintf("https://github.com/%s/%s", org, repoName)
 
-	// Step 3: Validate directory structure.
-	rootDir := project.RootDir(projectDir, cfg)
-	if err := validatePackageStructure(rootDir); err != nil {
+	// Step 4: Validate directory structure.
+	if err := validatePackageStructure(structureDir); err != nil {
 		fmt.Print(tui.ErrorMsg{
 			Title:  "Invalid package structure",
 			Detail: []string{err.Error()},
@@ -87,7 +150,36 @@ func run(ctx context.Context, _ *cli.Command) error {
 		return err
 	}
 
-	// Step 4: Open the git repo.
+	// Check for .codectx/ in the package directory (shouldn't be published).
+	if cfg.IsPackage() {
+		codectxInPkg := filepath.Join(structureDir, project.CodectxDir)
+		if info, statErr := os.Stat(codectxInPkg); statErr == nil && info.IsDir() {
+			fmt.Print(tui.WarnMsg{
+				Title: "Package contains .codectx/ directory",
+				Detail: []string{
+					"The .codectx/ directory should not be in package/.",
+					"It will be excluded from the release archive by the GitHub Action,",
+					"but you may want to remove it.",
+				},
+			}.Render())
+		}
+	}
+
+	// If validate-only, print summary and exit.
+	if validateOnly {
+		fmt.Printf("\n%s Package validation passed\n\n", tui.Success())
+		fmt.Printf("%s%s\n", tui.Indent(1), tui.KeyValue("Name", name+"@"+org))
+		fmt.Printf("%s%s\n", tui.Indent(1), tui.KeyValue("Version", version))
+		fmt.Printf("%s%s\n", tui.Indent(1), tui.KeyValue("Tag", tagName))
+		fmt.Printf("%s%s\n", tui.Indent(1), tui.KeyValue("Repo", remoteURL))
+		if cfg.IsPackage() {
+			fmt.Printf("%s%s\n", tui.Indent(1), tui.KeyValue("Package dir", structureDir))
+		}
+		fmt.Println()
+		return nil
+	}
+
+	// Step 5: Open the git repo.
 	repo, err := git.PlainOpen(projectDir)
 	if err != nil {
 		fmt.Print(tui.ErrorMsg{
@@ -102,7 +194,7 @@ func run(ctx context.Context, _ *cli.Command) error {
 
 	gc := registry.NewGitClient(registry.GitHubToken())
 
-	// Step 5: Check if tag already exists.
+	// Step 6: Check if tag already exists.
 	if gc.TagExists(repo, tagName) {
 		fmt.Print(tui.ErrorMsg{
 			Title: fmt.Sprintf("Tag %s already exists", tagName),
@@ -116,11 +208,11 @@ func run(ctx context.Context, _ *cli.Command) error {
 		return fmt.Errorf("tag %s already exists", tagName)
 	}
 
-	// Step 6: Create tag and push.
+	// Step 7: Create tag and push.
 	fmt.Printf("\n%s Publishing %s v%s\n",
 		tui.Arrow(),
-		tui.StyleBold.Render(cfg.Name+"@"+cfg.Org),
-		cfg.Version,
+		tui.StyleBold.Render(name+"@"+org),
+		version,
 	)
 	fmt.Printf("%s%s\n", tui.Indent(1), tui.KeyValue("Repo", tui.StyleMuted.Render(remoteURL)))
 
@@ -139,7 +231,7 @@ func run(ctx context.Context, _ *cli.Command) error {
 		return tagErr
 	}
 
-	if err = shared.RunWithSpinner(fmt.Sprintf("Pushing %s to %s...", tagName, cfg.Org+"/"+repoName), func() {
+	if err = shared.RunWithSpinner(fmt.Sprintf("Pushing %s to %s...", tagName, org+"/"+repoName), func() {
 		pushErr = gc.PushTag(ctx, repo, tagName)
 	}); err != nil {
 		return fmt.Errorf("spinner: %w", err)
@@ -166,12 +258,12 @@ func run(ctx context.Context, _ *cli.Command) error {
 
 	fmt.Printf("\n%s Published %s v%s (%s)\n\n",
 		tui.Success(),
-		tui.StyleBold.Render(cfg.Name+"@"+cfg.Org), cfg.Version, sha,
+		tui.StyleBold.Render(name+"@"+org), version, sha,
 	)
 	fmt.Printf("%sInstall with: %s\n\n",
 		tui.Indent(1),
 		tui.StyleCommand.Render(
-			fmt.Sprintf("codectx install %s@%s:%s", cfg.Name, cfg.Org, cfg.Version),
+			fmt.Sprintf("codectx add %s@%s:%s", name, org, version),
 		),
 	)
 

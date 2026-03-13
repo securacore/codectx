@@ -121,7 +121,7 @@ func TestRootDir_CustomRoot(t *testing.T) {
 func TestDiscoverAndLoad_Success(t *testing.T) {
 	dir := t.TempDir()
 
-	cfg := project.DefaultConfig("test-project", "")
+	cfg := project.DefaultConfig("test-project", "", "")
 	if err := cfg.WriteToFile(filepath.Join(dir, project.ConfigFileName)); err != nil {
 		t.Fatal(err)
 	}

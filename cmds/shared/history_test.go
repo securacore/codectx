@@ -22,7 +22,7 @@ func TestResolveHistoryDir(t *testing.T) {
 		}
 
 		configPath := filepath.Join(tmpDir, project.ConfigFileName)
-		cfg := project.DefaultConfig("test-project", "docs")
+		cfg := project.DefaultConfig("test-project", "docs", "")
 		if err := cfg.WriteToFile(configPath); err != nil {
 			t.Fatal(err)
 		}

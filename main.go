@@ -5,15 +5,18 @@ import (
 	"log"
 	"os"
 
+	addcmd "github.com/securacore/codectx/cmds/add"
 	compilecmd "github.com/securacore/codectx/cmds/compile"
 	generatecmd "github.com/securacore/codectx/cmds/generate"
 	historycmd "github.com/securacore/codectx/cmds/history"
 	initcmd "github.com/securacore/codectx/cmds/init"
 	installcmd "github.com/securacore/codectx/cmds/install"
 	linkcmd "github.com/securacore/codectx/cmds/link"
+	newcmd "github.com/securacore/codectx/cmds/new"
 	plancmd "github.com/securacore/codectx/cmds/plan"
 	publishcmd "github.com/securacore/codectx/cmds/publish"
 	querycmd "github.com/securacore/codectx/cmds/query"
+	removecmd "github.com/securacore/codectx/cmds/remove"
 	repaircmd "github.com/securacore/codectx/cmds/repair"
 	searchcmd "github.com/securacore/codectx/cmds/search"
 	selfcmd "github.com/securacore/codectx/cmds/self"
@@ -28,15 +31,18 @@ func main() {
 		Name:  "codectx",
 		Usage: "Documentation compiler for AI-driven development",
 		Commands: []*cli.Command{
+			addcmd.Command,
 			compilecmd.Command,
 			generatecmd.Command,
 			historycmd.Command,
 			initcmd.Command,
 			installcmd.Command,
 			linkcmd.Command,
+			newcmd.Command,
 			plancmd.Command,
 			publishcmd.Command,
 			querycmd.Command,
+			removecmd.Command,
 			repaircmd.Command,
 			searchcmd.Command,
 			selfcmd.Command,

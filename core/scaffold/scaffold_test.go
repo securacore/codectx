@@ -51,7 +51,7 @@ func TestInit_CreatesFullDirectoryStructure(t *testing.T) {
 		"docs/plans",
 		"docs/prompts",
 		"docs/system/foundation/compiler-philosophy",
-		"docs/system/foundation/cli-usage",
+		"docs/system/foundation/documentation-protocol",
 		"docs/system/foundation/history",
 		"docs/system/topics/taxonomy-generation",
 		"docs/system/topics/bridge-summaries",
@@ -154,7 +154,7 @@ func TestInit_CreatesSystemDefaults(t *testing.T) {
 	expectedFiles := map[string]string{
 		"system/foundation/compiler-philosophy/README.md":      "Compiler Philosophy",
 		"system/foundation/compiler-philosophy/README.spec.md": "Compiler Philosophy Reasoning",
-		"system/foundation/cli-usage/README.md":                "CLI Usage",
+		"system/foundation/documentation-protocol/README.md":   "Documentation Protocol",
 		"system/foundation/history/README.md":                  "History",
 		"system/topics/taxonomy-generation/README.md":          "Taxonomy Alias Generation",
 		"system/topics/taxonomy-generation/README.spec.md":     "Taxonomy Generation Reasoning",
@@ -917,7 +917,7 @@ func TestMaintain_RestoresDeletedSystemFile(t *testing.T) {
 	}
 
 	// Delete a system default file.
-	sysFile := filepath.Join(dir, "docs", "system", "foundation", "cli-usage", "README.md")
+	sysFile := filepath.Join(dir, "docs", "system", "foundation", "documentation-protocol", "README.md")
 	if err := os.Remove(sysFile); err != nil {
 		t.Fatal(err)
 	}
@@ -936,7 +936,7 @@ func TestMaintain_RestoresDeletedSystemFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected file to be restored: %v", err)
 	}
-	if !strings.Contains(string(data), "CLI Usage") {
+	if !strings.Contains(string(data), "Documentation Protocol") {
 		t.Error("restored file doesn't have expected content")
 	}
 }
@@ -1033,5 +1033,133 @@ func TestMaintain_HasActionsReportsBool(t *testing.T) {
 	r.DirsCreated = 1
 	if !r.HasActions() {
 		t.Error("expected HasActions to be true when dirs created")
+	}
+}
+
+func TestInitPackage_CreatesPackageStructure(t *testing.T) {
+	dir := t.TempDir()
+
+	result, err := scaffold.InitPackage(scaffold.PackageOptions{
+		ProjectDir:  dir,
+		Root:        "docs",
+		Name:        "react-patterns",
+		Org:         "community",
+		Description: "React component patterns",
+	})
+	if err != nil {
+		t.Fatalf("InitPackage: %v", err)
+	}
+
+	if result.DirsCreated == 0 {
+		t.Error("expected directories to be created")
+	}
+	if result.FilesCreated == 0 {
+		t.Error("expected files to be created")
+	}
+
+	// Verify package/ content directories.
+	expectedDirs := []string{
+		"package/foundation",
+		"package/topics",
+		"package/plans",
+		"package/prompts",
+	}
+	for _, d := range expectedDirs {
+		info, err := os.Stat(filepath.Join(dir, d))
+		if err != nil {
+			t.Errorf("expected %s to exist: %v", d, err)
+			continue
+		}
+		if !info.IsDir() {
+			t.Errorf("expected %s to be a directory", d)
+		}
+	}
+
+	// Verify package/codectx.yml.
+	manifestPath := filepath.Join(dir, "package", "codectx.yml")
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatalf("package manifest not created: %v", err)
+	}
+	if !strings.Contains(string(data), "react-patterns") {
+		t.Error("manifest should contain package name")
+	}
+	if !strings.Contains(string(data), "community") {
+		t.Error("manifest should contain org")
+	}
+
+	// Verify README.md.
+	readmePath := filepath.Join(dir, "README.md")
+	readmeData, err := os.ReadFile(readmePath)
+	if err != nil {
+		t.Fatalf("README.md not created: %v", err)
+	}
+	if !strings.Contains(string(readmeData), "react-patterns@community") {
+		t.Error("README should contain package reference")
+	}
+	if !strings.Contains(string(readmeData), "codectx add") {
+		t.Error("README should contain install instructions")
+	}
+
+	// Verify GHA workflow.
+	workflowPath := filepath.Join(dir, ".github", "workflows", "release.yml")
+	if _, err := os.Stat(workflowPath); err != nil {
+		t.Errorf("GHA workflow not created: %v", err)
+	}
+
+	// Verify docs/ authoring project was initialized.
+	docsConfig := filepath.Join(dir, "codectx.yml")
+	cfgData, err := os.ReadFile(docsConfig)
+	if err != nil {
+		t.Fatalf("project config not created: %v", err)
+	}
+	if !strings.Contains(string(cfgData), "type: package") {
+		t.Error("project config should have type: package")
+	}
+
+	// Verify docs/ directories exist.
+	docsDir := filepath.Join(dir, "docs")
+	if _, err := os.Stat(docsDir); err != nil {
+		t.Errorf("docs/ directory not created: %v", err)
+	}
+
+	// Verify InitResult is populated.
+	if result.InitResult == nil {
+		t.Error("InitResult should be populated")
+	}
+}
+
+func TestInitPackage_EmptyProjectDir(t *testing.T) {
+	_, err := scaffold.InitPackage(scaffold.PackageOptions{
+		ProjectDir: "",
+		Name:       "test",
+	})
+	if err == nil {
+		t.Error("expected error for empty project directory")
+	}
+}
+
+func TestInitPackage_GitInit(t *testing.T) {
+	dir := t.TempDir()
+
+	result, err := scaffold.InitPackage(scaffold.PackageOptions{
+		ProjectDir: dir,
+		Root:       "docs",
+		Name:       "test-pkg",
+		Org:        "org",
+		GitInit:    true,
+	})
+	if err != nil {
+		t.Fatalf("InitPackage: %v", err)
+	}
+
+	if !result.GitInitialized {
+		t.Error("expected GitInitialized to be true")
+	}
+
+	// Verify .git directory exists.
+	gitDir := filepath.Join(dir, ".git")
+	if _, err := os.Stat(gitDir); err != nil {
+		t.Errorf(".git directory not created: %v", err)
 	}
 }

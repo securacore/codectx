@@ -22,6 +22,18 @@ const ConfigFileName = "codectx.yml"
 // DefaultRoot is the default documentation root directory.
 const DefaultRoot = "docs"
 
+// TypeProject is the default project type — a full documentation environment.
+const TypeProject = "project"
+
+// TypePackage indicates a documentation package authoring project.
+// Package projects have a package/ directory containing publishable content
+// alongside the docs/ authoring workspace.
+const TypePackage = "package"
+
+// PackageContentDir is the directory name under the project root where
+// publishable package content lives (foundation/, topics/, plans/, prompts/).
+const PackageContentDir = "package"
+
 // DefaultSessionBudget is the default token budget for always-loaded context.
 const DefaultSessionBudget = 30000
 
@@ -88,6 +100,11 @@ func ResolveRoot(root string) string {
 // This is the source of truth for package identity, dependencies,
 // session context, and registry configuration.
 type Config struct {
+	// Type distinguishes project types: "project" (default) is a full
+	// documentation environment; "package" is a documentation package
+	// authoring project with a package/ directory for publishable content.
+	Type string `yaml:"type,omitempty"`
+
 	// Root is the documentation root directory relative to the project root.
 	// Defaults to "docs". All documentation paths are relative to this root.
 	Root string `yaml:"root"`
@@ -112,6 +129,25 @@ type Config struct {
 
 	// Registry is where to resolve packages. Defaults to "github.com".
 	Registry string `yaml:"registry,omitempty"`
+}
+
+// IsPackage reports whether this project is a documentation package
+// authoring project (type: "package").
+func (c *Config) IsPackage() bool {
+	return c.Type == TypePackage
+}
+
+// PackageConfigPath returns the absolute path to the package content
+// codectx.yml file (e.g., /path/to/project/package/codectx.yml).
+// Only meaningful when IsPackage() is true.
+func PackageConfigPath(projectDir string) string {
+	return filepath.Join(projectDir, PackageContentDir, ConfigFileName)
+}
+
+// PackageContentPath returns the absolute path to the package content
+// directory (e.g., /path/to/project/package/).
+func PackageContentPath(projectDir string) string {
+	return filepath.Join(projectDir, PackageContentDir)
 }
 
 // EffectiveRegistry returns the registry URL, falling back to
@@ -170,9 +206,13 @@ type DependencyConfig struct {
 }
 
 // DefaultConfig returns a Config with sensible defaults for a new project.
-func DefaultConfig(name string, root string) Config {
+// The projectType parameter controls the type field: use TypeProject for a
+// standard documentation project, or TypePackage for a package authoring project.
+// An empty string defaults to TypeProject (omitted from YAML output).
+func DefaultConfig(name string, root string, projectType string) Config {
 	root = ResolveRoot(root)
-	return Config{
+
+	cfg := Config{
 		Root:        root,
 		Name:        name,
 		Org:         "",
@@ -180,7 +220,7 @@ func DefaultConfig(name string, root string) Config {
 		Description: "",
 		Session: &SessionConfig{
 			AlwaysLoaded: []string{
-				"system/foundation/cli-usage",
+				"system/foundation/documentation-protocol",
 				"system/foundation/history",
 			},
 			Budget: DefaultSessionBudget,
@@ -188,6 +228,12 @@ func DefaultConfig(name string, root string) Config {
 		Dependencies: map[string]*DependencyConfig{},
 		Registry:     DefaultRegistry,
 	}
+
+	if projectType == TypePackage {
+		cfg.Type = TypePackage
+	}
+
+	return cfg
 }
 
 // WriteToFile marshals the config to YAML and writes it to the given path.
@@ -488,6 +534,49 @@ func LoadPreferencesConfigForProject(projectDir string, cfg *Config) (*Preferenc
 	rootDir := RootDir(projectDir, cfg)
 	codectxDir := filepath.Join(rootDir, CodectxDir)
 	return LoadPreferencesConfig(filepath.Join(codectxDir, PreferencesFile))
+}
+
+// PackageManifest represents the minimal package-only codectx.yml file
+// used inside the package/ directory. This is a subset of Config containing
+// only identity fields and semver-range dependencies.
+type PackageManifest struct {
+	// Name is the package name.
+	Name string `yaml:"name"`
+
+	// Org is the organization or author namespace.
+	Org string `yaml:"org"`
+
+	// Version is the package version in semver format.
+	Version string `yaml:"version"`
+
+	// Description is a one-line package description.
+	Description string `yaml:"description,omitempty"`
+
+	// Dependencies maps "name@org" to semver range constraints.
+	// Published packages use ranges (e.g., ">=1.0.0") instead of the
+	// project-level active/inactive format.
+	Dependencies map[string]string `yaml:"dependencies,omitempty"`
+}
+
+// WriteToFile marshals the package manifest to YAML and writes it to the given path.
+func (m *PackageManifest) WriteToFile(path string) error {
+	return WriteYAMLFile(path, "# codectx package manifest\n# See: https://github.com/securacore/codectx\n\n", m)
+}
+
+// LoadPackageManifest reads and parses a package-only codectx.yml from the given path.
+func LoadPackageManifest(path string) (*PackageManifest, error) {
+	return loadYAMLFile[PackageManifest](path)
+}
+
+// DefaultPackageManifest returns a PackageManifest with sensible defaults.
+func DefaultPackageManifest(name, org, description string) PackageManifest {
+	return PackageManifest{
+		Name:         name,
+		Org:          org,
+		Version:      "0.1.0",
+		Description:  description,
+		Dependencies: map[string]string{},
+	}
 }
 
 // loadYAMLFile reads a YAML file from disk and unmarshals it into a new

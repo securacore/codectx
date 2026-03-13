@@ -10,7 +10,6 @@ package update
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 
@@ -104,6 +103,17 @@ func classifyChanges(
 	return entries
 }
 
+// changedPackageRefs returns the refs of entries that are new or updated.
+func changedPackageRefs(entries []changeEntry) []string {
+	var refs []string
+	for _, e := range entries {
+		if e.Status != statusUnchanged {
+			refs = append(refs, e.Ref)
+		}
+	}
+	return refs
+}
+
 // countChanged returns the number of new or updated entries.
 func countChanged(entries []changeEntry) int {
 	n := 0
@@ -139,24 +149,18 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	// Load existing lock for comparison.
 	oldLock, _ := registry.LoadLock(lockPath)
 
-	gc := registry.NewGitClient(registry.GitHubToken())
-
-	// Create temp dir for transitive dep resolution cache.
-	cacheDir, err := os.MkdirTemp("", "codectx-update-*")
+	rc, err := shared.NewResolveContext()
 	if err != nil {
-		return fmt.Errorf("creating temp dir: %w", err)
+		return err
 	}
-	defer func() { _ = os.RemoveAll(cacheDir) }()
-
-	tags := &registry.GitTagLister{GC: gc}
-	configs := &registry.GitConfigReader{GC: gc, CacheDir: cacheDir}
+	defer rc.Cleanup()
 
 	// Step 2: Resolve all dependencies.
 	var result *registry.ResolveResult
 	var resolveErr error
 
 	if err = shared.RunWithSpinner("Resolving dependencies...", func() {
-		result, resolveErr = registry.Resolve(ctx, cfg.Dependencies, reg, tags, configs)
+		result, resolveErr = registry.Resolve(ctx, cfg.Dependencies, reg, rc.Tags, rc.Configs)
 	}); err != nil {
 		return fmt.Errorf("spinner: %w", err)
 	}
@@ -211,71 +215,27 @@ func run(ctx context.Context, cmd *cli.Command) error {
 		}
 	}
 
-	// Step 4: Download changed/new packages.
-	commitSHAs := make(map[string]string)
-
+	// Step 4: Download changed/new packages from GitHub Release archives.
+	// Only download packages that are new or updated — skip unchanged.
 	if changed > 0 {
-		fmt.Printf("\n%s Downloading %d changed packages\n\n",
-			tui.Arrow(), changed)
-
-		for ref, pkg := range result.Packages {
-			url := pkg.Key.RepoURL(reg)
-			destDir := filepath.Join(packagesDir, ref)
-
-			var installErr error
-			var sha string
-
-			if err = shared.RunWithSpinner(fmt.Sprintf("Installing %s v%s...", ref, pkg.ResolvedVersion), func() {
-				repo, cloneErr := gc.Clone(ctx, url, destDir)
-				if cloneErr != nil {
-					installErr = cloneErr
-					return
-				}
-
-				if checkoutErr := gc.CheckoutTag(repo, pkg.ResolvedTag); checkoutErr != nil {
-					installErr = checkoutErr
-					return
-				}
-
-				sha, installErr = gc.TagCommitSHA(repo, pkg.ResolvedTag)
-			}); err != nil {
-				return fmt.Errorf("spinner: %w", err)
+		changedRefs := changedPackageRefs(entries)
+		changedPackages := make(map[string]*registry.ResolvedPackage, len(changedRefs))
+		for _, ref := range changedRefs {
+			if pkg, ok := result.Packages[ref]; ok {
+				changedPackages[ref] = pkg
 			}
-			if installErr != nil {
-				fmt.Printf("%s%s %s: %v\n", tui.Indent(1), tui.ErrorIcon(), tui.StyleAccent.Render(ref), installErr)
-				continue
-			}
-
-			commitSHAs[ref] = sha
-			fmt.Printf("%s%s Downloaded: %s v%s\n", tui.Indent(1), tui.Success(), tui.StyleAccent.Render(ref), pkg.ResolvedVersion)
 		}
-	} else {
-		// Still need commit SHAs for unchanged packages.
-		for ref, pkg := range result.Packages {
-			if oldLock != nil {
-				if oldPkg, ok := oldLock.Packages[ref]; ok {
-					commitSHAs[ref] = oldPkg.Commit
-					continue
-				}
-			}
-			// Need to get SHA for new packages.
-			destDir := filepath.Join(packagesDir, ref)
-			url := pkg.Key.RepoURL(reg)
 
-			repo, cloneErr := gc.Clone(ctx, url, destDir)
-			if cloneErr != nil {
-				continue
-			}
-			if checkoutErr := gc.CheckoutTag(repo, pkg.ResolvedTag); checkoutErr != nil {
-				continue
-			}
-			sha, shaErr := gc.TagCommitSHA(repo, pkg.ResolvedTag)
-			if shaErr != nil {
-				continue
-			}
-			commitSHAs[ref] = sha
+		fmt.Printf("\n%s Downloading %d changed packages\n\n",
+			tui.Arrow(), len(changedPackages))
+
+		if _, installErr := shared.InstallPackages(ctx, rc.Installer, changedPackages, packagesDir); installErr != nil {
+			return installErr
 		}
 	}
+
+	// Archives don't provide commit SHAs.
+	commitSHAs := make(map[string]string)
 
 	// Step 5: Write lock file.
 	if err := shared.SaveLockOrError(lockPath, result, commitSHAs, reg); err != nil {

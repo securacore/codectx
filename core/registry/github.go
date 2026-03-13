@@ -55,6 +55,10 @@ type SearchResult struct {
 
 	// LatestVersion is the most recent semver tag (resolved separately).
 	LatestVersion string
+
+	// HasRelease indicates whether the latest version has a GitHub Release
+	// with a package.tar.gz asset. False means the package cannot be installed.
+	HasRelease bool
 }
 
 // SearchPackages searches GitHub for codectx packages matching the query.

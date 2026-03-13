@@ -6,6 +6,11 @@
   "required": ["name"],
   "additionalProperties": false,
   "properties": {
+    "type": {
+      "type": "string",
+      "enum": ["project", "package"],
+      "description": "Project type. 'project' (default) is a full documentation environment. 'package' is a documentation package authoring project with a package/ directory containing publishable content alongside the docs/ authoring workspace."
+    },
     "root": {
       "type": "string",
       "default": "docs",

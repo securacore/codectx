@@ -10,7 +10,7 @@ import (
 )
 
 func TestDefaultConfig_HasSensibleDefaults(t *testing.T) {
-	cfg := project.DefaultConfig("my-project", "")
+	cfg := project.DefaultConfig("my-project", "", "")
 
 	if cfg.Root != project.DefaultRoot {
 		t.Errorf("expected root %q, got %q", project.DefaultRoot, cfg.Root)
@@ -33,7 +33,7 @@ func TestDefaultConfig_HasSensibleDefaults(t *testing.T) {
 }
 
 func TestDefaultConfig_CustomRoot(t *testing.T) {
-	cfg := project.DefaultConfig("test", "ai-docs")
+	cfg := project.DefaultConfig("test", "ai-docs", "")
 	if cfg.Root != "ai-docs" {
 		t.Errorf("expected root %q, got %q", "ai-docs", cfg.Root)
 	}
@@ -43,7 +43,7 @@ func TestConfig_WriteAndLoad_Roundtrip(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, project.ConfigFileName)
 
-	original := project.DefaultConfig("roundtrip-test", "docs")
+	original := project.DefaultConfig("roundtrip-test", "docs", "")
 	original.Org = "testorg"
 	original.Description = "A test project"
 	original.Dependencies = map[string]*project.DependencyConfig{
@@ -97,7 +97,7 @@ func TestConfig_WriteToFile_HasHeader(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, project.ConfigFileName)
 
-	cfg := project.DefaultConfig("test", "")
+	cfg := project.DefaultConfig("test", "", "")
 	if err := cfg.WriteToFile(path); err != nil {
 		t.Fatalf("writing config: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestConfig_WriteToFile_CreatesParentDirs(t *testing.T) {
 	nested := filepath.Join(dir, "a", "b", "c")
 	path := filepath.Join(nested, project.ConfigFileName)
 
-	cfg := project.DefaultConfig("test", "")
+	cfg := project.DefaultConfig("test", "", "")
 	if err := cfg.WriteToFile(path); err != nil {
 		t.Fatalf("writing config to nested path: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestConfig_WriteToFile_CreatesParentDirs(t *testing.T) {
 }
 
 func TestConfig_WriteToFile_ErrorOnInvalidPath(t *testing.T) {
-	cfg := project.DefaultConfig("test", "")
+	cfg := project.DefaultConfig("test", "", "")
 	// Writing to /dev/null/impossible is invalid on all platforms.
 	err := cfg.WriteToFile("/dev/null/impossible/codectx.yml")
 	if err == nil {
@@ -265,7 +265,7 @@ func TestLoadAIConfigForProject(t *testing.T) {
 	dir := t.TempDir()
 
 	// Set up project structure: dir/docs/.codectx/ai.yml
-	cfg := project.DefaultConfig("test", "docs")
+	cfg := project.DefaultConfig("test", "docs", "")
 	codectxDir := filepath.Join(dir, "docs", project.CodectxDir)
 	if err := os.MkdirAll(codectxDir, project.DirPerm); err != nil {
 		t.Fatal(err)
@@ -288,7 +288,7 @@ func TestLoadAIConfigForProject(t *testing.T) {
 
 func TestLoadAIConfigForProject_MissingFile(t *testing.T) {
 	dir := t.TempDir()
-	cfg := project.DefaultConfig("test", "docs")
+	cfg := project.DefaultConfig("test", "docs", "")
 
 	_, err := project.LoadAIConfigForProject(dir, &cfg)
 	if err == nil {
@@ -298,7 +298,7 @@ func TestLoadAIConfigForProject_MissingFile(t *testing.T) {
 
 func TestResolveEncoding_WithConfig(t *testing.T) {
 	dir := t.TempDir()
-	cfg := project.DefaultConfig("test", "docs")
+	cfg := project.DefaultConfig("test", "docs", "")
 
 	// Set up ai.yml with a custom encoding.
 	rootDir := project.RootDir(dir, &cfg)
@@ -321,7 +321,7 @@ func TestResolveEncoding_WithConfig(t *testing.T) {
 
 func TestResolveEncoding_MissingConfig(t *testing.T) {
 	dir := t.TempDir()
-	cfg := project.DefaultConfig("test", "docs")
+	cfg := project.DefaultConfig("test", "docs", "")
 
 	got := project.ResolveEncoding(dir, &cfg)
 	if got != project.DefaultEncoding {
@@ -331,7 +331,7 @@ func TestResolveEncoding_MissingConfig(t *testing.T) {
 
 func TestLoadPreferencesConfigForProject(t *testing.T) {
 	dir := t.TempDir()
-	cfg := project.DefaultConfig("test", "docs")
+	cfg := project.DefaultConfig("test", "docs", "")
 
 	// Set up the directory structure: docs/.codectx/preferences.yml.
 	rootDir := project.RootDir(dir, &cfg)
@@ -359,7 +359,7 @@ func TestLoadPreferencesConfigForProject(t *testing.T) {
 
 func TestLoadPreferencesConfigForProject_MissingFile(t *testing.T) {
 	dir := t.TempDir()
-	cfg := project.DefaultConfig("test", "docs")
+	cfg := project.DefaultConfig("test", "docs", "")
 
 	_, err := project.LoadPreferencesConfigForProject(dir, &cfg)
 	if err == nil {
@@ -529,7 +529,7 @@ func TestYAMLFiles_Use2SpaceIndent(t *testing.T) {
 
 	// Write all three config types.
 	cfgPath := filepath.Join(dir, project.ConfigFileName)
-	cfg := project.DefaultConfig("indent-test", "docs")
+	cfg := project.DefaultConfig("indent-test", "docs", "")
 	if err := cfg.WriteToFile(cfgPath); err != nil {
 		t.Fatalf("writing config: %v", err)
 	}
@@ -854,5 +854,120 @@ func TestBoolPtr(t *testing.T) {
 	falsePtr := project.BoolPtr(false)
 	if falsePtr == nil || *falsePtr {
 		t.Error("BoolPtr(false) should return pointer to false")
+	}
+}
+
+func TestIsPackage_True(t *testing.T) {
+	cfg := &project.Config{Type: project.TypePackage}
+	if !cfg.IsPackage() {
+		t.Error("IsPackage() should return true for type=package")
+	}
+}
+
+func TestIsPackage_False(t *testing.T) {
+	cfg := &project.Config{Type: ""}
+	if cfg.IsPackage() {
+		t.Error("IsPackage() should return false for empty type")
+	}
+
+	cfg2 := &project.Config{Type: project.TypeProject}
+	if cfg2.IsPackage() {
+		t.Error("IsPackage() should return false for type=project")
+	}
+}
+
+func TestPackageConfigPath(t *testing.T) {
+	got := project.PackageConfigPath("/home/user/myproject")
+	want := filepath.Join("/home/user/myproject", project.PackageContentDir, project.ConfigFileName)
+	if got != want {
+		t.Errorf("PackageConfigPath() = %q, want %q", got, want)
+	}
+}
+
+func TestPackageContentPath(t *testing.T) {
+	got := project.PackageContentPath("/home/user/myproject")
+	want := filepath.Join("/home/user/myproject", project.PackageContentDir)
+	if got != want {
+		t.Errorf("PackageContentPath() = %q, want %q", got, want)
+	}
+}
+
+func TestDefaultPackageManifest(t *testing.T) {
+	m := project.DefaultPackageManifest("my-pkg", "myorg", "A description")
+	if m.Name != "my-pkg" {
+		t.Errorf("Name = %q, want %q", m.Name, "my-pkg")
+	}
+	if m.Org != "myorg" {
+		t.Errorf("Org = %q, want %q", m.Org, "myorg")
+	}
+	if m.Version != "0.1.0" {
+		t.Errorf("Version = %q, want %q", m.Version, "0.1.0")
+	}
+	if m.Description != "A description" {
+		t.Errorf("Description = %q, want %q", m.Description, "A description")
+	}
+	if m.Dependencies == nil {
+		t.Error("Dependencies should be initialized, not nil")
+	}
+}
+
+func TestPackageManifest_WriteAndLoad_Roundtrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "codectx.yml")
+
+	original := project.DefaultPackageManifest("test-pkg", "testorg", "Test package")
+	original.Dependencies["dep-a@other"] = ">=1.0.0"
+	original.Dependencies["dep-b@another"] = "latest"
+
+	if err := original.WriteToFile(path); err != nil {
+		t.Fatalf("WriteToFile: %v", err)
+	}
+
+	loaded, err := project.LoadPackageManifest(path)
+	if err != nil {
+		t.Fatalf("LoadPackageManifest: %v", err)
+	}
+
+	if loaded.Name != original.Name {
+		t.Errorf("Name: got %q, want %q", loaded.Name, original.Name)
+	}
+	if loaded.Org != original.Org {
+		t.Errorf("Org: got %q, want %q", loaded.Org, original.Org)
+	}
+	if loaded.Version != original.Version {
+		t.Errorf("Version: got %q, want %q", loaded.Version, original.Version)
+	}
+	if len(loaded.Dependencies) != 2 {
+		t.Fatalf("Dependencies: got %d, want 2", len(loaded.Dependencies))
+	}
+	if loaded.Dependencies["dep-a@other"] != ">=1.0.0" {
+		t.Errorf("dep-a@other: got %q, want %q", loaded.Dependencies["dep-a@other"], ">=1.0.0")
+	}
+}
+
+func TestLoadPackageManifest_InvalidPath(t *testing.T) {
+	_, err := project.LoadPackageManifest("/nonexistent/codectx.yml")
+	if err == nil {
+		t.Error("expected error for nonexistent file")
+	}
+}
+
+func TestDefaultConfig_PackageType(t *testing.T) {
+	cfg := project.DefaultConfig("my-pkg", "", project.TypePackage)
+	if cfg.Type != project.TypePackage {
+		t.Errorf("Type = %q, want %q", cfg.Type, project.TypePackage)
+	}
+	if !cfg.IsPackage() {
+		t.Error("IsPackage() should return true for package config")
+	}
+}
+
+func TestDefaultConfig_ProjectType(t *testing.T) {
+	cfg := project.DefaultConfig("my-project", "", "")
+	if cfg.Type != "" {
+		t.Errorf("Type = %q, want empty (default project)", cfg.Type)
+	}
+	if cfg.IsPackage() {
+		t.Error("IsPackage() should return false for default project")
 	}
 }

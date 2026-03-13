@@ -73,7 +73,7 @@ func TestSystemFiles_CoversExpectedTopics(t *testing.T) {
 	expectedPaths := map[string]bool{
 		"system/foundation/compiler-philosophy/README.md":      false,
 		"system/foundation/compiler-philosophy/README.spec.md": false,
-		"system/foundation/cli-usage/README.md":                false,
+		"system/foundation/documentation-protocol/README.md":   false,
 		"system/foundation/history/README.md":                  false,
 		"system/topics/taxonomy-generation/README.md":          false,
 		"system/topics/taxonomy-generation/README.spec.md":     false,

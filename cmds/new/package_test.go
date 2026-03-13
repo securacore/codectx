@@ -1,0 +1,259 @@
+package new
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/securacore/codectx/core/detect"
+	"github.com/securacore/codectx/core/project"
+	"github.com/securacore/codectx/core/tui"
+)
+
+func TestResolveTarget_CurrentDir(t *testing.T) {
+	t.Parallel()
+
+	dir, created, err := resolveTarget(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if created {
+		t.Error("should not create a new directory for nil args")
+	}
+	cwd, _ := os.Getwd()
+	if dir != cwd {
+		t.Errorf("dir = %q, want CWD %q", dir, cwd)
+	}
+}
+
+func TestResolveTarget_Dot(t *testing.T) {
+	t.Parallel()
+
+	dir, created, err := resolveTarget([]string{"."})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if created {
+		t.Error("should not create a new directory for '.'")
+	}
+	cwd, _ := os.Getwd()
+	if dir != cwd {
+		t.Errorf("dir = %q, want CWD %q", dir, cwd)
+	}
+}
+
+func TestResolveTarget_ExistingDir(t *testing.T) {
+	t.Parallel()
+
+	existing := t.TempDir()
+	dir, created, err := resolveTarget([]string{existing})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if created {
+		t.Error("should not report created for existing directory")
+	}
+	if dir != existing {
+		t.Errorf("dir = %q, want %q", dir, existing)
+	}
+}
+
+func TestResolveTarget_NewDir(t *testing.T) {
+	t.Parallel()
+
+	parent := t.TempDir()
+	target := filepath.Join(parent, "new-pkg")
+
+	dir, created, err := resolveTarget([]string{target})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !created {
+		t.Error("should report created for new directory")
+	}
+	if dir != target {
+		t.Errorf("dir = %q, want %q", dir, target)
+	}
+
+	// Verify directory was actually created.
+	info, err := os.Stat(target)
+	if err != nil {
+		t.Fatalf("new directory not created: %v", err)
+	}
+	if !info.IsDir() {
+		t.Error("target should be a directory")
+	}
+}
+
+func TestResolveTarget_FileNotDir(t *testing.T) {
+	t.Parallel()
+
+	parent := t.TempDir()
+	filePath := filepath.Join(parent, "not-a-dir")
+	if err := os.WriteFile(filePath, []byte("hello"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := resolveTarget([]string{filePath})
+	if err == nil {
+		t.Fatal("expected error when target is a file, not a directory")
+	}
+}
+
+func TestDetectProviderCapabilities_ClaudeOnly(t *testing.T) {
+	t.Parallel()
+
+	result := detect.Result{
+		Tools: []detect.Tool{
+			{Name: "Claude Code", Binary: "claude"},
+		},
+	}
+	hasCLI, hasAPI := detectProviderCapabilities(result)
+	if !hasCLI {
+		t.Error("expected hasCLI=true")
+	}
+	if hasAPI {
+		t.Error("expected hasAPI=false")
+	}
+}
+
+func TestDetectProviderCapabilities_APIOnly(t *testing.T) {
+	t.Parallel()
+
+	result := detect.Result{
+		Providers: []detect.Provider{
+			{Name: "Anthropic", EnvVar: "ANTHROPIC_API_KEY"},
+		},
+	}
+	hasCLI, hasAPI := detectProviderCapabilities(result)
+	if hasCLI {
+		t.Error("expected hasCLI=false")
+	}
+	if !hasAPI {
+		t.Error("expected hasAPI=true")
+	}
+}
+
+func TestDetectProviderCapabilities_Both(t *testing.T) {
+	t.Parallel()
+
+	result := detect.Result{
+		Tools: []detect.Tool{
+			{Name: "Claude Code", Binary: "claude"},
+		},
+		Providers: []detect.Provider{
+			{Name: "Anthropic", EnvVar: "ANTHROPIC_API_KEY"},
+		},
+	}
+	hasCLI, hasAPI := detectProviderCapabilities(result)
+	if !hasCLI {
+		t.Error("expected hasCLI=true")
+	}
+	if !hasAPI {
+		t.Error("expected hasAPI=true")
+	}
+}
+
+func TestDetectProviderCapabilities_Neither(t *testing.T) {
+	t.Parallel()
+
+	result := detect.Result{}
+	hasCLI, hasAPI := detectProviderCapabilities(result)
+	if hasCLI {
+		t.Error("expected hasCLI=false")
+	}
+	if hasAPI {
+		t.Error("expected hasAPI=false")
+	}
+}
+
+func TestAutoSelectProvider_CLI(t *testing.T) {
+	t.Parallel()
+	if got := autoSelectProvider(true, false); got != project.ProviderCLI {
+		t.Errorf("autoSelectProvider(true, false) = %q, want %q", got, project.ProviderCLI)
+	}
+}
+
+func TestAutoSelectProvider_API(t *testing.T) {
+	t.Parallel()
+	if got := autoSelectProvider(false, true); got != project.ProviderAPI {
+		t.Errorf("autoSelectProvider(false, true) = %q, want %q", got, project.ProviderAPI)
+	}
+}
+
+func TestAutoSelectProvider_CLIPrecedence(t *testing.T) {
+	t.Parallel()
+	// CLI takes precedence when both are available.
+	if got := autoSelectProvider(true, true); got != project.ProviderCLI {
+		t.Errorf("autoSelectProvider(true, true) = %q, want %q", got, project.ProviderCLI)
+	}
+}
+
+func TestAutoSelectProvider_Neither(t *testing.T) {
+	t.Parallel()
+	if got := autoSelectProvider(false, false); got != "" {
+		t.Errorf("autoSelectProvider(false, false) = %q, want empty", got)
+	}
+}
+
+func TestBuildPackageSummaryTree(t *testing.T) {
+	t.Parallel()
+
+	tree := buildPackageSummaryTree("docs")
+
+	if len(tree) != 5 {
+		t.Fatalf("expected 5 top-level nodes, got %d", len(tree))
+	}
+
+	// Verify first node is codectx.yml.
+	if tree[0].Name != project.ConfigFileName {
+		t.Errorf("tree[0].Name = %q, want %q", tree[0].Name, project.ConfigFileName)
+	}
+
+	// Verify package/ node has children.
+	pkgNode := tree[1]
+	if pkgNode.Name != project.PackageContentDir+"/" {
+		t.Errorf("tree[1].Name = %q, want %q", pkgNode.Name, project.PackageContentDir+"/")
+	}
+	if len(pkgNode.Children) != 5 {
+		t.Errorf("package/ node should have 5 children, got %d", len(pkgNode.Children))
+	}
+
+	// Verify docs/ node.
+	docsNode := tree[2]
+	if docsNode.Name != "docs/" {
+		t.Errorf("tree[2].Name = %q, want %q", docsNode.Name, "docs/")
+	}
+	if len(docsNode.Children) != 6 {
+		t.Errorf("docs/ node should have 6 children, got %d", len(docsNode.Children))
+	}
+
+	// Verify .github/workflows/ node.
+	ghNode := tree[3]
+	if len(ghNode.Children) != 1 {
+		t.Errorf("github node should have 1 child, got %d", len(ghNode.Children))
+	}
+	if ghNode.Children[0].Name != "release.yml" {
+		t.Errorf("github child = %q, want %q", ghNode.Children[0].Name, "release.yml")
+	}
+
+	// Verify README.md node.
+	if tree[4].Name != "README.md" {
+		t.Errorf("tree[4].Name = %q, want %q", tree[4].Name, "README.md")
+	}
+}
+
+func TestBuildPackageSummaryTree_CustomRoot(t *testing.T) {
+	t.Parallel()
+
+	tree := buildPackageSummaryTree("documentation")
+
+	// The docs node should use the custom root name.
+	docsNode := tree[2]
+	if docsNode.Name != "documentation/" {
+		t.Errorf("tree[2].Name = %q, want %q", docsNode.Name, "documentation/")
+	}
+}
+
+// Ensure tui package is used (avoids unused import in case of test changes).
+var _ = tui.Arrow

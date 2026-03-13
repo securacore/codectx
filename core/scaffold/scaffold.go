@@ -67,6 +67,11 @@ type Options struct {
 	// Provider is the LLM provider for compilation tasks ("cli" or "api").
 	// Empty means auto-detect at compile time.
 	Provider string
+
+	// ProjectType controls the type field in codectx.yml.
+	// Use project.TypePackage for package authoring projects.
+	// Empty or project.TypeProject for standard projects.
+	ProjectType string
 }
 
 // CheckResult holds the result of pre-scaffold capability checks.
@@ -214,6 +219,7 @@ func Init(opts Options) (*Result, error) {
 		projectDir: opts.ProjectDir, codectxDir: codectxDir,
 		name: name, root: root,
 		model: opts.Model, encoding: opts.Encoding, provider: opts.Provider,
+		projectType: opts.ProjectType,
 	}); err != nil {
 		return nil, err
 	}
@@ -266,7 +272,7 @@ func directories(docsRoot, codectxDir string) []string {
 
 		// System documentation (compiler instructions).
 		filepath.Join(docsRoot, project.SystemDir, "foundation", "compiler-philosophy"),
-		filepath.Join(docsRoot, project.SystemDir, "foundation", "cli-usage"),
+		filepath.Join(docsRoot, project.SystemDir, "foundation", "documentation-protocol"),
 		filepath.Join(docsRoot, project.SystemDir, "foundation", "history"),
 		filepath.Join(docsRoot, project.SystemDir, "topics", "taxonomy-generation"),
 		filepath.Join(docsRoot, project.SystemDir, "topics", "bridge-summaries"),
@@ -291,19 +297,20 @@ func directories(docsRoot, codectxDir string) []string {
 
 // configPaths holds the resolved paths and values for writing config files.
 type configPaths struct {
-	projectDir string
-	codectxDir string
-	name       string
-	root       string
-	model      string
-	encoding   string
-	provider   string
+	projectDir  string
+	codectxDir  string
+	name        string
+	root        string
+	model       string
+	encoding    string
+	provider    string
+	projectType string // "project" or "package"
 }
 
 // writeConfigs creates the three configuration files.
 func writeConfigs(cp configPaths) error {
 	// codectx.yml at project root.
-	cfg := project.DefaultConfig(cp.name, cp.root)
+	cfg := project.DefaultConfig(cp.name, cp.root, cp.projectType)
 	cfgPath := filepath.Join(cp.projectDir, project.ConfigFileName)
 	if err := cfg.WriteToFile(cfgPath); err != nil {
 		return fmt.Errorf("writing %s: %w", project.ConfigFileName, err)
@@ -355,6 +362,200 @@ func writeSystemDefaults(docsRoot string) (int, error) {
 	}
 
 	return written, nil
+}
+
+// PackageOptions configures the package scaffold operation.
+type PackageOptions struct {
+	// ProjectDir is the directory where the package repo will be created.
+	ProjectDir string
+
+	// Root is the documentation root for the authoring project.
+	// Defaults to "docs" if empty.
+	Root string
+
+	// Name is the package name (e.g., "react").
+	Name string
+
+	// Org is the organization namespace (e.g., "community").
+	Org string
+
+	// Description is a one-line package description.
+	Description string
+
+	// GitInit controls whether to run `git init` before scaffolding.
+	GitInit bool
+
+	// Model is the AI model to write to ai.yml for the authoring project.
+	Model string
+
+	// Encoding is the tokenizer encoding for the authoring project.
+	Encoding string
+
+	// Provider is the LLM provider for the authoring project.
+	Provider string
+}
+
+// PackageResult holds the outcome of a package scaffold operation.
+type PackageResult struct {
+	// ProjectDir is the absolute path to the project root.
+	ProjectDir string
+
+	// PackageDir is the absolute path to the package/ directory.
+	PackageDir string
+
+	// DocsRoot is the absolute path to the docs/ authoring project root.
+	DocsRoot string
+
+	// DirsCreated is the number of directories created.
+	DirsCreated int
+
+	// FilesCreated is the number of files written.
+	FilesCreated int
+
+	// GitInitialized is true if git init was run during scaffolding.
+	GitInitialized bool
+
+	// InitResult holds the result of the docs/ authoring project init.
+	InitResult *Result
+}
+
+// InitPackage creates the full documentation package repository structure.
+// It creates:
+//   - package/ directory with content dirs (foundation, topics, plans, prompts)
+//   - package/codectx.yml with package-only manifest
+//   - .github/workflows/release.yml for automated publishing
+//   - README.md at repo root
+//   - .gitignore with codectx entries
+//   - docs/ authoring project via Init()
+//
+// The calling command is responsible for performing checks before calling InitPackage.
+func InitPackage(opts PackageOptions) (*PackageResult, error) {
+	if opts.ProjectDir == "" {
+		return nil, errors.New("project directory is required")
+	}
+
+	absDir, err := filepath.Abs(opts.ProjectDir)
+	if err != nil {
+		return nil, fmt.Errorf("resolving project directory: %w", err)
+	}
+	opts.ProjectDir = absDir
+
+	result := &PackageResult{
+		ProjectDir: absDir,
+		PackageDir: filepath.Join(absDir, project.PackageContentDir),
+	}
+
+	// Optionally run git init first.
+	if opts.GitInit {
+		if err := gitInit(absDir); err != nil {
+			return nil, fmt.Errorf("running git init: %w", err)
+		}
+		result.GitInitialized = true
+	}
+
+	// 1. Create package/ content directories.
+	pkgDir := filepath.Join(absDir, project.PackageContentDir)
+	pkgContentDirs := []string{
+		filepath.Join(pkgDir, "foundation"),
+		filepath.Join(pkgDir, "topics"),
+		filepath.Join(pkgDir, "plans"),
+		filepath.Join(pkgDir, "prompts"),
+	}
+	for _, dir := range pkgContentDirs {
+		if err := os.MkdirAll(dir, project.DirPerm); err != nil {
+			return nil, fmt.Errorf("creating package directory %s: %w", dir, err)
+		}
+		result.DirsCreated++
+	}
+
+	// 2. Write package/codectx.yml.
+	manifest := project.DefaultPackageManifest(opts.Name, opts.Org, opts.Description)
+	manifestPath := project.PackageConfigPath(absDir)
+	if err := manifest.WriteToFile(manifestPath); err != nil {
+		return nil, fmt.Errorf("writing package manifest: %w", err)
+	}
+	result.FilesCreated++
+
+	// 3. Write .gitkeep in empty package content directories.
+	for _, dir := range pkgContentDirs {
+		added, _, err := manageGitkeep(dir)
+		if err != nil {
+			return nil, fmt.Errorf("creating .gitkeep in %s: %w", dir, err)
+		}
+		if added {
+			result.FilesCreated++
+		}
+	}
+
+	// 4. Write package template files (GHA workflow, etc.).
+	for _, tmpl := range embed.PackageTemplateFiles() {
+		content, err := embed.ReadPackageFile(tmpl.EmbedPath)
+		if err != nil {
+			return nil, fmt.Errorf("reading embedded template %s: %w", tmpl.EmbedPath, err)
+		}
+
+		destPath := filepath.Join(absDir, tmpl.DestPath)
+		if err := os.MkdirAll(filepath.Dir(destPath), project.DirPerm); err != nil {
+			return nil, fmt.Errorf("creating directory for %s: %w", tmpl.DestPath, err)
+		}
+
+		if err := os.WriteFile(destPath, content, project.FilePerm); err != nil {
+			return nil, fmt.Errorf("writing %s: %w", tmpl.DestPath, err)
+		}
+		result.FilesCreated++
+	}
+
+	// 5. Write README.md at repo root.
+	readmeContent := generatePackageReadme(opts.Name, opts.Org, opts.Description)
+	readmePath := filepath.Join(absDir, "README.md")
+	if err := os.WriteFile(readmePath, []byte(readmeContent), project.FilePerm); err != nil {
+		return nil, fmt.Errorf("writing README.md: %w", err)
+	}
+	result.FilesCreated++
+
+	// 6. Initialize the docs/ authoring project.
+	initOpts := Options{
+		ProjectDir:  absDir,
+		Root:        opts.Root,
+		Name:        opts.Name,
+		Model:       opts.Model,
+		Encoding:    opts.Encoding,
+		Provider:    opts.Provider,
+		ProjectType: project.TypePackage,
+	}
+
+	initResult, err := Init(initOpts)
+	if err != nil {
+		return nil, fmt.Errorf("initializing authoring project: %w", err)
+	}
+
+	result.DocsRoot = initResult.DocsRoot
+	result.DirsCreated += initResult.DirsCreated
+	result.FilesCreated += initResult.FilesCreated
+	result.InitResult = initResult
+
+	return result, nil
+}
+
+// generatePackageReadme creates a README.md for a documentation package repo.
+func generatePackageReadme(name, org, description string) string {
+	ref := name + "@" + org
+	if org == "" {
+		ref = name
+	}
+
+	readme := "# " + ref + "\n\n"
+
+	if description != "" {
+		readme += description + "\n\n"
+	}
+
+	readme += "## Install\n\n"
+	readme += "```bash\n"
+	readme += "codectx add " + ref + ":latest\n"
+	readme += "```\n"
+
+	return readme
 }
 
 // MaintainResult holds the outcome of a scaffold maintenance operation.

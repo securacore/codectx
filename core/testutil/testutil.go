@@ -29,7 +29,7 @@ func SetupProjectWithPrefs(t *testing.T, autoCompile *bool) (string, *project.Co
 	t.Helper()
 
 	dir := t.TempDir()
-	cfg := project.DefaultConfig("test", "docs")
+	cfg := project.DefaultConfig("test", "docs", "")
 
 	if err := cfg.WriteToFile(filepath.Join(dir, project.ConfigFileName)); err != nil {
 		t.Fatal(err)

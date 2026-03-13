@@ -251,7 +251,7 @@ func TestShouldAutoCompile_MissingPrefsFile(t *testing.T) {
 
 	// Project dir without preferences.yml — should default to compiling.
 	dir := t.TempDir()
-	cfg := project.DefaultConfig("test", "docs")
+	cfg := project.DefaultConfig("test", "docs", "")
 	if err := cfg.WriteToFile(filepath.Join(dir, project.ConfigFileName)); err != nil {
 		t.Fatal(err)
 	}
@@ -259,5 +259,36 @@ func TestShouldAutoCompile_MissingPrefsFile(t *testing.T) {
 	got := shouldAutoCompile(dir, &cfg, false, false)
 	if !got {
 		t.Error("expected true when preferences.yml is missing (graceful fallback)")
+	}
+}
+
+func TestChangedPackageRefs_Mixed(t *testing.T) {
+	entries := []changeEntry{
+		{Ref: "a@org", Status: statusNew, NewVersion: "1.0.0"},
+		{Ref: "b@org", Status: statusUnchanged, NewVersion: "2.0.0"},
+		{Ref: "c@org", Status: statusUpdated, NewVersion: "3.0.0"},
+	}
+
+	refs := changedPackageRefs(entries)
+	if len(refs) != 2 {
+		t.Fatalf("expected 2 changed refs, got %d", len(refs))
+	}
+	// Should include new and updated, not unchanged.
+	for _, ref := range refs {
+		if ref == "b@org" {
+			t.Error("should not include unchanged ref b@org")
+		}
+	}
+}
+
+func TestChangedPackageRefs_AllUnchanged(t *testing.T) {
+	entries := []changeEntry{
+		{Ref: "a@org", Status: statusUnchanged},
+		{Ref: "b@org", Status: statusUnchanged},
+	}
+
+	refs := changedPackageRefs(entries)
+	if len(refs) != 0 {
+		t.Errorf("expected 0 changed refs, got %d", len(refs))
 	}
 }

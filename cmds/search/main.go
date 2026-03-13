@@ -3,11 +3,14 @@
 //
 // It queries the GitHub API for repositories matching the codectx-* naming
 // convention and displays results with name, version, stars, and description.
+// Results are annotated with installability status — packages without a
+// GitHub Release containing package.tar.gz are marked as not installable.
 package search
 
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/securacore/codectx/cmds/shared"
@@ -22,7 +25,8 @@ var Command = &cli.Command{
 	Usage:     "Search for documentation packages on GitHub",
 	ArgsUsage: "<query>",
 	Description: `Search for codectx packages on GitHub using the codectx-* naming convention.
-Results are sorted by stars and include version information.
+Results are sorted by installability and stars. Packages without a GitHub
+Release archive are annotated with a warning.
 
 Example:
   codectx search "react patterns"`,
@@ -81,7 +85,7 @@ func run(ctx context.Context, cmd *cli.Command) error {
 		return nil
 	}
 
-	// Resolve latest version for each result.
+	// Resolve latest version and check release availability for each result.
 	if err = shared.RunWithSpinner("Resolving versions...", func() {
 		for i := range results {
 			r := &results[i]
@@ -94,10 +98,18 @@ func run(ctx context.Context, cmd *cli.Command) error {
 				continue
 			}
 			r.LatestVersion = registry.VersionFromTag(resolved)
+
+			// Check if a GitHub Release with package.tar.gz exists.
+			tag := registry.GitTag(r.LatestVersion)
+			_, releaseErr := gh.ReleaseAssetURL(ctx, r.Org, r.FullName[strings.Index(r.FullName, "/")+1:], tag)
+			r.HasRelease = releaseErr == nil
 		}
 	}); err != nil {
 		return fmt.Errorf("spinner: %w", err)
 	}
+
+	// Sort: installable results first, then no-release, then no-tags.
+	sortResults(results)
 
 	// Render results.
 	fmt.Print(renderSearchResults(query, results))
@@ -105,25 +117,83 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	return nil
 }
 
+// sortResults orders search results by installability:
+// 1. Installable packages (has version + has release) — original star order
+// 2. Has version but no release — original star order
+// 3. No version tags — original star order
+func sortResults(results []registry.SearchResult) {
+	sort.SliceStable(results, func(i, j int) bool {
+		return resultPriority(results[i]) < resultPriority(results[j])
+	})
+}
+
+// resultPriority returns a sort key: 0 = installable, 1 = has version but
+// no release, 2 = no version at all.
+func resultPriority(r registry.SearchResult) int {
+	if r.LatestVersion == "" {
+		return 2
+	}
+	if !r.HasRelease {
+		return 1
+	}
+	return 0
+}
+
+// countInstallable returns the number of results that have a release archive.
+func countInstallable(results []registry.SearchResult) int {
+	n := 0
+	for _, r := range results {
+		if r.HasRelease {
+			n++
+		}
+	}
+	return n
+}
+
 // renderSearchResults formats the search results for terminal display.
+//
+// Output format:
+//
+//	-> Results for: "react patterns"
+//
+//	  Found 3 packages (2 installable)
+//
+//	  1. react-patterns@community v2.4.0
+//	     Repo: community/codectx-react-patterns (* 342)
+//	     React component patterns and best practices
+//
+//	  2. react-testing@community v1.0.0  ⚠ no release archive
+//	     Repo: community/codectx-react-testing (* 89)
+//
+//	  Add with: codectx add react-patterns@community:latest
 func renderSearchResults(query string, results []registry.SearchResult) string {
 	var b strings.Builder
 
-	fmt.Fprintf(&b, "\n%s Results for: %s\n\n",
+	// Header — matches query command pattern.
+	fmt.Fprintf(&b, "\n%s Results for: %s\n",
 		tui.Arrow(),
 		tui.StyleBold.Render(fmt.Sprintf("%q", query)),
 	)
 
+	// Summary count.
+	installable := countInstallable(results)
+	fmt.Fprintf(&b, "\n%s\n",
+		tui.Indent(1)+formatSummaryLine(len(results), installable),
+	)
+
+	// Result entries.
 	for i, r := range results {
 		b.WriteString(formatResult(i+1, r))
 	}
 
+	// Install hint — uses first installable result, or first result as fallback.
 	if len(results) > 0 {
-		example := results[0]
-		fmt.Fprintf(&b, "%sInstall with: %s\n\n",
-			tui.Indent(1),
-			tui.StyleCommand.Render(
-				fmt.Sprintf("codectx install %s@%s:latest", example.Name, example.Org),
+		example := firstInstallable(results)
+		fmt.Fprintf(&b, "%s\n\n",
+			tui.Indent(1)+tui.KeyValue("Add with",
+				tui.StyleCommand.Render(
+					fmt.Sprintf("codectx add %s@%s:latest", example.Name, example.Org),
+				),
 			),
 		)
 	}
@@ -131,32 +201,79 @@ func renderSearchResults(query string, results []registry.SearchResult) string {
 	return b.String()
 }
 
+// formatSummaryLine renders the "Found N packages (M installable)" summary.
+func formatSummaryLine(total, installable int) string {
+	if installable == total {
+		return tui.StyleMuted.Render(fmt.Sprintf("Found %d packages", total))
+	}
+	return tui.StyleMuted.Render(fmt.Sprintf("Found %d packages (%d installable)", total, installable))
+}
+
+// firstInstallable returns the first result with HasRelease true.
+// Falls back to the first result if none are installable.
+func firstInstallable(results []registry.SearchResult) registry.SearchResult {
+	for _, r := range results {
+		if r.HasRelease {
+			return r
+		}
+	}
+	return results[0]
+}
+
 // formatResult formats a single search result entry.
+//
+// Installable result:
+//
+//  1. react-patterns@community v2.4.0
+//     Repo: community/codectx-react-patterns (* 342)
+//     React component patterns and best practices
+//
+// Non-installable result (no release):
+//
+//  2. react-testing@community v1.0.0  ⚠ no release archive
+//     Repo: community/codectx-react-testing (* 89)
+//
+// Non-installable result (no tags):
+//
+//  3. react-utils@someone  ⚠ no version tags
+//     Repo: someone/codectx-react-utils
 func formatResult(index int, r registry.SearchResult) string {
 	var b strings.Builder
 
-	version := r.LatestVersion
-	if version == "" {
-		version = "no tags"
-	}
-
-	fmt.Fprintf(&b, "%s%d. %s (v%s)",
+	// Line 1: number, package ref, version, optional warning.
+	fmt.Fprintf(&b, "\n%s%d. %s",
 		tui.Indent(1),
 		index,
 		tui.StyleAccent.Render(r.Name+"@"+r.Org),
-		version,
 	)
-	if r.Stars > 0 {
-		fmt.Fprintf(&b, " %s %d", tui.StyleMuted.Render("*"), r.Stars)
+
+	if r.LatestVersion != "" {
+		fmt.Fprintf(&b, " %s", tui.StyleBold.Render("v"+r.LatestVersion))
 	}
+
+	// Installability warnings — appended to the title line.
+	if r.LatestVersion == "" {
+		fmt.Fprintf(&b, "  %s %s", tui.Warning(), tui.StyleMuted.Render("no version tags"))
+	} else if !r.HasRelease {
+		fmt.Fprintf(&b, "  %s %s", tui.Warning(), tui.StyleMuted.Render("no release archive"))
+	}
+
 	b.WriteString("\n")
 
-	fmt.Fprintf(&b, "%s%s\n", tui.Indent(2), tui.StyleMuted.Render(r.FullName))
+	// Line 2: Repo as KeyValue with optional star count.
+	repoDisplay := tui.StylePath.Render(r.FullName)
+	if r.Stars > 0 {
+		repoDisplay += " " + tui.StyleMuted.Render(fmt.Sprintf("(* %s)", tui.FormatNumber(r.Stars)))
+	}
+	fmt.Fprintf(&b, "%s%s\n",
+		tui.Indent(2),
+		tui.KeyValue("Repo", repoDisplay),
+	)
 
+	// Line 3: Description (if present).
 	if r.Description != "" {
 		fmt.Fprintf(&b, "%s%s\n", tui.Indent(2), r.Description)
 	}
 
-	b.WriteString("\n")
 	return b.String()
 }
