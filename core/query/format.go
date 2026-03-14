@@ -103,7 +103,7 @@ func FormatQueryResults(r *QueryResult) string {
 		fmt.Fprintf(&b, "\n%s No results found.\n", tui.Warning())
 	} else {
 		fmt.Fprintf(&b, "%s\n%s\n",
-			tui.StyleMuted.Render("Select chunk IDs relevant to your task and run \"codectx generate ...\" to read their content."),
+			tui.StyleMuted.Render("Run \"codectx generate\" with the top chunk IDs above to read their full content before proceeding."),
 			tui.StyleMuted.Render("Try additional queries with different terms to explore related areas before deciding."),
 		)
 	}

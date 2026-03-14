@@ -13,8 +13,8 @@ install:
   echo "Installing project dependencies, please wait..."
   $run go mod download
 
-  echo "Starting development container, please wait..."
-  just docker up
+  echo "Starting/Re-starting development container, please wait..."
+  just docker restart
 
   echo "Installing container dependencies, please wait..."
   just docker exec go mod tidy

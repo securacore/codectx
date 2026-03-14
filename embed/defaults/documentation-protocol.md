@@ -20,6 +20,8 @@ ALWAYS query before starting any development task. Query to understand existing 
 
 ### 2. Generate
 
+After EVERY query that returns results, you MUST run `codectx generate` on the top results. This is not optional — query and generate are an inseparable pair. Do not skip this step even when chunk headings appear unrelated to your task.
+
 ```
 codectx generate "obj:id1,obj:id2,spec:id3"
 ```
@@ -28,7 +30,7 @@ Assembles requested chunks into a single document. Use chunk IDs from query resu
 
 Use `--file <path>` to write the document to a file instead of stdout.
 
-**You MUST generate before judging relevance.** Query results show only chunk headings and scores — not content. Headings are structural breadcrumbs, not summaries. You MUST run `codectx generate` on the top results and read the actual content before making any determination about whether the documentation covers a topic. Skipping this step and judging by titles alone will cause you to miss relevant content.
+Query results show only chunk headings and scores — not content. Headings are structural breadcrumbs, not summaries of what the chunk contains. You MUST read the actual generated content before making any determination about whether the documentation covers a topic. Judging by titles alone will cause you to miss relevant content — taxonomy expansion and bridge summaries surface related information that headings do not reveal.
 
 ### 3. Act
 
@@ -42,7 +44,7 @@ The generated output establishes the project's conventions. These are authoritat
 
 When your investigation reveals new terms, components, or patterns not covered by the initial query, run `codectx query` again with new search terms. Repeat until you have reviewed all relevant documentation.
 
-**Before concluding a topic is not documented, try at least 3 queries with different terms.** Vary your search terms — use synonyms, related concepts, broader terms, and narrower terms. The taxonomy expansion will surface related content, but only if your query terms are close enough to match. A single failed query is not sufficient evidence that a topic is undocumented.
+**Before concluding a topic is not documented, try at least 3 queries with different terms and generate the top results from each.** Vary your search terms — use synonyms, related concepts, broader terms, and narrower terms. The taxonomy expansion will surface related content, but only if your query terms are close enough to match. A single failed query is not sufficient evidence that a topic is undocumented. Each query must be followed by `codectx generate` — running queries without generating is equivalent to skipping the documentation step entirely.
 
 ### 5. Validate
 
@@ -57,7 +59,8 @@ Before completing a task, query for the areas you changed to confirm your implem
 - **MUST** cite which generated chunks informed your approach when answering or acting.
 - **NEVER** browse or read files under `docs/`, `foundation/`, `topics/`, `plans/`, `prompts/`, or `system/` directories directly. These are compiler source files — not meant for direct consumption.
 - **NEVER** skip the query step. Even if you think you know the answer, query first. The compiled chunks contain taxonomy aliases, cross-references, and bridge context that raw files lack.
-- **NEVER** skip the generate step. Query results are pointers, not content. You must generate and read the actual chunks before acting or answering.
+- **MUST** run `codectx generate` after every `codectx query` that returns results. This pair is atomic — never query without generating.
+- **NEVER** skip the generate step. Query results are pointers, not content. You must generate and read the actual chunks before acting or answering. Do not pre-filter results by heading — generate the top results regardless of whether headings seem related to your task.
 - When the documentation covers a topic, follow it — do not override documented conventions with general knowledge.
 - When the documentation does not cover a topic, say what you queried and found, then proceed using your engineering judgment informed by the project's documented patterns.
 
