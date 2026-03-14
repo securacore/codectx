@@ -2,15 +2,17 @@
 // full documentation compilation pipeline.
 //
 // The command discovers markdown files, parses and normalizes them, chunks
-// them into token-counted semantic blocks, builds BM25 search indexes, and
-// generates all manifest files.
+// them into token-counted semantic blocks, builds BM25 and BM25F search
+// indexes, extracts taxonomy, generates bridges and cross-references, and
+// produces all manifest files.
 //
 // The TUI flow:
 //  1. Discover the project (walk up to codectx.yml)
-//  2. Load all configuration files (codectx.yml, ai.yml, preferences.yml)
-//  3. Run the compilation pipeline with per-stage spinners
-//  4. Display a formatted summary with statistics
-//  5. Display any validation warnings
+//  2. Load configuration (codectx.yml, ai.yml, preferences.yml)
+//  3. Run scaffold maintenance if enabled
+//  4. Run compilation pipeline with per-stage spinners
+//  5. Display summary with statistics and any validation warnings
+//  6. Sync local usage metrics to global
 package compile
 
 import (
@@ -69,7 +71,7 @@ func run(_ context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("loading preferences: %w", err)
 	}
 
-	// --- Step 2b: Scaffold maintenance (if enabled) ---
+	// --- Step 3: Scaffold maintenance (if enabled) ---
 	if prefsCfg.EffectiveScaffoldMaintenance() {
 		mr, mrErr := scaffold.Maintain(projectDir, cfg)
 		if mrErr != nil {
@@ -101,7 +103,7 @@ func run(_ context.Context, cmd *cli.Command) error {
 	compileCfg := compile.BuildConfig(projectDir, rootDir, cfg, aiCfg, prefsCfg)
 	compileCfg.Incremental = cmd.Bool("incremental")
 
-	// --- Step 3: Run compilation pipeline ---
+	// --- Step 4: Run compilation pipeline ---
 	var result *compile.Result
 
 	progress := func(stage, detail string) {
@@ -118,15 +120,15 @@ func run(_ context.Context, cmd *cli.Command) error {
 		return renderCompileError(err)
 	}
 
-	// --- Step 4: Display summary ---
+	// --- Step 5: Display summary ---
 	fmt.Print(renderSummary(result, cfg.Name, compileCfg.CompiledDir, projectDir, prefsCfg))
 
-	// --- Step 5: Display warnings ---
+	// --- Step 6: Display warnings ---
 	if len(result.Warnings) > 0 {
 		fmt.Print(renderWarnings(result.Warnings))
 	}
 
-	// --- Step 6: Sync usage metrics (best-effort) ---
+	// --- Step 7: Sync usage metrics (best-effort) ---
 	localUsage := usage.LocalPath(projectDir, cfg)
 	globalUsage := usage.GlobalPath(projectDir, cfg)
 	if syncErr := usage.SyncGlobal(localUsage, globalUsage, cfg.Name); syncErr != nil {

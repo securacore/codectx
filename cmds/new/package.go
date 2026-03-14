@@ -82,7 +82,7 @@ func runPackage(_ context.Context, cmd *cli.Command) error {
 
 	interactive := term.IsTerminal(os.Stdin.Fd()) && !autoYes
 
-	// --- Step 1b: Warn if directory doesn't follow codectx- convention ---
+	// --- Step 1 (cont): Warn if directory doesn't follow codectx- convention ---
 	dirBase := filepath.Base(targetDir)
 	if !strings.HasPrefix(dirBase, registry.RepoPrefix) {
 		fmt.Print(tui.WarnMsg{
@@ -246,6 +246,7 @@ func runPackage(_ context.Context, cmd *cli.Command) error {
 	// --- Step 9: Summary ---
 	effectiveRoot := project.ResolveRoot(root)
 	tree := buildPackageSummaryTree(effectiveRoot)
+	willCompile := shouldPackageAutoCompile(targetDir, root, forceCompile, skipCompile)
 
 	nextSteps := []string{
 		fmt.Sprintf("Add documentation to %s",
@@ -253,7 +254,7 @@ func runPackage(_ context.Context, cmd *cli.Command) error {
 		fmt.Sprintf("Use %s for AI-assisted authoring",
 			tui.StyleCommand.Render(effectiveRoot+"/")),
 	}
-	if !shouldPackageAutoCompile(targetDir, root, forceCompile, skipCompile) {
+	if !willCompile {
 		nextSteps = append(nextSteps,
 			fmt.Sprintf("Run %s to build the documentation index",
 				tui.StyleCommand.Render("codectx compile")),
@@ -288,8 +289,8 @@ func runPackage(_ context.Context, cmd *cli.Command) error {
 	}
 
 	// --- Step 11: Auto-compile ---
-	if shouldPackageAutoCompile(targetDir, root, forceCompile, skipCompile) {
-		if err := runPackageCompile(targetDir, root); err != nil {
+	if willCompile {
+		if err := shared.RunPostInitCompile(targetDir); err != nil {
 			fmt.Printf("\n%s %s\n%s %s\n\n",
 				tui.StyleMuted.Render("-"),
 				tui.StyleMuted.Render("Initial compilation failed (non-fatal)"),
@@ -398,12 +399,6 @@ func shouldPackageAutoCompile(
 	forceCompile, skipCompile bool,
 ) bool {
 	return shared.ShouldPostInitCompile(projectDir, root, forceCompile, skipCompile)
-}
-
-// runPackageCompile loads the freshly created project configuration and runs
-// the full compilation pipeline.
-func runPackageCompile(projectDir, root string) error {
-	return shared.RunPostInitCompile(projectDir)
 }
 
 // ensurePackagePrefix prepends the "codectx-" prefix if not already present.

@@ -171,17 +171,6 @@ func TestInitSummary_NoNextSteps(t *testing.T) {
 	}
 }
 
-func TestDetectedTool_Format(t *testing.T) {
-	result := tui.DetectedTool("Claude Code", "v2.1.63")
-
-	if !strings.Contains(result, "Claude Code") {
-		t.Error("expected tool name")
-	}
-	if !strings.Contains(result, "v2.1.63") {
-		t.Error("expected version")
-	}
-}
-
 func TestKeyValue_Format(t *testing.T) {
 	result := tui.KeyValue("Model", "claude-sonnet-4")
 

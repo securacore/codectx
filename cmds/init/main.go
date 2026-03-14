@@ -285,7 +285,7 @@ func run(_ context.Context, cmd *cli.Command) error {
 
 	// --- Step 11: Auto-compile ---
 	if willAutoCompile {
-		if err := runInitCompile(targetDir, root); err != nil {
+		if err := shared.RunPostInitCompile(targetDir); err != nil {
 			// Non-fatal: init succeeded even if compile failed.
 			// Print the error but don't return it.
 			fmt.Printf("\n%s %s\n%s %s\n\n",
@@ -313,12 +313,6 @@ func shouldInitAutoCompile(
 	forceCompile, skipCompile bool,
 ) bool {
 	return shared.ShouldPostInitCompile(projectDir, root, forceCompile, skipCompile)
-}
-
-// runInitCompile loads the freshly created project configuration and runs
-// the full compilation pipeline with a spinner.
-func runInitCompile(projectDir, root string) error {
-	return shared.RunPostInitCompile(projectDir)
 }
 
 // resolveTarget determines the target directory from positional arguments.

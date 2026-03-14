@@ -245,8 +245,7 @@ func LoadConfig(path string) (*Config, error) {
 // AIConfig represents the .codectx/ai.yml file.
 // AI model and behavior configuration. Checked into version control (no secrets).
 type AIConfig struct {
-	// Compilation configures the model used during compilation for alias
-	// generation and bridge summaries.
+	// Compilation configures compilation settings (tokenizer encoding).
 	Compilation AICompilationConfig `yaml:"compilation"`
 
 	// Consumption configures the target model for consumption, affecting

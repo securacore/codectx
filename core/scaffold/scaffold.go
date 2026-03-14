@@ -383,9 +383,6 @@ type PackageOptions struct {
 	// GitInit controls whether to run `git init` before scaffolding.
 	GitInit bool
 
-	// Model is the AI model to write to ai.yml for the authoring project.
-	Model string
-
 	// Encoding is the tokenizer encoding for the authoring project.
 	Encoding string
 }

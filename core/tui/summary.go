@@ -75,15 +75,6 @@ func InitSummary(projectName string, tree []TreeNode, nextSteps []string) string
 	return b.String()
 }
 
-// DetectedTool formats a single detected tool line for the detection summary.
-func DetectedTool(name, version string) string {
-	return fmt.Sprintf("%s %s %s",
-		Success(),
-		StyleBold.Render(name),
-		StyleMuted.Render(version),
-	)
-}
-
 // KeyValue formats a key-value pair with the key in muted and value in default color.
 func KeyValue(key, value string) string {
 	return fmt.Sprintf("%s %s", StyleMuted.Render(key+":"), value)

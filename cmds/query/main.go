@@ -135,9 +135,11 @@ func run(_ context.Context, cmd *cli.Command) error {
 	return nil
 }
 
-// resolveTopN determines the number of results per index type.
-// If flagValue is positive, it's used directly. Otherwise, the default
-// is loaded from the AI config or falls back to project.DefaultResultsCount.
+// resolveTopN determines the number of query results to return.
+// In BM25F mode this is the total unified result count; in BM25 mode
+// it is per index type. If flagValue is positive, it's used directly.
+// Otherwise, the default is loaded from the AI config or falls back
+// to project.DefaultResultsCount.
 func resolveTopN(flagValue int, projectDir string, cfg *project.Config) int {
 	if flagValue > 0 {
 		return flagValue
