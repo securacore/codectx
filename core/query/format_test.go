@@ -349,6 +349,14 @@ func TestFormatQueryResults_Unified(t *testing.T) {
 	if !strings.Contains(got, "Related") {
 		t.Error("missing related chunks")
 	}
+
+	// Action hint.
+	if !strings.Contains(got, "codectx generate") {
+		t.Error("missing generate hint in footer")
+	}
+	if !strings.Contains(got, "additional queries") {
+		t.Error("missing re-query hint in footer")
+	}
 }
 
 func TestFormatQueryResults_UnifiedNoResults(t *testing.T) {
@@ -360,6 +368,10 @@ func TestFormatQueryResults_UnifiedNoResults(t *testing.T) {
 	got := query.FormatQueryResults(r)
 	if !strings.Contains(got, "No results found") {
 		t.Error("should show no results message for empty unified list")
+	}
+	// Hint should NOT appear when there are no results.
+	if strings.Contains(got, "codectx generate") {
+		t.Error("generate hint should not appear when there are no results")
 	}
 }
 
