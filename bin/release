@@ -94,7 +94,7 @@ case "$CONFIRM" in
 esac
 
 # Update version in package manifest.
-sed -i '' "s/^version: .*/version: ${MAJOR}.${MINOR}.${PATCH}/" docs/manifest.yml
+sed "s/^version: .*/version: ${MAJOR}.${MINOR}.${PATCH}/" docs/manifest.yml > docs/manifest.yml.tmp && mv docs/manifest.yml.tmp docs/manifest.yml
 git add docs/manifest.yml
 git commit -m "release: ${NEW_VERSION}"
 git push origin main
