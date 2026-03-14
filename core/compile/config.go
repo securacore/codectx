@@ -35,6 +35,7 @@ func BuildConfig(
 		Version:     project.Version,
 		Chunking:    prefsCfg.Chunking,
 		BM25:        prefsCfg.BM25,
+		BM25F:       prefsCfg.BM25F,
 		Validation:  prefsCfg.Validation,
 		Taxonomy:    prefsCfg.Taxonomy,
 		Model:       aiCfg.Compilation.Model,

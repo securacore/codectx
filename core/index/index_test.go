@@ -777,3 +777,231 @@ func TestLoad_ParallelProducesSameResults(t *testing.T) {
 		}
 	}
 }
+
+// ---------------------------------------------------------------------------
+// ParseChunkFields
+// ---------------------------------------------------------------------------
+
+func TestParseChunkFields_Basic(t *testing.T) {
+	content := "Some body text about authentication.\n\n```go\nfunc Login() {}\n```\n\nMore body text."
+	heading := "Auth > JWT > Refresh"
+	terms := []string{"authentication", "jwt"}
+
+	fields := ParseChunkFields(content, heading, terms)
+
+	if len(fields.Heading) == 0 {
+		t.Error("expected non-empty heading tokens")
+	}
+	if len(fields.Body) == 0 {
+		t.Error("expected non-empty body tokens")
+	}
+	if len(fields.Code) == 0 {
+		t.Error("expected non-empty code tokens")
+	}
+	if len(fields.Terms) == 0 {
+		t.Error("expected non-empty terms tokens")
+	}
+
+	// Body should NOT contain code block content.
+	for _, tok := range fields.Body {
+		if tok == "login" {
+			t.Error("body should not contain code tokens")
+		}
+	}
+}
+
+func TestParseChunkFields_NoCode(t *testing.T) {
+	content := "Simple paragraph with no code blocks."
+	fields := ParseChunkFields(content, "Heading", nil)
+
+	if len(fields.Body) == 0 {
+		t.Error("expected body tokens")
+	}
+	if len(fields.Code) != 0 {
+		t.Errorf("expected empty code tokens, got %d", len(fields.Code))
+	}
+	if len(fields.Terms) != 0 {
+		t.Errorf("expected empty terms tokens, got %d", len(fields.Terms))
+	}
+}
+
+func TestParseChunkFields_WithContextHeader(t *testing.T) {
+	content := "<!-- codectx:meta\nid: obj:abc.1\ntype: object\n-->\n\nActual body content here."
+	fields := ParseChunkFields(content, "Test", nil)
+
+	// Body should strip the context header.
+	for _, tok := range fields.Body {
+		if tok == "codectx" || tok == "meta" {
+			t.Errorf("body should not contain context header tokens, found %q", tok)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// FieldIndex
+// ---------------------------------------------------------------------------
+
+func TestNewFieldIndex(t *testing.T) {
+	cfg := project.DefaultBM25FConfig()
+	idx := NewFieldIndex(cfg)
+
+	if idx == nil {
+		t.Fatal("expected non-nil FieldIndex")
+	}
+	for _, it := range allIndexTypes() {
+		if idx.Indexes[it] == nil {
+			t.Errorf("expected non-nil BM25F for %s", it)
+		}
+	}
+}
+
+func TestBuildFieldIndexFromChunks(t *testing.T) {
+	cfg := project.DefaultBM25FConfig()
+	idx := NewFieldIndex(cfg)
+
+	chunks := testChunks()
+	terms := map[string][]string{
+		chunks[0].ID: {"authentication", "jwt"},
+		chunks[1].ID: {"error-handling"},
+	}
+
+	idx.BuildFieldIndexFromChunks(chunks, terms)
+
+	// Verify chunks were indexed.
+	for _, it := range allIndexTypes() {
+		bm25f := idx.Indexes[it]
+		if bm25f.DocCount == 0 && it == IndexObjects {
+			t.Error("expected objects to have documents")
+		}
+	}
+}
+
+func TestBuildFieldIndexFromChunks_NilTerms(t *testing.T) {
+	cfg := project.DefaultBM25FConfig()
+	idx := NewFieldIndex(cfg)
+
+	idx.BuildFieldIndexFromChunks(testChunks(), nil)
+
+	// Should not panic with nil terms map.
+	if idx.Indexes[IndexObjects].DocCount == 0 {
+		t.Error("expected objects to have documents even with nil terms")
+	}
+}
+
+func TestQueryAllWeighted(t *testing.T) {
+	cfg := project.DefaultBM25FConfig()
+	idx := NewFieldIndex(cfg)
+	idx.BuildFieldIndexFromChunks(testChunks(), nil)
+
+	query := []WeightedTerm{
+		{Text: "jwt", Weight: 1.0, Tier: "original"},
+	}
+	results := idx.QueryAllWeighted(query, 10)
+
+	// Should get results from at least the objects index.
+	if len(results) == 0 {
+		t.Error("expected some results from QueryAllWeighted")
+	}
+}
+
+func TestQueryAllWeighted_Empty(t *testing.T) {
+	cfg := project.DefaultBM25FConfig()
+	idx := NewFieldIndex(cfg)
+	idx.BuildFieldIndexFromChunks(testChunks(), nil)
+
+	results := idx.QueryAllWeighted(nil, 10)
+	if len(results) != 0 {
+		t.Errorf("expected empty results for nil query, got %d", len(results))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// BM25F Serialization round-trip
+// ---------------------------------------------------------------------------
+
+func TestSaveLoadFieldIndex_RoundTrip(t *testing.T) {
+	tmpDir := t.TempDir()
+	compiledDir := filepath.Join(tmpDir, "compiled")
+
+	// Build field index.
+	cfg := project.DefaultBM25FConfig()
+	original := NewFieldIndex(cfg)
+	terms := map[string][]string{
+		"obj:abc123.1": {"authentication", "jwt"},
+	}
+	original.BuildFieldIndexFromChunks(testChunks(), terms)
+
+	// Save.
+	if err := original.SaveFieldIndex(compiledDir); err != nil {
+		t.Fatalf("SaveFieldIndex failed: %v", err)
+	}
+
+	// Verify files exist.
+	for _, it := range allIndexTypes() {
+		path := filepath.Join(compiledDir, "bm25f", string(it), indexFileName)
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("expected field index file at %s: %v", path, err)
+		}
+	}
+
+	// Load.
+	loaded, err := LoadFieldIndex(compiledDir)
+	if err != nil {
+		t.Fatalf("LoadFieldIndex failed: %v", err)
+	}
+
+	// Verify loaded indexes match original.
+	for _, it := range allIndexTypes() {
+		origBM25F := original.Indexes[it]
+		loadBM25F := loaded.Indexes[it]
+
+		if origBM25F.DocCount != loadBM25F.DocCount {
+			t.Errorf("%s: DocCount mismatch: %d vs %d", it, origBM25F.DocCount, loadBM25F.DocCount)
+		}
+		if origBM25F.K1 != loadBM25F.K1 {
+			t.Errorf("%s: K1 mismatch", it)
+		}
+		if len(origBM25F.FieldNames) != len(loadBM25F.FieldNames) {
+			t.Errorf("%s: FieldNames length mismatch", it)
+		}
+	}
+}
+
+func TestSaveLoadFieldIndex_QueryAfterLoad(t *testing.T) {
+	tmpDir := t.TempDir()
+	compiledDir := filepath.Join(tmpDir, "compiled")
+
+	cfg := project.DefaultBM25FConfig()
+	original := NewFieldIndex(cfg)
+	original.BuildFieldIndexFromChunks(testChunks(), nil)
+
+	if err := original.SaveFieldIndex(compiledDir); err != nil {
+		t.Fatalf("SaveFieldIndex failed: %v", err)
+	}
+	loaded, err := LoadFieldIndex(compiledDir)
+	if err != nil {
+		t.Fatalf("LoadFieldIndex failed: %v", err)
+	}
+
+	query := []WeightedTerm{{Text: "jwt", Weight: 1.0, Tier: "original"}}
+	origResults := original.QueryAllWeighted(query, 10)
+	loadResults := loaded.QueryAllWeighted(query, 10)
+
+	// Result sets should be identical.
+	for _, it := range allIndexTypes() {
+		orig := origResults[it]
+		load := loadResults[it]
+		if len(orig) != len(load) {
+			t.Errorf("%s: result count mismatch: %d vs %d", it, len(orig), len(load))
+			continue
+		}
+		for i := range orig {
+			if orig[i].ChunkID != load[i].ChunkID {
+				t.Errorf("%s: result %d ChunkID mismatch", it, i)
+			}
+			if orig[i].Score != load[i].Score {
+				t.Errorf("%s: result %d Score mismatch: %f vs %f", it, i, orig[i].Score, load[i].Score)
+			}
+		}
+	}
+}

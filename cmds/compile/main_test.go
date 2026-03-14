@@ -67,7 +67,7 @@ func TestRenderSummary_ContainsAllFields(t *testing.T) {
 		TotalSeconds: 1.5,
 	}
 
-	got := renderSummary(result, "my-project", "claude-sonnet-4", "/tmp/compiled", "/tmp")
+	got := renderSummary(result, "my-project", "claude-sonnet-4", "/tmp/compiled", "/tmp", nil)
 
 	checks := []string{
 		"Compilation complete",
@@ -77,7 +77,7 @@ func TestRenderSummary_ContainsAllFields(t *testing.T) {
 		"objects: 15",
 		"specs: 5",
 		"system: 5",
-		"3 indexes",
+		"bm25 + bm25f",
 		"avg 500",
 		"min 200",
 		"max 800",
@@ -100,7 +100,7 @@ func TestRenderSummary_NoChunks(t *testing.T) {
 		TotalSeconds: 0.05,
 	}
 
-	got := renderSummary(result, "empty-project", "claude-sonnet-4", "/tmp/compiled", "/tmp")
+	got := renderSummary(result, "empty-project", "claude-sonnet-4", "/tmp/compiled", "/tmp", nil)
 
 	if !strings.Contains(got, "Compilation complete") {
 		t.Error("expected success header even with no chunks")
@@ -126,7 +126,7 @@ func TestRenderSummary_OversizedChunks(t *testing.T) {
 		TotalSeconds: 0.5,
 	}
 
-	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp")
+	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp", nil)
 
 	if !strings.Contains(got, "Oversized") {
 		t.Error("expected oversized warning in summary")
@@ -149,7 +149,7 @@ func TestRenderSummary_NoOversized(t *testing.T) {
 		TotalSeconds: 0.3,
 	}
 
-	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp")
+	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp", nil)
 
 	if strings.Contains(got, "Oversized") {
 		t.Error("should not show oversized line when count is 0")
@@ -162,6 +162,7 @@ func TestRenderSummary_RelativePath(t *testing.T) {
 		"test", "model",
 		"/projects/myapp/docs/.codectx/compiled",
 		"/projects/myapp",
+		nil,
 	)
 
 	if !strings.Contains(got, "docs/.codectx/compiled") {
@@ -181,10 +182,10 @@ func TestRenderSummary_OnlyObjectChunks(t *testing.T) {
 		TotalSeconds: 0.2,
 	}
 
-	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp")
+	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp", nil)
 
-	if !strings.Contains(got, "1 indexes") {
-		t.Errorf("expected 1 index, got:\n%s", got)
+	if !strings.Contains(got, "bm25 + bm25f") {
+		t.Errorf("expected dual index indicator, got:\n%s", got)
 	}
 	if !strings.Contains(got, "objects: 8") {
 		t.Errorf("expected objects count, got:\n%s", got)
@@ -211,7 +212,7 @@ func TestRenderSummary_WithSessionData(t *testing.T) {
 		TotalSeconds:  1.0,
 	}
 
-	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp")
+	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp", nil)
 
 	if !strings.Contains(got, "Session") {
 		t.Error("expected Session line in summary")
@@ -239,7 +240,7 @@ func TestRenderSummary_NoSessionData(t *testing.T) {
 		TotalSeconds: 0.5,
 	}
 
-	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp")
+	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp", nil)
 
 	if strings.Contains(got, "Session") {
 		t.Error("should not show Session line when no session data")
@@ -361,7 +362,7 @@ func TestRenderSummary_LLMSkipped(t *testing.T) {
 		TotalSeconds:  0.5,
 	}
 
-	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp")
+	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp", nil)
 
 	if !strings.Contains(got, "LLM") {
 		t.Error("expected LLM line in summary")
@@ -389,7 +390,7 @@ func TestRenderSummary_LLMWithResults(t *testing.T) {
 		TotalSeconds:   3.0,
 	}
 
-	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp")
+	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp", nil)
 
 	if !strings.Contains(got, "42 aliases") {
 		t.Error("expected alias count in LLM line")
@@ -412,7 +413,7 @@ func TestRenderSummary_DetBridges(t *testing.T) {
 		TotalSeconds:   0.5,
 	}
 
-	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp")
+	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp", nil)
 
 	if !strings.Contains(got, "Bridges") {
 		t.Error("expected Bridges line in summary")
@@ -438,7 +439,7 @@ func TestRenderSummary_IncrementalMode(t *testing.T) {
 		TotalSeconds:    1.0,
 	}
 
-	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp")
+	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp", nil)
 
 	if !strings.Contains(got, "Changes") {
 		t.Error("expected Changes line in incremental summary")
@@ -467,7 +468,7 @@ func TestRenderSummary_NonIncrementalNoChangesLine(t *testing.T) {
 		TotalSeconds:    1.0,
 	}
 
-	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp")
+	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp", nil)
 
 	if strings.Contains(got, "Changes") {
 		t.Error("should not show Changes line in non-incremental mode")
@@ -486,7 +487,7 @@ func TestRenderSummary_LLMNoResults(t *testing.T) {
 		TotalSeconds: 0.5,
 	}
 
-	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp")
+	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp", nil)
 
 	// When LLM is neither skipped nor produced results, no LLM line.
 	if strings.Contains(got, "LLM") {

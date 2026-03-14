@@ -1039,3 +1039,148 @@ func TestSearchConfig_MissingField_DefaultsFalse(t *testing.T) {
 		t.Error("effective ShowUninstallable should be false when field is missing")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// BM25F / Query / Indexer config tests
+// ---------------------------------------------------------------------------
+
+func TestEffectiveIndexer_Default(t *testing.T) {
+	cfg := &project.PreferencesConfig{}
+	if cfg.EffectiveIndexer() != project.IndexerBM25F {
+		t.Errorf("default indexer should be bm25f, got %q", cfg.EffectiveIndexer())
+	}
+}
+
+func TestEffectiveIndexer_BM25(t *testing.T) {
+	cfg := &project.PreferencesConfig{Indexer: project.IndexerBM25}
+	if cfg.EffectiveIndexer() != project.IndexerBM25 {
+		t.Errorf("expected bm25, got %q", cfg.EffectiveIndexer())
+	}
+}
+
+func TestEffectiveIndexer_BM25F(t *testing.T) {
+	cfg := &project.PreferencesConfig{Indexer: project.IndexerBM25F}
+	if cfg.EffectiveIndexer() != project.IndexerBM25F {
+		t.Errorf("expected bm25f, got %q", cfg.EffectiveIndexer())
+	}
+}
+
+func TestEffectiveIndexer_UnknownDefaultsToBM25F(t *testing.T) {
+	cfg := &project.PreferencesConfig{Indexer: "invalid"}
+	if cfg.EffectiveIndexer() != project.IndexerBM25F {
+		t.Errorf("unknown indexer should default to bm25f, got %q", cfg.EffectiveIndexer())
+	}
+}
+
+func TestExpansionConfig_EffectiveEnabled(t *testing.T) {
+	t.Run("nil defaults to true", func(t *testing.T) {
+		cfg := &project.ExpansionConfig{}
+		if !cfg.EffectiveEnabled() {
+			t.Error("nil Enabled should default to true")
+		}
+	})
+	t.Run("explicit true", func(t *testing.T) {
+		cfg := &project.ExpansionConfig{Enabled: project.BoolPtr(true)}
+		if !cfg.EffectiveEnabled() {
+			t.Error("explicit true should return true")
+		}
+	})
+	t.Run("explicit false", func(t *testing.T) {
+		cfg := &project.ExpansionConfig{Enabled: project.BoolPtr(false)}
+		if cfg.EffectiveEnabled() {
+			t.Error("explicit false should return false")
+		}
+	})
+}
+
+func TestGraphRerankConfig_EffectiveEnabled(t *testing.T) {
+	t.Run("nil defaults to true", func(t *testing.T) {
+		cfg := &project.GraphRerankConfig{}
+		if !cfg.EffectiveEnabled() {
+			t.Error("nil Enabled should default to true")
+		}
+	})
+	t.Run("explicit true", func(t *testing.T) {
+		cfg := &project.GraphRerankConfig{Enabled: project.BoolPtr(true)}
+		if !cfg.EffectiveEnabled() {
+			t.Error("explicit true should return true")
+		}
+	})
+	t.Run("explicit false", func(t *testing.T) {
+		cfg := &project.GraphRerankConfig{Enabled: project.BoolPtr(false)}
+		if cfg.EffectiveEnabled() {
+			t.Error("explicit false should return false")
+		}
+	})
+}
+
+func TestDefaultBM25FConfig(t *testing.T) {
+	cfg := project.DefaultBM25FConfig()
+
+	if cfg.K1 != 1.2 {
+		t.Errorf("K1 = %f, want 1.2", cfg.K1)
+	}
+	if len(cfg.Fields) != 4 {
+		t.Fatalf("expected 4 fields, got %d", len(cfg.Fields))
+	}
+	heading, ok := cfg.Fields["heading"]
+	if !ok {
+		t.Fatal("expected heading field")
+	}
+	if heading.Weight != 3.0 {
+		t.Errorf("heading weight = %f, want 3.0", heading.Weight)
+	}
+	if heading.B != 0.3 {
+		t.Errorf("heading b = %f, want 0.3", heading.B)
+	}
+	body := cfg.Fields["body"]
+	if body.Weight != 1.0 {
+		t.Errorf("body weight = %f, want 1.0", body.Weight)
+	}
+}
+
+func TestDefaultQueryConfig(t *testing.T) {
+	cfg := project.DefaultQueryConfig()
+
+	if cfg.Expansion.AliasWeight != 1.0 {
+		t.Errorf("alias weight = %f, want 1.0", cfg.Expansion.AliasWeight)
+	}
+	if cfg.Expansion.NarrowerWeight != 0.7 {
+		t.Errorf("narrower weight = %f, want 0.7", cfg.Expansion.NarrowerWeight)
+	}
+	if cfg.Expansion.RelatedWeight != 0.4 {
+		t.Errorf("related weight = %f, want 0.4", cfg.Expansion.RelatedWeight)
+	}
+	if cfg.Expansion.MaxExpansionTerms != 20 {
+		t.Errorf("max expansion terms = %d, want 20", cfg.Expansion.MaxExpansionTerms)
+	}
+	if cfg.RRF.K != 60 {
+		t.Errorf("RRF K = %f, want 60", cfg.RRF.K)
+	}
+	if cfg.RRF.IndexWeights["objects"] != 1.0 {
+		t.Error("expected objects weight 1.0")
+	}
+	if cfg.GraphRerank.AdjacentBoost != 0.15 {
+		t.Errorf("adjacent boost = %f, want 0.15", cfg.GraphRerank.AdjacentBoost)
+	}
+	if cfg.GraphRerank.SpecBoost != 0.20 {
+		t.Errorf("spec boost = %f, want 0.20", cfg.GraphRerank.SpecBoost)
+	}
+}
+
+func TestDefaultPreferencesConfig_HasBM25FFields(t *testing.T) {
+	cfg := project.DefaultPreferencesConfig()
+
+	if cfg.Indexer != project.IndexerBM25F {
+		t.Errorf("default indexer = %q, want bm25f", cfg.Indexer)
+	}
+	if cfg.BM25F.K1 != 1.2 {
+		t.Errorf("BM25F K1 = %f, want 1.2", cfg.BM25F.K1)
+	}
+	if len(cfg.BM25F.Fields) != 4 {
+		t.Errorf("BM25F fields count = %d, want 4", len(cfg.BM25F.Fields))
+	}
+	if cfg.Query.RRF.K != 60 {
+		t.Errorf("Query RRF K = %f, want 60", cfg.Query.RRF.K)
+	}
+}

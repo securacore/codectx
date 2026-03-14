@@ -71,8 +71,11 @@ const CodectxDir = ".codectx"
 // CompiledDir is the directory name under .codectx/ for compiled output.
 const CompiledDir = "compiled"
 
-// BM25Dir is the directory name under compiled/ for BM25 index files.
+// BM25Dir is the directory name under compiled/ for flat BM25 index files.
 const BM25Dir = "bm25"
+
+// BM25FDir is the directory name under compiled/ for field-weighted BM25F index files.
+const BM25FDir = "bm25f"
 
 // SystemDir is the directory name for system/compiler documentation
 // under the documentation root.
@@ -358,8 +361,19 @@ type PreferencesConfig struct {
 	// Chunking configures chunk compilation settings.
 	Chunking ChunkingConfig `yaml:"chunking"`
 
-	// BM25 configures BM25 index parameters.
+	// Indexer selects which BM25 implementation is used at query time.
+	// Both indexes are always built during compilation for instant switching.
+	// Valid values: "bm25" (flat), "bm25f" (field-weighted). Defaults to "bm25f".
+	Indexer IndexerType `yaml:"indexer,omitempty"`
+
+	// BM25 configures flat BM25 index parameters.
 	BM25 BM25Config `yaml:"bm25"`
+
+	// BM25F configures field-weighted BM25F index parameters.
+	BM25F BM25FConfig `yaml:"bm25f"`
+
+	// Query configures the query pipeline (expansion, RRF, graph re-ranking).
+	Query QueryConfig `yaml:"query"`
 
 	// Taxonomy configures taxonomy extraction settings.
 	Taxonomy TaxonomyConfig `yaml:"taxonomy"`
@@ -434,13 +448,118 @@ func ClampHashLength(n int) int {
 	return n
 }
 
-// BM25Config controls BM25 index parameters.
+// IndexerType selects which BM25 scoring implementation is used at query time.
+type IndexerType string
+
+const (
+	// IndexerBM25 selects the flat bag-of-words BM25 scorer.
+	IndexerBM25 IndexerType = "bm25"
+
+	// IndexerBM25F selects the field-weighted BM25F scorer with per-field
+	// weights and length normalization.
+	IndexerBM25F IndexerType = "bm25f"
+)
+
+// BM25Config controls flat BM25 index parameters.
 type BM25Config struct {
 	// K1 is the term frequency saturation parameter.
 	K1 float64 `yaml:"k1"`
 
 	// B is the document length normalization parameter.
 	B float64 `yaml:"b"`
+}
+
+// BM25FConfig controls BM25F field-weighted index parameters.
+type BM25FConfig struct {
+	// K1 is the term frequency saturation parameter.
+	K1 float64 `yaml:"k1"`
+
+	// Fields defines per-field scoring weights and length normalization.
+	Fields map[string]BM25FFieldConfig `yaml:"fields"`
+}
+
+// BM25FFieldConfig controls scoring for a single BM25F field.
+type BM25FFieldConfig struct {
+	// Weight is the field importance multiplier.
+	Weight float64 `yaml:"weight"`
+
+	// B is the per-field document length normalization parameter.
+	B float64 `yaml:"b"`
+}
+
+// QueryConfig controls the query pipeline configuration.
+type QueryConfig struct {
+	// Expansion controls taxonomy-based query expansion.
+	Expansion ExpansionConfig `yaml:"expansion"`
+
+	// RRF controls Reciprocal Rank Fusion parameters.
+	RRF RRFConfig `yaml:"rrf"`
+
+	// GraphRerank controls graph-based re-ranking after RRF.
+	GraphRerank GraphRerankConfig `yaml:"graph_rerank"`
+}
+
+// ExpansionConfig controls taxonomy query expansion behavior.
+type ExpansionConfig struct {
+	// Enabled controls whether query expansion is active.
+	Enabled *bool `yaml:"enabled,omitempty"`
+
+	// AliasWeight is the weight multiplier for taxonomy alias matches.
+	AliasWeight float64 `yaml:"alias_weight"`
+
+	// NarrowerWeight is the weight multiplier for narrower term matches.
+	NarrowerWeight float64 `yaml:"narrower_weight"`
+
+	// RelatedWeight is the weight multiplier for related term matches.
+	RelatedWeight float64 `yaml:"related_weight"`
+
+	// MaxExpansionTerms caps the total expanded terms to prevent query explosion.
+	MaxExpansionTerms int `yaml:"max_expansion_terms"`
+}
+
+// EffectiveEnabled returns whether query expansion is enabled.
+// Defaults to true when Enabled is nil (field absent from config).
+func (c *ExpansionConfig) EffectiveEnabled() bool {
+	if c.Enabled == nil {
+		return true
+	}
+	return *c.Enabled
+}
+
+// RRFConfig controls Reciprocal Rank Fusion parameters.
+type RRFConfig struct {
+	// K is the smoothing constant for RRF scoring. Standard default is 60.
+	K float64 `yaml:"k"`
+
+	// IndexWeights assigns importance multipliers per index type.
+	IndexWeights map[string]float64 `yaml:"index_weights"`
+}
+
+// GraphRerankConfig controls graph-based re-ranking after RRF fusion.
+type GraphRerankConfig struct {
+	// Enabled controls whether graph re-ranking is active.
+	Enabled *bool `yaml:"enabled,omitempty"`
+
+	// AdjacentBoost is the score multiplier for chunks with adjacent
+	// chunks that also scored in the top window.
+	AdjacentBoost float64 `yaml:"adjacent_boost"`
+
+	// SpecBoost is the score multiplier for chunks whose paired
+	// spec/object counterpart also scored.
+	SpecBoost float64 `yaml:"spec_boost"`
+
+	// CrossRefBoost is the score multiplier for chunks from documents
+	// that cross-reference other scored documents.
+	CrossRefBoost float64 `yaml:"cross_ref_boost"`
+}
+
+// EffectiveEnabled returns whether graph re-ranking is enabled.
+// Defaults to true when Enabled is nil (field absent from config).
+func (c *GraphRerankConfig) EffectiveEnabled() bool {
+	if c.Enabled == nil {
+		return true
+	}
+	return *c.Enabled
 }
 
 // TaxonomyConfig controls taxonomy extraction settings.
@@ -501,10 +620,63 @@ func (c *PreferencesConfig) EffectiveScaffoldMaintenance() bool {
 	return *c.ScaffoldMaintenance
 }
 
+// EffectiveIndexer returns the active indexer type.
+// Defaults to IndexerBM25F when empty or unrecognized.
+func (c *PreferencesConfig) EffectiveIndexer() IndexerType {
+	switch c.Indexer {
+	case IndexerBM25:
+		return IndexerBM25
+	case IndexerBM25F:
+		return IndexerBM25F
+	default:
+		return IndexerBM25F
+	}
+}
+
 // BoolPtr returns a pointer to the given bool value.
 // Used when setting *bool fields like AutoCompile in config structs.
 func BoolPtr(v bool) *bool {
 	return &v
+}
+
+// DefaultBM25FConfig returns sensible defaults for BM25F field-weighted scoring.
+func DefaultBM25FConfig() BM25FConfig {
+	return BM25FConfig{
+		K1: 1.2,
+		Fields: map[string]BM25FFieldConfig{
+			"heading": {Weight: 3.0, B: 0.3},
+			"terms":   {Weight: 2.0, B: 0.0},
+			"body":    {Weight: 1.0, B: 0.75},
+			"code":    {Weight: 0.6, B: 0.5},
+		},
+	}
+}
+
+// DefaultQueryConfig returns sensible defaults for the query pipeline.
+func DefaultQueryConfig() QueryConfig {
+	return QueryConfig{
+		Expansion: ExpansionConfig{
+			Enabled:           BoolPtr(true),
+			AliasWeight:       1.0,
+			NarrowerWeight:    0.7,
+			RelatedWeight:     0.4,
+			MaxExpansionTerms: 20,
+		},
+		RRF: RRFConfig{
+			K: 60,
+			IndexWeights: map[string]float64{
+				"objects": 1.0,
+				"specs":   0.7,
+				"system":  0.3,
+			},
+		},
+		GraphRerank: GraphRerankConfig{
+			Enabled:       BoolPtr(true),
+			AdjacentBoost: 0.15,
+			SpecBoost:     0.20,
+			CrossRefBoost: 0.10,
+		},
+	}
 }
 
 // DefaultPreferencesConfig returns a PreferencesConfig with sensible defaults.
@@ -520,10 +692,13 @@ func DefaultPreferencesConfig() PreferencesConfig {
 			FlexibilityWindow: 0.8,
 			HashLength:        DefaultHashLength,
 		},
+		Indexer: IndexerBM25F,
 		BM25: BM25Config{
 			K1: 1.2,
 			B:  0.75,
 		},
+		BM25F: DefaultBM25FConfig(),
+		Query: DefaultQueryConfig(),
 		Taxonomy: TaxonomyConfig{
 			MinTermFrequency:   2,
 			MaxAliasCount:      10,

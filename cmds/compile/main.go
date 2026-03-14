@@ -119,7 +119,7 @@ func run(_ context.Context, cmd *cli.Command) error {
 	}
 
 	// --- Step 4: Display summary ---
-	fmt.Print(renderSummary(result, cfg.Name, aiCfg.Compilation.Model, compileCfg.CompiledDir, projectDir))
+	fmt.Print(renderSummary(result, cfg.Name, aiCfg.Compilation.Model, compileCfg.CompiledDir, projectDir, prefsCfg))
 
 	// --- Step 5: Display warnings ---
 	if len(result.Warnings) > 0 {
@@ -166,7 +166,7 @@ func renderCompileError(err error) error {
 }
 
 // renderSummary formats the post-compilation summary.
-func renderSummary(result *compile.Result, projectName, model, compiledDir, projectDir string) string {
+func renderSummary(result *compile.Result, projectName, model, compiledDir, projectDir string, prefsCfg *project.PreferencesConfig) string {
 	var b strings.Builder
 
 	// Success header.
@@ -191,7 +191,7 @@ func renderSummary(result *compile.Result, projectName, model, compiledDir, proj
 		)
 	}
 
-	// Index line: breakdown by type.
+	// Index line: breakdown by type + active indexer.
 	indexParts := []string{}
 	if result.ObjectChunks > 0 {
 		indexParts = append(indexParts, fmt.Sprintf("objects: %d", result.ObjectChunks))
@@ -203,10 +203,14 @@ func renderSummary(result *compile.Result, projectName, model, compiledDir, proj
 		indexParts = append(indexParts, fmt.Sprintf("system: %d", result.SystemChunks))
 	}
 	if len(indexParts) > 0 {
+		activeIndexer := string(project.IndexerBM25F)
+		if prefsCfg != nil {
+			activeIndexer = string(prefsCfg.EffectiveIndexer())
+		}
 		fmt.Fprintf(&b, "%s%s\n", tui.Indent(1),
-			tui.KeyValue("Index", fmt.Sprintf("%d indexes (%s)",
-				countNonZero(result.ObjectChunks, result.SpecChunks, result.SystemChunks),
+			tui.KeyValue("Index", fmt.Sprintf("bm25 + bm25f (%s, active: %s)",
 				strings.Join(indexParts, ", "),
+				activeIndexer,
 			)),
 		)
 	}

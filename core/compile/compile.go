@@ -60,8 +60,11 @@ type Config struct {
 	// Chunking holds chunking configuration from preferences.yml.
 	Chunking project.ChunkingConfig
 
-	// BM25 holds BM25 index parameters from preferences.yml.
+	// BM25 holds flat BM25 index parameters from preferences.yml.
 	BM25 project.BM25Config
+
+	// BM25F holds field-weighted BM25F index parameters from preferences.yml.
+	BM25F project.BM25FConfig
 
 	// Validation holds validation settings from preferences.yml.
 	Validation project.ValidationConfig
@@ -197,7 +200,8 @@ type pipelineState struct {
 	allChunks         []chunk.Chunk
 
 	// Index.
-	idx *index.Index
+	idx      *index.Index
+	fieldIdx *index.FieldIndex
 
 	// Taxonomy.
 	taxResult    *taxonomy.Result
@@ -283,6 +287,11 @@ func Run(cfg Config, progress ProgressFunc) (*Result, error) {
 
 	// --- Extract taxonomy ---
 	if err := ps.stageTaxonomy(); err != nil {
+		return nil, err
+	}
+
+	// --- Build BM25F field-weighted index (needs taxonomy terms) ---
+	if err := ps.stageFieldIndex(); err != nil {
 		return nil, err
 	}
 
@@ -608,9 +617,11 @@ func (ps *pipelineState) stageWriteChunks() error {
 	return nil
 }
 
-// stageIndex builds the BM25 search index from all chunks.
+// stageIndex builds the flat BM25 search index from all chunks.
+// The field-weighted BM25F index is built separately in stageFieldIndex
+// after taxonomy extraction provides per-chunk terms.
 func (ps *pipelineState) stageIndex() error {
-	ps.progress(StageIndex, "Building search index")
+	ps.progress(StageIndex, "Building search index (bm25)")
 
 	indexStart := time.Now()
 
@@ -622,6 +633,33 @@ func (ps *pipelineState) stageIndex() error {
 	}
 
 	ps.result.IndexSeconds = time.Since(indexStart).Seconds()
+	return nil
+}
+
+// stageFieldIndex builds the field-weighted BM25F index from all chunks.
+// This runs after taxonomy extraction so that per-chunk terms are available
+// for the terms field. Both BM25 and BM25F indexes are always built so
+// users can switch between them without recompiling.
+func (ps *pipelineState) stageFieldIndex() error {
+	ps.progress(StageIndex, "Building field-weighted index (bm25f)")
+
+	fieldStart := time.Now()
+
+	ps.fieldIdx = index.NewFieldIndexFromConfig(ps.cfg.BM25F)
+
+	// Build a map of chunk ID → term keys for the terms field.
+	var termsByChunk map[string][]string
+	if ps.taxResult != nil && ps.taxResult.ChunkTerms != nil {
+		termsByChunk = ps.taxResult.ChunkTerms
+	}
+
+	ps.fieldIdx.BuildFieldIndexFromChunks(ps.allChunks, termsByChunk)
+
+	if err := ps.fieldIdx.SaveFieldIndex(ps.cfg.CompiledDir); err != nil {
+		return fmt.Errorf("saving BM25F field index: %w", err)
+	}
+
+	ps.result.IndexSeconds += time.Since(fieldStart).Seconds()
 	return nil
 }
 

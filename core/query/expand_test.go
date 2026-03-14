@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/securacore/codectx/core/project"
 	"github.com/securacore/codectx/core/taxonomy"
 )
 
@@ -14,6 +15,7 @@ func testTaxonomy() *taxonomy.Taxonomy {
 				Canonical: "Authentication",
 				Aliases:   []string{"auth", "authn", "identity verification"},
 				Narrower:  []string{"oauth", "jwt"},
+				Related:   []string{"authorization"},
 			},
 			"jwt": {
 				Canonical: "JWT",
@@ -25,12 +27,21 @@ func testTaxonomy() *taxonomy.Taxonomy {
 				Aliases:   []string{"open authorization"},
 				Broader:   "authentication",
 			},
+			"authorization": {
+				Canonical: "Authorization",
+				Aliases:   []string{"authz", "permissions"},
+				Related:   []string{"authentication"},
+			},
 			"error-handling": {
 				Canonical: "Error Handling",
 				Aliases:   []string{"exception handling", "try-catch"},
 			},
 		},
 	}
+}
+
+func defaultExpansionConfig() project.ExpansionConfig {
+	return project.DefaultQueryConfig().Expansion
 }
 
 func TestExpandQuery_WithTaxonomy(t *testing.T) {
@@ -213,5 +224,180 @@ func TestExpandQuery_Deduplication(t *testing.T) {
 		if count > 1 {
 			t.Errorf("duplicate token %q appears %d times", tok, count)
 		}
+	}
+}
+
+// --- ExpandQueryWeighted tests ---
+
+func TestExpandQueryWeighted_OriginalTermsFullWeight(t *testing.T) {
+	tax := testTaxonomy()
+	aliasIdx := taxonomy.BuildAliasIndex(tax)
+	cfg := defaultExpansionConfig()
+
+	eq := ExpandQueryWeighted("jwt", tax, aliasIdx, cfg)
+
+	if len(eq.Terms) == 0 {
+		t.Fatal("expected terms")
+	}
+
+	// First term should be the original at weight 1.0.
+	if eq.Terms[0].Text != "jwt" {
+		t.Errorf("first term = %q, want 'jwt'", eq.Terms[0].Text)
+	}
+	if eq.Terms[0].Weight != 1.0 {
+		t.Errorf("original weight = %f, want 1.0", eq.Terms[0].Weight)
+	}
+	if eq.Terms[0].Tier != "original" {
+		t.Errorf("original tier = %q, want 'original'", eq.Terms[0].Tier)
+	}
+}
+
+func TestExpandQueryWeighted_TierWeights(t *testing.T) {
+	tax := testTaxonomy()
+	aliasIdx := taxonomy.BuildAliasIndex(tax)
+	cfg := defaultExpansionConfig()
+
+	eq := ExpandQueryWeighted("authentication", tax, aliasIdx, cfg)
+
+	// Build a map of term text → weighted term for inspection.
+	termMap := make(map[string]float64)
+	tierMap := make(map[string]string)
+	for _, wt := range eq.Terms {
+		termMap[wt.Text] = wt.Weight
+		tierMap[wt.Text] = wt.Tier
+	}
+
+	// Original should be at 1.0.
+	if w, ok := termMap["authent"]; !ok || w != 1.0 {
+		t.Errorf("original 'authent' weight = %f, want 1.0", w)
+	}
+
+	// Aliases should be at AliasWeight (1.0).
+	if _, ok := termMap["auth"]; !ok {
+		t.Error("expected alias 'auth' in expanded terms")
+	}
+
+	// Narrower terms (jwt, oauth) should be at NarrowerWeight (0.7).
+	if w, ok := termMap["jwt"]; !ok {
+		t.Error("expected narrower 'jwt' in expanded terms")
+	} else if w != cfg.NarrowerWeight {
+		t.Errorf("narrower 'jwt' weight = %f, want %f", w, cfg.NarrowerWeight)
+	}
+
+	// Related terms (authorization) should be at RelatedWeight (0.4).
+	if w, ok := termMap["author"]; !ok {
+		// "Authorization" stems to "author"
+		t.Error("expected related 'author' (stemmed authorization) in expanded terms")
+	} else if w != cfg.RelatedWeight {
+		t.Errorf("related 'author' weight = %f, want %f", w, cfg.RelatedWeight)
+	}
+}
+
+func TestExpandQueryWeighted_MaxExpansionTerms(t *testing.T) {
+	tax := testTaxonomy()
+	aliasIdx := taxonomy.BuildAliasIndex(tax)
+	cfg := defaultExpansionConfig()
+	cfg.MaxExpansionTerms = 3
+
+	eq := ExpandQueryWeighted("authentication", tax, aliasIdx, cfg)
+
+	if len(eq.Terms) > 3 {
+		t.Errorf("expected at most 3 terms, got %d", len(eq.Terms))
+	}
+}
+
+func TestExpandQueryWeighted_ExpansionDisabled(t *testing.T) {
+	tax := testTaxonomy()
+	aliasIdx := taxonomy.BuildAliasIndex(tax)
+	cfg := defaultExpansionConfig()
+	cfg.Enabled = project.BoolPtr(false)
+
+	eq := ExpandQueryWeighted("authentication", tax, aliasIdx, cfg)
+
+	// Should only have the original stemmed token.
+	if len(eq.Terms) != 1 {
+		t.Errorf("expected 1 term with expansion disabled, got %d", len(eq.Terms))
+	}
+	if eq.Terms[0].Text != "authent" {
+		t.Errorf("term = %q, want 'authent'", eq.Terms[0].Text)
+	}
+}
+
+func TestExpandQueryWeighted_NilTaxonomy(t *testing.T) {
+	cfg := defaultExpansionConfig()
+	eq := ExpandQueryWeighted("hello world", nil, nil, cfg)
+
+	if len(eq.Terms) != 2 {
+		t.Errorf("expected 2 terms, got %d", len(eq.Terms))
+	}
+	for _, wt := range eq.Terms {
+		if wt.Tier != "original" {
+			t.Errorf("without taxonomy, all terms should be 'original', got %q", wt.Tier)
+		}
+	}
+}
+
+func TestExpandQueryWeighted_FlatTokensMatch(t *testing.T) {
+	tax := testTaxonomy()
+	aliasIdx := taxonomy.BuildAliasIndex(tax)
+	cfg := defaultExpansionConfig()
+
+	eq := ExpandQueryWeighted("jwt", tax, aliasIdx, cfg)
+
+	if len(eq.FlatTokens) != len(eq.Terms) {
+		t.Errorf("FlatTokens length (%d) != Terms length (%d)",
+			len(eq.FlatTokens), len(eq.Terms))
+	}
+	for i, ft := range eq.FlatTokens {
+		if ft != eq.Terms[i].Text {
+			t.Errorf("FlatTokens[%d] = %q, Terms[%d].Text = %q",
+				i, ft, i, eq.Terms[i].Text)
+		}
+	}
+}
+
+func TestExpandQueryWeighted_EmptyQuery(t *testing.T) {
+	cfg := defaultExpansionConfig()
+	eq := ExpandQueryWeighted("", nil, nil, cfg)
+
+	if len(eq.Terms) != 0 {
+		t.Errorf("expected 0 terms for empty query, got %d", len(eq.Terms))
+	}
+}
+
+func TestExpandQueryWeighted_RelatedTermExpansion(t *testing.T) {
+	tax := testTaxonomy()
+	aliasIdx := taxonomy.BuildAliasIndex(tax)
+	cfg := defaultExpansionConfig()
+
+	eq := ExpandQueryWeighted("authentication", tax, aliasIdx, cfg)
+
+	// Check that the related term "authorization" was included.
+	found := false
+	for _, wt := range eq.Terms {
+		if wt.Tier == "related" {
+			found = true
+			if wt.Weight != cfg.RelatedWeight {
+				t.Errorf("related term weight = %f, want %f", wt.Weight, cfg.RelatedWeight)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected at least one related term in expansion")
+	}
+}
+
+func TestExpandQueryWeighted_Display(t *testing.T) {
+	tax := testTaxonomy()
+	aliasIdx := taxonomy.BuildAliasIndex(tax)
+	cfg := defaultExpansionConfig()
+
+	eq := ExpandQueryWeighted("authentication", tax, aliasIdx, cfg)
+
+	if eq.Display == "" {
+		t.Error("expected non-empty Display string")
+	}
+	if !strings.Contains(eq.Display, "authent") {
+		t.Errorf("Display should contain stemmed original, got %q", eq.Display)
 	}
 }

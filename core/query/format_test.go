@@ -266,6 +266,131 @@ func TestFormatGenerateSummary_HistoryAndFilePath(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// FormatQueryResults — Unified (BM25F) mode
+// ---------------------------------------------------------------------------
+
+func TestFormatQueryResults_Unified(t *testing.T) {
+	r := &query.QueryResult{
+		RawQuery:      "jwt authentication",
+		ExpandedQuery: "jwt authent auth oauth",
+		Unified: []query.ResultEntry{
+			{
+				ChunkID:      "obj:abc123.1",
+				Score:        0.0312,
+				Heading:      "Auth > JWT > Refresh",
+				Source:       "topics/auth/jwt.md",
+				Sequence:     3,
+				TotalInFile:  7,
+				Tokens:       462,
+				IndexSources: map[string]int{"objects": 1, "specs": 5},
+			},
+			{
+				ChunkID:      "spec:def456.1",
+				Score:        0.0198,
+				Heading:      "Auth > JWT > Reasoning",
+				Source:       "topics/auth/jwt.spec.md",
+				Sequence:     1,
+				TotalInFile:  2,
+				Tokens:       300,
+				IndexSources: map[string]int{"specs": 1},
+			},
+		},
+		Related: []query.RelatedEntry{
+			{ChunkID: "obj:abc123.2", Heading: "Auth > JWT > Tokens", Tokens: 350},
+		},
+	}
+
+	got := query.FormatQueryResults(r)
+
+	// Header with result count and pipeline info.
+	if !strings.Contains(got, "bm25f + rrf") {
+		t.Error("missing bm25f + rrf indicator")
+	}
+	if !strings.Contains(got, "(2,") {
+		t.Error("missing result count in header")
+	}
+
+	// Results section (not "Instructions:" or "Reasoning:").
+	if !strings.Contains(got, "Results") {
+		t.Error("missing Results section header")
+	}
+	if strings.Contains(got, "Instructions:") {
+		t.Error("unified mode should not show Instructions section")
+	}
+
+	// Score precision should be 4 decimal places.
+	if !strings.Contains(got, "0.0312") {
+		t.Error("missing 4-decimal score for first result")
+	}
+
+	// Index source annotation.
+	if !strings.Contains(got, "objects:#1") {
+		t.Error("missing objects source annotation")
+	}
+	if !strings.Contains(got, "specs:#5") {
+		t.Error("missing specs source annotation")
+	}
+
+	// Total token summary.
+	if !strings.Contains(got, "762 tokens") {
+		t.Errorf("missing total tokens summary (expected 762), got:\n%s", got)
+	}
+	if !strings.Contains(got, "2 results") {
+		t.Error("missing result count in summary")
+	}
+
+	// Expanded query.
+	if !strings.Contains(got, "Expanded:") {
+		t.Error("missing expanded query display")
+	}
+
+	// Related.
+	if !strings.Contains(got, "Related") {
+		t.Error("missing related chunks")
+	}
+}
+
+func TestFormatQueryResults_UnifiedNoResults(t *testing.T) {
+	r := &query.QueryResult{
+		RawQuery: "nonexistent",
+		Unified:  []query.ResultEntry{},
+	}
+
+	got := query.FormatQueryResults(r)
+	if !strings.Contains(got, "No results found") {
+		t.Error("should show no results message for empty unified list")
+	}
+}
+
+func TestFormatQueryResults_UnifiedSingleSource(t *testing.T) {
+	r := &query.QueryResult{
+		RawQuery: "test",
+		Unified: []query.ResultEntry{
+			{
+				ChunkID:      "obj:abc.1",
+				Score:        0.05,
+				Heading:      "Test",
+				Source:       "test.md",
+				Sequence:     1,
+				TotalInFile:  1,
+				Tokens:       100,
+				IndexSources: map[string]int{"objects": 1},
+			},
+		},
+	}
+
+	got := query.FormatQueryResults(r)
+
+	// Only objects source, no specs or system.
+	if !strings.Contains(got, "objects:#1") {
+		t.Error("missing objects source")
+	}
+	if strings.Contains(got, "specs:") {
+		t.Error("should not show specs source when not present")
+	}
+}
+
 func TestFormatGenerateSummary_CacheHit(t *testing.T) {
 	r := &query.GenerateResult{
 		TotalTokens: 500,

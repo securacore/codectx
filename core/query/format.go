@@ -49,19 +49,42 @@ func FormatQueryResults(r *QueryResult) string {
 		)
 	}
 
-	if len(r.Instructions) > 0 {
-		fmt.Fprintf(&b, "\n%s\n", tui.StyleBold.Render("Instructions:"))
-		formatEntries(&b, r.Instructions)
-	}
+	if len(r.Unified) > 0 {
+		// BM25F unified mode — single ranked list with count header.
+		fmt.Fprintf(&b, "\n%s %s\n",
+			tui.StyleBold.Render("Results"),
+			tui.StyleMuted.Render(fmt.Sprintf("(%d, bm25f + rrf)", len(r.Unified))),
+		)
+		formatUnifiedEntries(&b, r.Unified)
 
-	if len(r.Reasoning) > 0 {
-		fmt.Fprintf(&b, "\n%s\n", tui.StyleBold.Render("Reasoning:"))
-		formatEntries(&b, r.Reasoning)
-	}
+		// Summary line: total tokens across all results.
+		totalTokens := 0
+		for _, e := range r.Unified {
+			totalTokens += e.Tokens
+		}
+		fmt.Fprintf(&b, "\n%s%s\n",
+			tui.Indent(1),
+			tui.KeyValue("Total", fmt.Sprintf("%s tokens across %d results",
+				tui.FormatNumber(totalTokens),
+				len(r.Unified),
+			)),
+		)
+	} else {
+		// BM25 mode — separate per-type lists.
+		if len(r.Instructions) > 0 {
+			fmt.Fprintf(&b, "\n%s\n", tui.StyleBold.Render("Instructions:"))
+			formatEntries(&b, r.Instructions)
+		}
 
-	if len(r.System) > 0 {
-		fmt.Fprintf(&b, "\n%s\n", tui.StyleBold.Render("System:"))
-		formatEntries(&b, r.System)
+		if len(r.Reasoning) > 0 {
+			fmt.Fprintf(&b, "\n%s\n", tui.StyleBold.Render("Reasoning:"))
+			formatEntries(&b, r.Reasoning)
+		}
+
+		if len(r.System) > 0 {
+			fmt.Fprintf(&b, "\n%s\n", tui.StyleBold.Render("System:"))
+			formatEntries(&b, r.System)
+		}
 	}
 
 	if len(r.Related) > 0 {
@@ -76,7 +99,7 @@ func FormatQueryResults(r *QueryResult) string {
 		}
 	}
 
-	if len(r.Instructions) == 0 && len(r.Reasoning) == 0 && len(r.System) == 0 {
+	if len(r.Instructions) == 0 && len(r.Reasoning) == 0 && len(r.System) == 0 && len(r.Unified) == 0 {
 		fmt.Fprintf(&b, "\n%s No results found.\n", tui.Warning())
 	}
 
@@ -84,13 +107,26 @@ func FormatQueryResults(r *QueryResult) string {
 	return b.String()
 }
 
+// formatUnifiedEntries writes numbered entries from the RRF-fused result list,
+// showing the index sources that contributed to each result.
+// formatUnifiedEntries writes numbered entries from the RRF-fused result list.
+func formatUnifiedEntries(b *strings.Builder, entries []ResultEntry) {
+	formatEntriesWithPrecision(b, entries, "%.4f", true)
+}
+
 // formatEntries writes numbered result entries to the builder with TUI styling.
 func formatEntries(b *strings.Builder, entries []ResultEntry) {
+	formatEntriesWithPrecision(b, entries, "%.2f", false)
+}
+
+// formatEntriesWithPrecision writes numbered result entries with configurable
+// score precision and optional index source annotations.
+func formatEntriesWithPrecision(b *strings.Builder, entries []ResultEntry, scoreFmt string, showSources bool) {
 	for i, entry := range entries {
 		fmt.Fprintf(b, "%s%d. %s %s \u2014 %s\n",
 			tui.Indent(1),
 			i+1,
-			tui.StyleMuted.Render(fmt.Sprintf("[score: %.2f]", entry.Score)),
+			tui.StyleMuted.Render(fmt.Sprintf("[score: "+scoreFmt+"]", entry.Score)),
 			tui.StyleAccent.Render(entry.ChunkID),
 			entry.Heading,
 		)
@@ -102,7 +138,31 @@ func formatEntries(b *strings.Builder, entries []ResultEntry) {
 				tui.FormatNumber(entry.Tokens),
 			)),
 		)
+		if showSources {
+			if sources := formatSourceAnnotation(entry.IndexSources); sources != "" {
+				fmt.Fprintf(b, "%s%s\n",
+					tui.Indent(2),
+					tui.KeyValue("Indexes", tui.StyleMuted.Render(sources)),
+				)
+			}
+		}
 	}
+}
+
+// formatSourceAnnotation builds a human-readable string showing which
+// indexes contributed to a result and at what rank.
+func formatSourceAnnotation(sources map[string]int) string {
+	if len(sources) == 0 {
+		return ""
+	}
+	order := []string{"objects", "specs", "system"}
+	var parts []string
+	for _, name := range order {
+		if rank, ok := sources[name]; ok {
+			parts = append(parts, fmt.Sprintf("%s:#%d", name, rank))
+		}
+	}
+	return strings.Join(parts, ", ")
 }
 
 // FormatGenerateSummary renders the summary for a generate operation with

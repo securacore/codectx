@@ -1,6 +1,8 @@
 package index
 
 import (
+	"regexp"
+	"strings"
 	"sync"
 
 	"github.com/securacore/codectx/core/chunk"
@@ -157,6 +159,139 @@ func (idx *Index) scoreAll(tokens []string, topN int) map[IndexType][]ScoredResu
 		}
 	}
 
+	return results
+}
+
+// FieldIndex manages three BM25F field-weighted indexes — one for each
+// content type. Unlike Index, documents are split into fields (heading,
+// body, code, terms) before indexing.
+type FieldIndex struct {
+	// Indexes maps each IndexType to its BM25F field index.
+	Indexes map[IndexType]*BM25F
+}
+
+// NewFieldIndex creates a FieldIndex with three empty BM25F indexes.
+func NewFieldIndex(cfg project.BM25FConfig) *FieldIndex {
+	return &FieldIndex{
+		Indexes: map[IndexType]*BM25F{
+			IndexObjects: NewBM25F(cfg),
+			IndexSpecs:   NewBM25F(cfg),
+			IndexSystem:  NewBM25F(cfg),
+		},
+	}
+}
+
+// NewFieldIndexFromConfig creates a FieldIndex from the preferences config.
+func NewFieldIndexFromConfig(cfg project.BM25FConfig) *FieldIndex {
+	return NewFieldIndex(cfg)
+}
+
+// codeBlockPattern matches fenced code blocks in markdown.
+var codeBlockPattern = regexp.MustCompile("(?s)```[^\n]*\n(.*?)```")
+
+// ChunkFields holds per-field tokenized content for a chunk.
+type ChunkFields struct {
+	Heading []string
+	Body    []string
+	Code    []string
+	Terms   []string
+}
+
+// ParseChunkFields splits a chunk's content into field tokens.
+// The heading comes from the chunk's Heading field.
+// Terms come from the manifest entry's Terms field.
+// Code is extracted from fenced code blocks in the content.
+// Body is the remaining prose after removing code blocks.
+func ParseChunkFields(content, heading string, terms []string) ChunkFields {
+	// Extract code blocks.
+	codeMatches := codeBlockPattern.FindAllStringSubmatch(content, -1)
+	var codeParts []string
+	for _, m := range codeMatches {
+		if len(m) > 1 {
+			codeParts = append(codeParts, m[1])
+		}
+	}
+	codeText := strings.Join(codeParts, " ")
+
+	// Remove code blocks from body.
+	bodyText := codeBlockPattern.ReplaceAllString(content, "")
+
+	// Strip the context header comment block if present.
+	if idx := strings.Index(bodyText, "-->"); idx >= 0 {
+		bodyText = bodyText[idx+3:]
+	}
+
+	return ChunkFields{
+		Heading: Tokenize(heading),
+		Body:    Tokenize(strings.TrimSpace(bodyText)),
+		Code:    Tokenize(codeText),
+		Terms:   Tokenize(strings.Join(terms, " ")),
+	}
+}
+
+// BuildFieldIndexFromChunks populates the three BM25F indexes from chunks.
+// The termsByChunkID map provides taxonomy terms for each chunk (from the manifest).
+// If termsByChunkID is nil, the terms field is left empty.
+func (idx *FieldIndex) BuildFieldIndexFromChunks(chunks []chunk.Chunk, termsByChunkID map[string][]string) {
+	for i := range chunks {
+		c := &chunks[i]
+		it := indexTypeForChunk(c.Type)
+		bm25f := idx.Indexes[it]
+
+		var terms []string
+		if termsByChunkID != nil {
+			terms = termsByChunkID[c.ID]
+		}
+
+		fields := ParseChunkFields(c.Content, c.Heading, terms)
+		bm25f.AddDocument(c.ID, map[string][]string{
+			"heading": fields.Heading,
+			"body":    fields.Body,
+			"code":    fields.Code,
+			"terms":   fields.Terms,
+		})
+	}
+
+	// Finalize all indexes.
+	for _, bm25f := range idx.Indexes {
+		bm25f.Build()
+	}
+}
+
+// QueryAllWeighted runs weighted query terms against all three indexes
+// in parallel and returns results grouped by index type.
+func (idx *FieldIndex) QueryAllWeighted(terms []WeightedTerm, topN int) map[IndexType][]ScoredResult {
+	if len(terms) == 0 {
+		return make(map[IndexType][]ScoredResult)
+	}
+	return idx.scoreAllWeighted(terms, topN)
+}
+
+// scoreAllWeighted fans out BM25F scoring across all indexes in parallel.
+func (idx *FieldIndex) scoreAllWeighted(terms []WeightedTerm, topN int) map[IndexType][]ScoredResult {
+	types := allIndexTypes()
+	scored := make([][]ScoredResult, len(types))
+
+	var wg sync.WaitGroup
+	for i, it := range types {
+		bm25f, ok := idx.Indexes[it]
+		if !ok {
+			continue
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			scored[i] = bm25f.Score(terms, topN)
+		}()
+	}
+	wg.Wait()
+
+	results := make(map[IndexType][]ScoredResult, len(types))
+	for i, it := range types {
+		if len(scored[i]) > 0 {
+			results[it] = scored[i]
+		}
+	}
 	return results
 }
 

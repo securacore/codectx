@@ -28,8 +28,13 @@ var Command = &cli.Command{
 	Name:      "query",
 	Usage:     "Search compiled documentation",
 	ArgsUsage: "<search terms>",
-	Description: `Search all compiled BM25 indexes (objects, specs, system) and return
-ranked results grouped by type with manifest metadata.
+	Description: `Search compiled documentation using BM25 or BM25F indexes.
+
+In BM25F mode (default), results are fused across object, spec, and system
+indexes using Reciprocal Rank Fusion (RRF) and graph-based re-ranking into
+a single unified ranked list. In BM25 mode, results are grouped by type.
+
+The active indexer is controlled by the 'indexer' field in preferences.yml.
 
 Results include chunk IDs that can be passed to codectx generate.
 
@@ -39,7 +44,7 @@ Examples:
 	Flags: []cli.Flag{
 		&cli.IntFlag{
 			Name:  "top",
-			Usage: "Maximum number of results per index type",
+			Usage: "Maximum number of results (total in bm25f mode, per-index in bm25 mode)",
 		},
 	},
 	Action: run,
@@ -74,12 +79,24 @@ func run(_ context.Context, cmd *cli.Command) error {
 	// --- Step 3: Determine topN ---
 	topN := resolveTopN(int(cmd.Int("top")), projectDir, cfg)
 
-	// --- Step 4: Run the query ---
+	// --- Step 4: Load preferences for indexer selection ---
+	prefsCfg, prefsErr := project.LoadPreferencesConfigForProject(projectDir, cfg)
+	if prefsErr != nil {
+		shared.WarnBestEffort("Loading preferences", prefsErr)
+		prefsCfg = &project.PreferencesConfig{}
+	}
+
+	// --- Step 5: Run the query ---
 	var result *corequery.QueryResult
 	var queryErr error
 
+	indexer := prefsCfg.EffectiveIndexer()
 	if err = shared.RunWithSpinner("Searching compiled documentation...", func() {
-		result, queryErr = corequery.RunQuery(compiledDir, queryStr, topN)
+		if indexer == project.IndexerBM25F {
+			result, queryErr = corequery.RunQueryUnified(compiledDir, queryStr, topN, prefsCfg.Query)
+		} else {
+			result, queryErr = corequery.RunQuery(compiledDir, queryStr, topN)
+		}
 	}); err != nil {
 		return fmt.Errorf("spinner: %w", err)
 	}
@@ -96,20 +113,20 @@ func run(_ context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("query failed: %w", queryErr)
 	}
 
-	// --- Step 5: Display results ---
+	// --- Step 6: Display results ---
 	fmt.Print(corequery.FormatQueryResults(result))
 
-	// --- Step 6: History logging (best-effort) ---
+	// --- Step 7: History logging (best-effort) ---
 	histDir := history.HistoryDir(projectDir, cfg)
 	compileHash, _ := history.CompileHash(compiledDir)
 	caller := history.ResolveCallerContext()
-	totalResults := len(result.Instructions) + len(result.Reasoning) + len(result.System)
+	totalResults := len(result.Instructions) + len(result.Reasoning) + len(result.System) + len(result.Unified)
 
 	if logErr := history.LogQuery(histDir, projectDir, cfg.Root, queryStr, result.ExpandedQuery, totalResults, compileHash, caller); logErr != nil {
 		shared.WarnHistory("logging query", logErr)
 	}
 
-	// --- Step 7: Usage (best-effort) ---
+	// --- Step 8: Usage (best-effort) ---
 	usageFile := usage.LocalPath(projectDir, cfg)
 	if usageErr := usage.UpdateQuery(usageFile); usageErr != nil {
 		shared.WarnBestEffort("Updating usage metrics", usageErr)

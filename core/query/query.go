@@ -29,13 +29,20 @@ type QueryResult struct {
 	ExpandedQuery string
 
 	// Instructions contains scored object (instruction) chunk results.
+	// Populated in BM25 mode. Empty in BM25F mode (use Unified instead).
 	Instructions []ResultEntry
 
 	// Reasoning contains scored spec (reasoning) chunk results.
+	// Populated in BM25 mode. Empty in BM25F mode (use Unified instead).
 	Reasoning []ResultEntry
 
 	// System contains scored system chunk results.
+	// Populated in BM25 mode. Empty in BM25F mode (use Unified instead).
 	System []ResultEntry
+
+	// Unified contains the fused ranked list from RRF + graph re-ranking.
+	// Populated in BM25F mode. Empty in BM25 mode (use per-type lists instead).
+	Unified []ResultEntry
 
 	// Related contains adjacent chunks to top results that were not
 	// themselves scored in the results. Useful for exploration.
@@ -47,7 +54,7 @@ type ResultEntry struct {
 	// ChunkID is the full chunk identifier (e.g. "obj:a1b2c3.03").
 	ChunkID string
 
-	// Score is the BM25 relevance score.
+	// Score is the BM25 relevance score (or RRF score in unified mode).
 	Score float64
 
 	// Heading is the heading breadcrumb (e.g. "Authentication > JWT Tokens > Refresh Flow").
@@ -64,6 +71,10 @@ type ResultEntry struct {
 
 	// Tokens is the token count of this chunk.
 	Tokens int
+
+	// IndexSources maps index name to rank (1-based) in that index's result list.
+	// Only populated in unified (BM25F) mode from RRF fusion.
+	IndexSources map[string]int
 }
 
 // RelatedEntry is an adjacent chunk referenced by a top result but not
@@ -148,6 +159,100 @@ func RunQuery(compiledDir, query string, topN int) (*QueryResult, error) {
 		instrIDs[i] = e.ChunkID
 	}
 	result.Related = CollectRelated(instrIDs, mfst, seen)
+
+	return result, nil
+}
+
+// RunQueryUnified executes a search query using the BM25F pipeline with
+// RRF fusion and graph re-ranking, producing a single unified result list.
+//
+// Pipeline: Weighted Expansion → BM25F Scoring → RRF Fusion → Graph Re-ranking.
+func RunQueryUnified(compiledDir, query string, topN int, queryCfg project.QueryConfig) (*QueryResult, error) {
+	// Load BM25F field indexes.
+	fieldIdx, err := index.LoadFieldIndex(compiledDir)
+	if err != nil {
+		return nil, fmt.Errorf("loading BM25F field indexes: %w", err)
+	}
+
+	// Load manifest for metadata enrichment and graph re-ranking.
+	mfst, err := manifest.LoadManifest(manifest.EntryPath(compiledDir))
+	if err != nil {
+		return nil, fmt.Errorf("loading manifest: %w", err)
+	}
+
+	// Attempt to load taxonomy for query expansion.
+	var tax *taxonomy.Taxonomy
+	var aliasIdx *taxonomy.AliasIndex
+	taxPath := taxonomy.TaxonomyPath(compiledDir)
+	if loaded, loadErr := taxonomy.Load(taxPath); loadErr == nil {
+		tax = loaded
+		aliasIdx = taxonomy.BuildAliasIndex(tax)
+	}
+
+	// Layer 1: Weighted taxonomy expansion.
+	expanded := ExpandQueryWeighted(query, tax, aliasIdx, queryCfg.Expansion)
+
+	if len(expanded.Terms) == 0 {
+		return &QueryResult{
+			RawQuery:      query,
+			ExpandedQuery: expanded.Display,
+		}, nil
+	}
+
+	// Layer 2: Parallel BM25F scoring across all three indexes.
+	// Use a larger candidate set for RRF — topN*3 per index gives RRF room.
+	candidateN := topN * 3
+	allResults := fieldIdx.QueryAllWeighted(expanded.Terms, candidateN)
+
+	// Layer 3: Reciprocal Rank Fusion.
+	fused := WeightedRRF(allResults, queryCfg.RRF)
+
+	// Layer 4: Graph-based re-ranking.
+	// Load metadata for cross-reference boost (nil is handled gracefully).
+	var meta *manifest.Metadata
+	metaPath := manifest.MetadataPath(compiledDir)
+	if loaded, loadErr := manifest.LoadMetadata(metaPath); loadErr == nil {
+		meta = loaded
+	}
+
+	reranked := GraphRerank(fused, mfst, meta, queryCfg.GraphRerank, topN)
+
+	// Truncate to topN.
+	if len(reranked) > topN {
+		reranked = reranked[:topN]
+	}
+
+	// Enrich with manifest metadata.
+	result := &QueryResult{
+		RawQuery:      query,
+		ExpandedQuery: expanded.Display,
+	}
+
+	seen := make(map[string]bool)
+	for _, rr := range reranked {
+		if entry := mfst.LookupEntry(rr.ID); entry != nil {
+			result.Unified = append(result.Unified, ResultEntry{
+				ChunkID:      rr.ID,
+				Score:        rr.RRFScore,
+				Heading:      entry.Heading,
+				Source:       entry.Source,
+				Sequence:     entry.Sequence,
+				TotalInFile:  entry.TotalInFile,
+				Tokens:       entry.Tokens,
+				IndexSources: rr.Sources,
+			})
+		}
+		seen[rr.ID] = true
+	}
+
+	// Collect related chunks from the unified list.
+	unifiedIDs := make([]string, len(result.Unified))
+	for i, e := range result.Unified {
+		unifiedIDs[i] = e.ChunkID
+	}
+	// Limit related to the top results (not the full unified list).
+	maxRelatedSource := min(len(unifiedIDs), topN)
+	result.Related = CollectRelated(unifiedIDs[:maxRelatedSource], mfst, seen)
 
 	return result, nil
 }
