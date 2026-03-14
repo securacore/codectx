@@ -88,9 +88,17 @@ func run(_ context.Context, cmd *cli.Command) error {
 	return nil
 }
 
+// hasActivity reports whether the metrics contain any recorded activity.
+func hasActivity(m coreusage.Metrics) bool {
+	return m.TotalTokens > 0 || m.QueryInvocations > 0 || m.GenerateInvocations > 0
+}
+
 // formatSection renders a usage metrics section with the standard TUI pattern:
 // section header, one KeyValue per line at indent 1, optional breakdowns at
 // indent 2, and timestamp footer.
+//
+// When no activity has been recorded, a concise empty-state message is shown
+// instead of a full listing of zeros.
 func formatSection(title string, m coreusage.Metrics) string {
 	var b strings.Builder
 
@@ -99,6 +107,15 @@ func formatSection(title string, m coreusage.Metrics) string {
 		tui.Arrow(),
 		tui.StyleBold.Render(title),
 	)
+
+	// Empty state — no activity recorded yet.
+	if !hasActivity(m) {
+		fmt.Fprintf(&b, "%s%s\n\n",
+			tui.Indent(1),
+			tui.StyleMuted.Render("No activity recorded"),
+		)
+		return b.String()
+	}
 
 	// Summary stats — one KeyValue per line.
 	fmt.Fprintf(&b, "%s%s\n", tui.Indent(1),
@@ -136,14 +153,15 @@ func formatSection(title string, m coreusage.Metrics) string {
 		formatBreakdown(&b, m.TokensByModel, m.TotalTokens)
 	}
 
-	// Timestamps.
+	// Timestamps — only show when values are meaningful (non-zero).
 	if m.FirstSeen > 0 {
 		fmt.Fprintf(&b, "\n%s%s\n", tui.Indent(1),
 			tui.KeyValue("Tracking since", time.Unix(0, m.FirstSeen).Format("2006-01-02")))
+	}
+	if m.LastUpdated > 0 {
 		fmt.Fprintf(&b, "%s%s\n", tui.Indent(1),
 			tui.KeyValue("Last updated", time.Unix(0, m.LastUpdated).Format("2006-01-02")))
 	}
-
 	if m.LastCompile > 0 {
 		fmt.Fprintf(&b, "%s%s\n", tui.Indent(1),
 			tui.KeyValue("Last compile sync", time.Unix(0, m.LastCompile).Format("2006-01-02")))

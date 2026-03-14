@@ -44,7 +44,9 @@ const DefaultRegistry = "github.com"
 const DefaultContextWindow = 200000
 
 // DefaultResultsCount is the default number of results returned by codectx query.
-const DefaultResultsCount = 10
+// Set to 30 to give the unified RRF pipeline room to fuse results across
+// object, spec, and system indexes with graph re-ranking.
+const DefaultResultsCount = 30
 
 // DefaultEncoding is the fallback tokenizer encoding.
 const DefaultEncoding = "cl100k_base"

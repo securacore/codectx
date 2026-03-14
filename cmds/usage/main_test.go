@@ -19,22 +19,16 @@ func TestFormatSection_EmptyMetrics(t *testing.T) {
 	if !strings.Contains(got, "Test Section") {
 		t.Error("output should contain section title")
 	}
-	if !strings.Contains(got, "Total tokens generated") {
-		t.Error("output should contain total tokens label")
+	// Empty state — should show concise message, not full zero listing.
+	if !strings.Contains(got, "No activity recorded") {
+		t.Error("empty metrics should show 'No activity recorded'")
 	}
-	if !strings.Contains(got, "Query invocations") {
-		t.Error("output should contain query invocations label")
+	// Should NOT show detail lines in empty state.
+	if strings.Contains(got, "Total tokens generated") {
+		t.Error("empty state should not show detail lines")
 	}
-	if !strings.Contains(got, "Generate invocations") {
-		t.Error("output should contain generate invocations label")
-	}
-	// Should NOT contain cache hit rate with zero invocations.
-	if strings.Contains(got, "Cache hit rate") {
-		t.Error("should not show cache hit rate with zero generate invocations")
-	}
-	// Should NOT contain breakdowns with empty maps.
-	if strings.Contains(got, "By caller") {
-		t.Error("should not show caller breakdown with empty map")
+	if strings.Contains(got, "Query invocations") {
+		t.Error("empty state should not show query invocations line")
 	}
 }
 
@@ -108,16 +102,67 @@ func TestFormatSection_WithData(t *testing.T) {
 func TestFormatSection_LastCompile(t *testing.T) {
 	now := time.Now().UnixNano()
 	m := coreusage.Metrics{
-		TokensByCaller: make(map[string]int),
-		TokensByModel:  make(map[string]int),
-		FirstSeen:      now,
-		LastUpdated:    now,
-		LastCompile:    now,
+		TotalTokens:      100,
+		QueryInvocations: 1,
+		TokensByCaller:   make(map[string]int),
+		TokensByModel:    make(map[string]int),
+		FirstSeen:        now,
+		LastUpdated:      now,
+		LastCompile:      now,
 	}
 
 	got := formatSection("Test", m)
 	if !strings.Contains(got, "Last compile sync") {
 		t.Error("output should contain last compile sync when set")
+	}
+}
+
+func TestFormatSection_ZeroTimestamps(t *testing.T) {
+	m := coreusage.Metrics{
+		TotalTokens:      500,
+		QueryInvocations: 5,
+		TokensByCaller:   make(map[string]int),
+		TokensByModel:    make(map[string]int),
+		FirstSeen:        0,
+		LastUpdated:      0,
+	}
+
+	got := formatSection("Test", m)
+
+	// Should show stats (has activity) but skip zero timestamps.
+	if !strings.Contains(got, "500") {
+		t.Error("should show token count")
+	}
+	if strings.Contains(got, "Tracking since") {
+		t.Error("should not show Tracking since when FirstSeen is 0")
+	}
+	if strings.Contains(got, "Last updated") {
+		t.Error("should not show Last updated when LastUpdated is 0")
+	}
+	if strings.Contains(got, "1969") {
+		t.Error("should not show Unix epoch date")
+	}
+}
+
+func TestHasActivity(t *testing.T) {
+	tests := []struct {
+		name string
+		m    coreusage.Metrics
+		want bool
+	}{
+		{"all zero", coreusage.Metrics{}, false},
+		{"has tokens", coreusage.Metrics{TotalTokens: 1}, true},
+		{"has queries", coreusage.Metrics{QueryInvocations: 1}, true},
+		{"has generates", coreusage.Metrics{GenerateInvocations: 1}, true},
+		{"cache hits only", coreusage.Metrics{CacheHits: 1}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := hasActivity(tt.m); got != tt.want {
+				t.Errorf("hasActivity() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 
