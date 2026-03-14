@@ -15,9 +15,7 @@ func TestBuildConfig_BasicMapping(t *testing.T) {
 	}
 	aiCfg := &project.AIConfig{
 		Compilation: project.AICompilationConfig{
-			Model:    "claude-sonnet-4-20250514",
 			Encoding: "cl100k_base",
-			Provider: "cli",
 		},
 	}
 	prefsCfg := &project.PreferencesConfig{
@@ -35,14 +33,8 @@ func TestBuildConfig_BasicMapping(t *testing.T) {
 	if got.RootDir != "/projects/test/docs" {
 		t.Errorf("RootDir = %q, want /projects/test/docs", got.RootDir)
 	}
-	if got.Model != "claude-sonnet-4-20250514" {
-		t.Errorf("Model = %q, want claude-sonnet-4-20250514", got.Model)
-	}
 	if got.Encoding != "cl100k_base" {
 		t.Errorf("Encoding = %q, want cl100k_base", got.Encoding)
-	}
-	if got.Provider != "cli" {
-		t.Errorf("Provider = %q, want cli", got.Provider)
 	}
 	if got.Chunking.MinTokens != 100 {
 		t.Errorf("Chunking.MinTokens = %d, want 100", got.Chunking.MinTokens)

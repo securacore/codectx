@@ -90,14 +90,12 @@ func ClassifyFiles(currentHashes map[string]string, previousHashes *manifest.Has
 // InstructionChanges tracks which system instruction directories changed
 // between compilations.
 type InstructionChanges struct {
-	TaxonomyGeneration bool
-	BridgeSummaries    bool
-	ContextAssembly    bool
+	ContextAssembly bool
 }
 
 // AnyChanged reports whether any system instruction directory changed.
 func (ic *InstructionChanges) AnyChanged() bool {
-	return ic.TaxonomyGeneration || ic.BridgeSummaries || ic.ContextAssembly
+	return ic.ContextAssembly
 }
 
 // DetectInstructionChanges compares current system directory hashes against
@@ -126,8 +124,6 @@ func DetectInstructionChanges(currentSystem, previousSystem map[string]string) *
 		return curr != prev
 	}
 
-	ic.TaxonomyGeneration = check("taxonomy-generation")
-	ic.BridgeSummaries = check("bridge-summaries")
 	ic.ContextAssembly = check("context-assembly")
 
 	return ic

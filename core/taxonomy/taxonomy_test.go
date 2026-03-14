@@ -85,10 +85,9 @@ func tableBlock(content string, hierarchy []string) markdown.Block {
 // defaultCfg returns a TaxonomyConfig with test-friendly defaults.
 func defaultCfg() project.TaxonomyConfig {
 	return project.TaxonomyConfig{
-		MinTermFrequency:   1, // Low threshold for tests.
-		MaxAliasCount:      10,
-		POSExtraction:      false,
-		LLMAliasGeneration: false,
+		MinTermFrequency: 1, // Low threshold for tests.
+		MaxAliasCount:    10,
+		POSExtraction:    false,
 	}
 }
 

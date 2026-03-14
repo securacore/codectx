@@ -1,7 +1,6 @@
 package compile
 
 import (
-	"os"
 	"path/filepath"
 
 	"github.com/securacore/codectx/core/project"
@@ -38,9 +37,6 @@ func BuildConfig(
 		BM25F:       prefsCfg.BM25F,
 		Validation:  prefsCfg.Validation,
 		Taxonomy:    prefsCfg.Taxonomy,
-		Model:       aiCfg.Compilation.Model,
-		Provider:    aiCfg.Compilation.Provider,
-		APIKey:      os.Getenv("ANTHROPIC_API_KEY"),
 		ActiveDeps:  activeDeps,
 		Session:     cfg.Session,
 	}

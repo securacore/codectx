@@ -53,8 +53,7 @@ func TestInit_CreatesFullDirectoryStructure(t *testing.T) {
 		"docs/system/foundation/compiler-philosophy",
 		"docs/system/foundation/documentation-protocol",
 		"docs/system/foundation/history",
-		"docs/system/topics/taxonomy-generation",
-		"docs/system/topics/bridge-summaries",
+
 		"docs/system/topics/context-assembly",
 		"docs/system/plans",
 		"docs/system/prompts",
@@ -156,11 +155,8 @@ func TestInit_CreatesSystemDefaults(t *testing.T) {
 		"system/foundation/compiler-philosophy/README.spec.md": "Compiler Philosophy Reasoning",
 		"system/foundation/documentation-protocol/README.md":   "Documentation Protocol",
 		"system/foundation/history/README.md":                  "History",
-		"system/topics/taxonomy-generation/README.md":          "Taxonomy Alias Generation",
-		"system/topics/taxonomy-generation/README.spec.md":     "Taxonomy Generation Reasoning",
-		"system/topics/bridge-summaries/README.md":             "Bridge Summary Generation",
-		"system/topics/bridge-summaries/README.spec.md":        "Bridge Summary Reasoning",
-		"system/topics/context-assembly/README.md":             "Context Assembly Instructions",
+
+		"system/topics/context-assembly/README.md": "Context Assembly Instructions",
 	}
 
 	for path, expectedContent := range expectedFiles {
@@ -416,13 +412,12 @@ func TestInit_OverwritesOnSecondRun(t *testing.T) {
 	}
 }
 
-func TestInit_ModelAndEncodingPassthrough(t *testing.T) {
+func TestInit_EncodingPassthrough(t *testing.T) {
 	dir := t.TempDir()
 
 	_, err := scaffold.Init(scaffold.Options{
 		ProjectDir: dir,
-		Name:       "model-test",
-		Model:      "gpt-4o",
+		Name:       "encoding-test",
 		Encoding:   "o200k_base",
 	})
 	if err != nil {
@@ -436,24 +431,17 @@ func TestInit_ModelAndEncodingPassthrough(t *testing.T) {
 	}
 
 	content := string(data)
-	if !strings.Contains(content, "gpt-4o") {
-		t.Error("expected ai.yml to contain custom model 'gpt-4o'")
-	}
 	if !strings.Contains(content, "o200k_base") {
 		t.Error("expected ai.yml to contain custom encoding 'o200k_base'")
 	}
-	// Should NOT contain the default model.
-	// Note: consumption.model also gets set to the custom model.
-	// Both compilation and consumption should show gpt-4o.
 }
 
-func TestInit_ModelWithoutEncoding(t *testing.T) {
+func TestInit_DefaultEncoding(t *testing.T) {
 	dir := t.TempDir()
 
 	_, err := scaffold.Init(scaffold.Options{
 		ProjectDir: dir,
-		Name:       "partial-model-test",
-		Model:      "gemini-2.0-flash",
+		Name:       "default-encoding-test",
 		// Encoding intentionally omitted — should keep default.
 	})
 	if err != nil {
@@ -467,11 +455,8 @@ func TestInit_ModelWithoutEncoding(t *testing.T) {
 	}
 
 	content := string(data)
-	if !strings.Contains(content, "gemini-2.0-flash") {
-		t.Error("expected ai.yml to contain custom model")
-	}
 	if !strings.Contains(content, "cl100k_base") {
-		t.Error("expected ai.yml to retain default encoding when not overridden")
+		t.Error("expected ai.yml to contain default encoding")
 	}
 }
 
@@ -698,30 +683,6 @@ func TestCheck_NoRootConflictNonexistent(t *testing.T) {
 
 	if result.RootConflict {
 		t.Error("expected RootConflict to be false when docs/ doesn't exist")
-	}
-}
-
-func TestInit_ProviderPassthrough(t *testing.T) {
-	dir := t.TempDir()
-
-	_, err := scaffold.Init(scaffold.Options{
-		ProjectDir: dir,
-		Name:       "provider-test",
-		Provider:   "cli",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	aiPath := filepath.Join(dir, "docs", ".codectx", "ai.yml")
-	data, err := os.ReadFile(aiPath)
-	if err != nil {
-		t.Fatalf("reading ai.yml: %v", err)
-	}
-
-	content := string(data)
-	if !strings.Contains(content, "provider: cli") {
-		t.Error("expected ai.yml to contain provider: cli")
 	}
 }
 

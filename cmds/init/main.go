@@ -10,10 +10,9 @@
 //  1. Resolve target directory from positional args
 //  2. Run pre-scaffold checks (already initialized, nested, git, root conflict)
 //  3. Prompt for missing information (project name, git init, root conflict)
-//  4. Detect AI tools and API keys
-//  5. Confirm or override the recommended model
-//  6. Scaffold the project with a spinner
-//  7. Display a formatted summary
+//  4. Scaffold the project with a spinner
+//  5. Display summary and prompt for AI tool entry points
+//  6. Auto-compile if enabled
 package init
 
 import (
@@ -26,7 +25,6 @@ import (
 	"charm.land/huh/v2"
 	"github.com/charmbracelet/x/term"
 	"github.com/securacore/codectx/cmds/shared"
-	"github.com/securacore/codectx/core/detect"
 	"github.com/securacore/codectx/core/project"
 	"github.com/securacore/codectx/core/scaffold"
 	"github.com/securacore/codectx/core/tui"
@@ -51,10 +49,6 @@ With a directory name, creates the directory and initializes inside it.`,
 		&cli.StringFlag{
 			Name:  "name",
 			Usage: "Project name (default: directory name)",
-		},
-		&cli.StringFlag{
-			Name:  "model",
-			Usage: "AI model for compilation (auto-detected if omitted)",
 		},
 		&cli.BoolFlag{
 			Name:    "yes",
@@ -82,7 +76,6 @@ func run(_ context.Context, cmd *cli.Command) error {
 
 	root := cmd.String("root")
 	name := cmd.String("name")
-	model := cmd.String("model")
 	autoYes := cmd.Bool("yes")
 	forceCompile := cmd.IsSet("compile") && cmd.Bool("compile")
 	skipCompile := cmd.IsSet("no-compile") && cmd.Bool("no-compile")
@@ -230,115 +223,12 @@ func run(_ context.Context, cmd *cli.Command) error {
 		}
 	}
 
-	// --- Step 7: AI tool detection ---
-	var detection detect.Result
-
-	if err = shared.RunWithSpinner("Scanning for AI tools...", func() {
-		detection = detect.Scan()
-	}); err != nil {
-		return err
-	}
-
-	// Display detection results.
-	if detection.HasAnything() {
-		fmt.Println()
-		if len(detection.Tools) > 0 {
-			fmt.Printf("%s%s\n", tui.Indent(1), tui.StyleMuted.Render("Detected tools:"))
-			for _, tool := range detection.Tools {
-				version := ""
-				if tool.Version != "" {
-					version = tool.Version
-				}
-				fmt.Printf("%s%s\n", tui.Indent(2), tui.DetectedTool(tool.Name, version))
-			}
-		}
-		if len(detection.Providers) > 0 {
-			fmt.Printf("%s%s\n", tui.Indent(1), tui.StyleMuted.Render("API providers:"))
-			for _, p := range detection.Providers {
-				fmt.Printf("%s%s %s\n", tui.Indent(2),
-					tui.Success(),
-					tui.StyleBold.Render(p.Name))
-			}
-		}
-		fmt.Println()
-	}
-
-	// --- Step 8: Model selection ---
-	effectiveModel := model
-	effectiveEncoding := detection.RecommendedEncoding
-	if effectiveModel == "" {
-		effectiveModel = detection.RecommendedModel
-	}
-
-	if interactive && model == "" {
-		// Build model options from detection results + the recommended default.
-		type modelChoice struct {
-			model    string
-			encoding string
-		}
-
-		// Collect unique models from providers.
-		seen := map[string]bool{effectiveModel: true}
-		options := []huh.Option[modelChoice]{
-			huh.NewOption(
-				fmt.Sprintf("%s (recommended)", effectiveModel),
-				modelChoice{model: effectiveModel, encoding: detection.RecommendedEncoding},
-			),
-		}
-
-		for _, p := range detection.Providers {
-			if !seen[p.DefaultModel] {
-				seen[p.DefaultModel] = true
-				enc := detect.EncodingForModel(p.DefaultModel)
-				options = append(options, huh.NewOption(
-					fmt.Sprintf("%s (%s)", p.DefaultModel, p.Name),
-					modelChoice{model: p.DefaultModel, encoding: enc},
-				))
-			}
-		}
-
-		// Only show select if there are multiple choices.
-		if len(options) > 1 {
-			var selected modelChoice
-			if err := huh.NewSelect[modelChoice]().
-				Title("Compilation model:").
-				Options(options...).
-				Value(&selected).
-				Run(); err != nil {
-				return err
-			}
-			effectiveModel = selected.model
-			effectiveEncoding = selected.encoding
-		}
-	}
-
-	// --- Step 8b: Provider selection ---
-	hasCLI, hasAPI := detectProviderCapabilities(detection)
-	effectiveProvider := autoSelectProvider(hasCLI, hasAPI)
-
-	// If both are available and interactive, let the user choose.
-	if hasCLI && hasAPI && interactive {
-		if err := huh.NewSelect[string]().
-			Title("LLM provider for compilation:").
-			Options(
-				huh.NewOption("Claude CLI (recommended, uses existing subscription)", project.ProviderCLI),
-				huh.NewOption("Anthropic API (direct API calls)", project.ProviderAPI),
-			).
-			Value(&effectiveProvider).
-			Run(); err != nil {
-			return err
-		}
-	}
-
-	// --- Step 9: Scaffold with spinner ---
+	// --- Step 7: Scaffold with spinner ---
 	opts := scaffold.Options{
 		ProjectDir: targetDir,
 		Root:       root,
 		Name:       name,
 		GitInit:    needGitInit,
-		Model:      effectiveModel,
-		Encoding:   effectiveEncoding,
-		Provider:   effectiveProvider,
 	}
 
 	var result *scaffold.Result
@@ -352,10 +242,10 @@ func run(_ context.Context, cmd *cli.Command) error {
 		return initErr
 	}
 
-	// --- Step 10: Determine auto-compile intent ---
+	// --- Step 8: Determine auto-compile intent ---
 	willAutoCompile := shouldInitAutoCompile(targetDir, root, forceCompile, skipCompile)
 
-	// --- Step 11: Summary ---
+	// --- Step 9: Summary ---
 	effectiveRoot := project.ResolveRoot(root)
 
 	tree := buildSummaryTree(effectiveRoot)
@@ -375,22 +265,6 @@ func run(_ context.Context, cmd *cli.Command) error {
 
 	fmt.Print(tui.InitSummary(name, tree, nextSteps))
 
-	// Print key configuration values.
-	fmt.Printf("%s%s\n", tui.Indent(1),
-		tui.KeyValue("Model", effectiveModel))
-	if effectiveProvider != "" {
-		var providerLabel string
-		switch effectiveProvider {
-		case project.ProviderCLI:
-			providerLabel = "cli (Claude Code)"
-		case project.ProviderAPI:
-			providerLabel = "api (Anthropic API)"
-		default:
-			providerLabel = effectiveProvider
-		}
-		fmt.Printf("%s%s\n", tui.Indent(1),
-			tui.KeyValue("Provider", providerLabel))
-	}
 	if created {
 		fmt.Printf("%s%s\n", tui.Indent(1),
 			tui.KeyValue("Directory", targetDir))
@@ -401,7 +275,7 @@ func run(_ context.Context, cmd *cli.Command) error {
 	}
 	fmt.Println()
 
-	// --- Step 12: Link prompt ---
+	// --- Step 10: Link prompt ---
 	if interactive {
 		if err := promptLink(targetDir); err != nil {
 			// Non-fatal: init succeeded even if link was skipped.
@@ -409,7 +283,7 @@ func run(_ context.Context, cmd *cli.Command) error {
 		}
 	}
 
-	// --- Step 13: Auto-compile ---
+	// --- Step 11: Auto-compile ---
 	if willAutoCompile {
 		if err := runInitCompile(targetDir, root); err != nil {
 			// Non-fatal: init succeeded even if compile failed.
@@ -482,18 +356,6 @@ func resolveTarget(args []string) (string, bool, error) {
 		return "", false, err
 	}
 	return abs, true, nil
-}
-
-// detectProviderCapabilities checks the detection results for Claude CLI
-// binary and Anthropic API key availability.
-func detectProviderCapabilities(detection detect.Result) (hasCLI, hasAPI bool) {
-	return shared.DetectProviderCapabilities(detection)
-}
-
-// autoSelectProvider returns the appropriate provider string based on
-// detected capabilities.
-func autoSelectProvider(hasCLI, hasAPI bool) string {
-	return shared.AutoSelectProvider(hasCLI, hasAPI)
 }
 
 // buildSummaryTree creates the tree structure for the init summary display.

@@ -102,7 +102,7 @@ func GenerateAll(chunks []chunk.Chunk, mfst *manifest.Manifest) map[string]strin
 			prev := fileChunks[i]
 			next := fileChunks[i+1]
 
-			// Skip if this entry already has a bridge (e.g. from LLM).
+			// Skip if this entry already has a bridge (e.g. from incremental cache).
 			entry := mfst.LookupEntry(prev.id)
 			if entry != nil && entry.BridgeToNext != nil {
 				continue

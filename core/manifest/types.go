@@ -64,13 +64,10 @@ type Adjacency struct {
 }
 
 // Reference describes a cross-reference between documents.
-// Populated by future cross-reference extraction; nil/empty for now.
+// Populated during compilation by extracting internal markdown links.
 type Reference struct {
-	// Path is the relative path to the referenced document.
+	// Path is the docs-root-relative path to the referenced document.
 	Path string `yaml:"path"`
-
-	// Reason describes why this reference exists.
-	Reason string `yaml:"reason"`
 }
 
 // ClassifyDocType determines the DocumentType from a source file path.

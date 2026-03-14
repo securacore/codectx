@@ -8,47 +8,6 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// countNonZero
-// ---------------------------------------------------------------------------
-
-func TestCountNonZero_AllZero(t *testing.T) {
-	if got := countNonZero(0, 0, 0); got != 0 {
-		t.Errorf("countNonZero(0,0,0) = %d, want 0", got)
-	}
-}
-
-func TestCountNonZero_AllNonZero(t *testing.T) {
-	if got := countNonZero(1, 2, 3); got != 3 {
-		t.Errorf("countNonZero(1,2,3) = %d, want 3", got)
-	}
-}
-
-func TestCountNonZero_Mixed(t *testing.T) {
-	if got := countNonZero(0, 5, 0); got != 1 {
-		t.Errorf("countNonZero(0,5,0) = %d, want 1", got)
-	}
-}
-
-func TestCountNonZero_SingleArg(t *testing.T) {
-	if got := countNonZero(42); got != 1 {
-		t.Errorf("countNonZero(42) = %d, want 1", got)
-	}
-}
-
-func TestCountNonZero_NoArgs(t *testing.T) {
-	if got := countNonZero(); got != 0 {
-		t.Errorf("countNonZero() = %d, want 0", got)
-	}
-}
-
-func TestCountNonZero_NegativeValues(t *testing.T) {
-	// Negative values are treated as zero (only positive counts matter).
-	if got := countNonZero(-1, 0, 1); got != 1 {
-		t.Errorf("countNonZero(-1,0,1) = %d, want 1", got)
-	}
-}
-
-// ---------------------------------------------------------------------------
 // renderSummary
 // ---------------------------------------------------------------------------
 
@@ -67,7 +26,7 @@ func TestRenderSummary_ContainsAllFields(t *testing.T) {
 		TotalSeconds: 1.5,
 	}
 
-	got := renderSummary(result, "my-project", "claude-sonnet-4", "/tmp/compiled", "/tmp", nil)
+	got := renderSummary(result, "my-project", "/tmp/compiled", "/tmp", nil)
 
 	checks := []string{
 		"Compilation complete",
@@ -81,7 +40,6 @@ func TestRenderSummary_ContainsAllFields(t *testing.T) {
 		"avg 500",
 		"min 200",
 		"max 800",
-		"claude-sonnet-4",
 		"compiled",
 	}
 
@@ -100,7 +58,7 @@ func TestRenderSummary_NoChunks(t *testing.T) {
 		TotalSeconds: 0.05,
 	}
 
-	got := renderSummary(result, "empty-project", "claude-sonnet-4", "/tmp/compiled", "/tmp", nil)
+	got := renderSummary(result, "empty-project", "/tmp/compiled", "/tmp", nil)
 
 	if !strings.Contains(got, "Compilation complete") {
 		t.Error("expected success header even with no chunks")
@@ -126,7 +84,7 @@ func TestRenderSummary_OversizedChunks(t *testing.T) {
 		TotalSeconds: 0.5,
 	}
 
-	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp", nil)
+	got := renderSummary(result, "test", "/tmp/compiled", "/tmp", nil)
 
 	if !strings.Contains(got, "Oversized") {
 		t.Error("expected oversized warning in summary")
@@ -149,7 +107,7 @@ func TestRenderSummary_NoOversized(t *testing.T) {
 		TotalSeconds: 0.3,
 	}
 
-	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp", nil)
+	got := renderSummary(result, "test", "/tmp/compiled", "/tmp", nil)
 
 	if strings.Contains(got, "Oversized") {
 		t.Error("should not show oversized line when count is 0")
@@ -159,7 +117,7 @@ func TestRenderSummary_NoOversized(t *testing.T) {
 func TestRenderSummary_RelativePath(t *testing.T) {
 	got := renderSummary(
 		&corecompile.Result{TotalSeconds: 0.1},
-		"test", "model",
+		"test",
 		"/projects/myapp/docs/.codectx/compiled",
 		"/projects/myapp",
 		nil,
@@ -182,7 +140,7 @@ func TestRenderSummary_OnlyObjectChunks(t *testing.T) {
 		TotalSeconds: 0.2,
 	}
 
-	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp", nil)
+	got := renderSummary(result, "test", "/tmp/compiled", "/tmp", nil)
 
 	if !strings.Contains(got, "bm25 + bm25f") {
 		t.Errorf("expected dual index indicator, got:\n%s", got)
@@ -212,7 +170,7 @@ func TestRenderSummary_WithSessionData(t *testing.T) {
 		TotalSeconds:  1.0,
 	}
 
-	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp", nil)
+	got := renderSummary(result, "test", "/tmp/compiled", "/tmp", nil)
 
 	if !strings.Contains(got, "Session") {
 		t.Error("expected Session line in summary")
@@ -240,7 +198,7 @@ func TestRenderSummary_NoSessionData(t *testing.T) {
 		TotalSeconds: 0.5,
 	}
 
-	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp", nil)
+	got := renderSummary(result, "test", "/tmp/compiled", "/tmp", nil)
 
 	if strings.Contains(got, "Session") {
 		t.Error("should not show Session line when no session data")
@@ -344,62 +302,6 @@ func TestRenderConfigError_Preferences(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// renderSummary — LLM lines
-// ---------------------------------------------------------------------------
-
-func TestRenderSummary_LLMSkipped(t *testing.T) {
-	result := &corecompile.Result{
-		TotalFiles:    5,
-		TotalChunks:   10,
-		ObjectChunks:  10,
-		TotalTokens:   5000,
-		AvgTokens:     500,
-		MinTokens:     200,
-		MaxTokens:     800,
-		LLMSkipped:    true,
-		LLMSkipReason: "no provider available",
-		TotalSeconds:  0.5,
-	}
-
-	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp", nil)
-
-	if !strings.Contains(got, "LLM") {
-		t.Error("expected LLM line in summary")
-	}
-	if !strings.Contains(got, "skipped") {
-		t.Error("expected 'skipped' in LLM line")
-	}
-	if !strings.Contains(got, "no provider available") {
-		t.Error("expected skip reason in LLM line")
-	}
-}
-
-func TestRenderSummary_LLMWithResults(t *testing.T) {
-	result := &corecompile.Result{
-		TotalFiles:     5,
-		TotalChunks:    10,
-		ObjectChunks:   10,
-		TotalTokens:    5000,
-		AvgTokens:      500,
-		MinTokens:      200,
-		MaxTokens:      800,
-		LLMAliasCount:  42,
-		LLMBridgeCount: 8,
-		LLMSeconds:     2.5,
-		TotalSeconds:   3.0,
-	}
-
-	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp", nil)
-
-	if !strings.Contains(got, "42 aliases") {
-		t.Error("expected alias count in LLM line")
-	}
-	if !strings.Contains(got, "8 bridges") {
-		t.Error("expected bridge count in LLM line")
-	}
-}
-
 func TestRenderSummary_DetBridges(t *testing.T) {
 	result := &corecompile.Result{
 		TotalFiles:     5,
@@ -413,7 +315,7 @@ func TestRenderSummary_DetBridges(t *testing.T) {
 		TotalSeconds:   0.5,
 	}
 
-	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp", nil)
+	got := renderSummary(result, "test", "/tmp/compiled", "/tmp", nil)
 
 	if !strings.Contains(got, "Bridges") {
 		t.Error("expected Bridges line in summary")
@@ -439,7 +341,7 @@ func TestRenderSummary_IncrementalMode(t *testing.T) {
 		TotalSeconds:    1.0,
 	}
 
-	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp", nil)
+	got := renderSummary(result, "test", "/tmp/compiled", "/tmp", nil)
 
 	if !strings.Contains(got, "Changes") {
 		t.Error("expected Changes line in incremental summary")
@@ -468,29 +370,9 @@ func TestRenderSummary_NonIncrementalNoChangesLine(t *testing.T) {
 		TotalSeconds:    1.0,
 	}
 
-	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp", nil)
+	got := renderSummary(result, "test", "/tmp/compiled", "/tmp", nil)
 
 	if strings.Contains(got, "Changes") {
 		t.Error("should not show Changes line in non-incremental mode")
-	}
-}
-
-func TestRenderSummary_LLMNoResults(t *testing.T) {
-	result := &corecompile.Result{
-		TotalFiles:   5,
-		TotalChunks:  10,
-		ObjectChunks: 10,
-		TotalTokens:  5000,
-		AvgTokens:    500,
-		MinTokens:    200,
-		MaxTokens:    800,
-		TotalSeconds: 0.5,
-	}
-
-	got := renderSummary(result, "test", "model", "/tmp/compiled", "/tmp", nil)
-
-	// When LLM is neither skipped nor produced results, no LLM line.
-	if strings.Contains(got, "LLM") {
-		t.Error("should not show LLM line when no results and not skipped")
 	}
 }

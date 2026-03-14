@@ -162,15 +162,15 @@ func TestBuildMetadata_TitleReadme(t *testing.T) {
 	}
 }
 
-func TestBuildMetadata_ReferencePlaceholders(t *testing.T) {
+func TestBuildMetadata_NilBlocksNoRefs(t *testing.T) {
 	m := manifest.BuildMetadata(testChunks(), nil)
 
 	for source, doc := range m.Documents {
 		if doc.ReferencesTo != nil {
-			t.Errorf("%s: references_to should be nil, got %v", source, doc.ReferencesTo)
+			t.Errorf("%s: references_to should be nil without blocks, got %v", source, doc.ReferencesTo)
 		}
 		if doc.ReferencedBy != nil {
-			t.Errorf("%s: referenced_by should be nil, got %v", source, doc.ReferencedBy)
+			t.Errorf("%s: referenced_by should be nil without blocks, got %v", source, doc.ReferencedBy)
 		}
 	}
 }
@@ -252,5 +252,175 @@ func TestMetadataPath(t *testing.T) {
 	expected := filepath.Join("/project/.codectx/compiled", "metadata.yml")
 	if got != expected {
 		t.Errorf("expected %q, got %q", expected, got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Cross-reference extraction
+// ---------------------------------------------------------------------------
+
+func TestBuildMetadata_CrossReferences(t *testing.T) {
+	// Two documents: auth links to jwt.
+	chunks := []chunk.Chunk{
+		{ID: "obj:auth.1", Type: chunk.ChunkObject, Source: "topics/auth/README.md", Sequence: 1, TotalInFile: 1, Tokens: 100},
+		{ID: "obj:jwt.1", Type: chunk.ChunkObject, Source: "topics/jwt/README.md", Sequence: 1, TotalInFile: 1, Tokens: 100},
+	}
+
+	blocks := map[string]*markdown.Document{
+		"topics/auth/README.md": {
+			Blocks: []markdown.Block{
+				{Type: markdown.BlockParagraph, Content: "See JWT docs."},
+			},
+			Links: []markdown.LinkRef{
+				{Destination: "../jwt/README.md", Text: "JWT docs"},
+			},
+		},
+		"topics/jwt/README.md": {
+			Blocks: []markdown.Block{
+				{Type: markdown.BlockParagraph, Content: "JWT details."},
+			},
+		},
+	}
+
+	m := manifest.BuildMetadata(chunks, blocks)
+
+	// Auth doc should reference JWT doc.
+	authDoc := m.Documents["topics/auth/README.md"]
+	if len(authDoc.ReferencesTo) != 1 {
+		t.Fatalf("auth: expected 1 ReferencesTo, got %d", len(authDoc.ReferencesTo))
+	}
+	if authDoc.ReferencesTo[0].Path != "topics/jwt/README.md" {
+		t.Errorf("auth: ReferencesTo[0].Path = %q, want topics/jwt/README.md", authDoc.ReferencesTo[0].Path)
+	}
+
+	// JWT doc should be referenced by auth doc.
+	jwtDoc := m.Documents["topics/jwt/README.md"]
+	if len(jwtDoc.ReferencedBy) != 1 {
+		t.Fatalf("jwt: expected 1 ReferencedBy, got %d", len(jwtDoc.ReferencedBy))
+	}
+	if jwtDoc.ReferencedBy[0].Path != "topics/auth/README.md" {
+		t.Errorf("jwt: ReferencedBy[0].Path = %q, want topics/auth/README.md", jwtDoc.ReferencedBy[0].Path)
+	}
+}
+
+func TestBuildMetadata_CrossReferences_SelfReference(t *testing.T) {
+	chunks := []chunk.Chunk{
+		{ID: "obj:auth.1", Type: chunk.ChunkObject, Source: "topics/auth/README.md", Sequence: 1, TotalInFile: 1, Tokens: 100},
+	}
+
+	blocks := map[string]*markdown.Document{
+		"topics/auth/README.md": {
+			Links: []markdown.LinkRef{
+				{Destination: "./README.md", Text: "this page"}, // self-reference
+			},
+		},
+	}
+
+	m := manifest.BuildMetadata(chunks, blocks)
+
+	authDoc := m.Documents["topics/auth/README.md"]
+	if len(authDoc.ReferencesTo) != 0 {
+		t.Errorf("self-references should be excluded, got %d refs", len(authDoc.ReferencesTo))
+	}
+}
+
+func TestBuildMetadata_CrossReferences_NonExistentTarget(t *testing.T) {
+	chunks := []chunk.Chunk{
+		{ID: "obj:auth.1", Type: chunk.ChunkObject, Source: "topics/auth/README.md", Sequence: 1, TotalInFile: 1, Tokens: 100},
+	}
+
+	blocks := map[string]*markdown.Document{
+		"topics/auth/README.md": {
+			Links: []markdown.LinkRef{
+				{Destination: "../nonexistent/README.md", Text: "missing doc"},
+			},
+		},
+	}
+
+	m := manifest.BuildMetadata(chunks, blocks)
+
+	authDoc := m.Documents["topics/auth/README.md"]
+	if len(authDoc.ReferencesTo) != 0 {
+		t.Errorf("links to non-existent docs should be excluded, got %d refs", len(authDoc.ReferencesTo))
+	}
+}
+
+func TestBuildMetadata_CrossReferences_Bidirectional(t *testing.T) {
+	// Auth links to JWT, JWT links to Auth.
+	chunks := []chunk.Chunk{
+		{ID: "obj:auth.1", Type: chunk.ChunkObject, Source: "topics/auth/README.md", Sequence: 1, TotalInFile: 1, Tokens: 100},
+		{ID: "obj:jwt.1", Type: chunk.ChunkObject, Source: "topics/jwt/README.md", Sequence: 1, TotalInFile: 1, Tokens: 100},
+	}
+
+	blocks := map[string]*markdown.Document{
+		"topics/auth/README.md": {
+			Links: []markdown.LinkRef{
+				{Destination: "../jwt/README.md", Text: "JWT"},
+			},
+		},
+		"topics/jwt/README.md": {
+			Links: []markdown.LinkRef{
+				{Destination: "../auth/README.md", Text: "Auth"},
+			},
+		},
+	}
+
+	m := manifest.BuildMetadata(chunks, blocks)
+
+	authDoc := m.Documents["topics/auth/README.md"]
+	jwtDoc := m.Documents["topics/jwt/README.md"]
+
+	// Auth references JWT.
+	if len(authDoc.ReferencesTo) != 1 || authDoc.ReferencesTo[0].Path != "topics/jwt/README.md" {
+		t.Errorf("auth: expected ReferencesTo jwt, got %+v", authDoc.ReferencesTo)
+	}
+
+	// JWT references Auth.
+	if len(jwtDoc.ReferencesTo) != 1 || jwtDoc.ReferencesTo[0].Path != "topics/auth/README.md" {
+		t.Errorf("jwt: expected ReferencesTo auth, got %+v", jwtDoc.ReferencesTo)
+	}
+
+	// Auth is referenced by JWT.
+	if len(authDoc.ReferencedBy) != 1 || authDoc.ReferencedBy[0].Path != "topics/jwt/README.md" {
+		t.Errorf("auth: expected ReferencedBy jwt, got %+v", authDoc.ReferencedBy)
+	}
+
+	// JWT is referenced by Auth.
+	if len(jwtDoc.ReferencedBy) != 1 || jwtDoc.ReferencedBy[0].Path != "topics/auth/README.md" {
+		t.Errorf("jwt: expected ReferencedBy auth, got %+v", jwtDoc.ReferencedBy)
+	}
+}
+
+func TestBuildMetadata_CrossReferences_MultipleTargets(t *testing.T) {
+	chunks := []chunk.Chunk{
+		{ID: "obj:auth.1", Type: chunk.ChunkObject, Source: "topics/auth/README.md", Sequence: 1, TotalInFile: 1, Tokens: 100},
+		{ID: "obj:jwt.1", Type: chunk.ChunkObject, Source: "topics/jwt/README.md", Sequence: 1, TotalInFile: 1, Tokens: 100},
+		{ID: "obj:oauth.1", Type: chunk.ChunkObject, Source: "topics/oauth/README.md", Sequence: 1, TotalInFile: 1, Tokens: 100},
+	}
+
+	blocks := map[string]*markdown.Document{
+		"topics/auth/README.md": {
+			Links: []markdown.LinkRef{
+				{Destination: "../jwt/README.md", Text: "JWT"},
+				{Destination: "../oauth/README.md", Text: "OAuth"},
+			},
+		},
+		"topics/jwt/README.md":   {},
+		"topics/oauth/README.md": {},
+	}
+
+	m := manifest.BuildMetadata(chunks, blocks)
+
+	authDoc := m.Documents["topics/auth/README.md"]
+	if len(authDoc.ReferencesTo) != 2 {
+		t.Fatalf("auth: expected 2 ReferencesTo, got %d", len(authDoc.ReferencesTo))
+	}
+
+	// Should be sorted.
+	if authDoc.ReferencesTo[0].Path != "topics/jwt/README.md" {
+		t.Errorf("auth: ReferencesTo[0].Path = %q, want topics/jwt/README.md", authDoc.ReferencesTo[0].Path)
+	}
+	if authDoc.ReferencesTo[1].Path != "topics/oauth/README.md" {
+		t.Errorf("auth: ReferencesTo[1].Path = %q, want topics/oauth/README.md", authDoc.ReferencesTo[1].Path)
 	}
 }

@@ -39,12 +39,12 @@ type DocumentEntry struct {
 	// TotalTokens is the sum of all chunk token counts for this document.
 	TotalTokens int `yaml:"total_tokens"`
 
-	// ReferencesTo lists documents that this document references.
-	// Nil until cross-reference extraction populates it.
+	// ReferencesTo lists documents that this document links to.
+	// Populated during compilation by resolving internal markdown links.
 	ReferencesTo []Reference `yaml:"references_to"`
 
-	// ReferencedBy lists documents that reference this document.
-	// Nil until cross-reference extraction populates it.
+	// ReferencedBy lists documents that link to this document.
+	// Computed as the inverse of ReferencesTo across all documents.
 	ReferencedBy []Reference `yaml:"referenced_by"`
 }
 
@@ -95,16 +95,112 @@ func BuildMetadata(chunks []chunk.Chunk, blocks map[string]*markdown.Document) *
 		title := deriveTitle(source, blocks)
 
 		m.Documents[source] = &DocumentEntry{
-			Type:         ClassifyDocType(source),
-			Title:        title,
-			Chunks:       chunkIDs,
-			TotalTokens:  acc.tokens,
-			ReferencesTo: nil, // Placeholder for cross-reference extraction.
-			ReferencedBy: nil, // Placeholder for cross-reference extraction.
+			Type:        ClassifyDocType(source),
+			Title:       title,
+			Chunks:      chunkIDs,
+			TotalTokens: acc.tokens,
 		}
 	}
 
+	// Populate cross-references from internal markdown links.
+	populateCrossRefs(m, blocks)
+
 	return m
+}
+
+// populateCrossRefs resolves internal markdown links into bidirectional
+// cross-reference entries on each DocumentEntry.
+//
+// For each document, it resolves relative link destinations to docs-root-
+// relative paths, filters to only known documents, and populates
+// ReferencesTo. After all forward refs are built, the inverse
+// ReferencedBy is computed.
+func populateCrossRefs(m *Metadata, blocks map[string]*markdown.Document) {
+	if blocks == nil {
+		return
+	}
+
+	// Build the set of known document paths for validation.
+	knownDocs := make(map[string]bool, len(m.Documents))
+	for path := range m.Documents {
+		knownDocs[path] = true
+	}
+
+	// Forward pass: resolve links and populate ReferencesTo.
+	for source, doc := range blocks {
+		entry, ok := m.Documents[source]
+		if !ok || len(doc.Links) == 0 {
+			continue
+		}
+
+		refs := resolveDocLinks(source, doc.Links, knownDocs)
+		if len(refs) > 0 {
+			entry.ReferencesTo = refs
+		}
+	}
+
+	// Inverse pass: compute ReferencedBy from ReferencesTo.
+	for source, entry := range m.Documents {
+		for _, ref := range entry.ReferencesTo {
+			if target, ok := m.Documents[ref.Path]; ok {
+				target.ReferencedBy = append(target.ReferencedBy, Reference{
+					Path: source,
+				})
+			}
+		}
+	}
+
+	// Sort ReferencedBy for deterministic output.
+	for _, entry := range m.Documents {
+		if len(entry.ReferencedBy) > 1 {
+			sort.Slice(entry.ReferencedBy, func(i, j int) bool {
+				return entry.ReferencedBy[i].Path < entry.ReferencedBy[j].Path
+			})
+		}
+	}
+}
+
+// resolveDocLinks converts a document's raw LinkRef destinations into
+// docs-root-relative Reference entries, filtering to only links that
+// target known documents. Self-references are excluded.
+func resolveDocLinks(sourcePath string, links []markdown.LinkRef, knownDocs map[string]bool) []Reference {
+	sourceDir := filepath.Dir(sourcePath)
+	var refs []Reference
+	seen := make(map[string]bool)
+
+	for _, link := range links {
+		// Resolve the relative link destination against the source directory.
+		resolved := filepath.Join(sourceDir, link.Destination)
+		resolved = filepath.Clean(resolved)
+
+		// Normalize to forward slashes for consistency.
+		resolved = filepath.ToSlash(resolved)
+
+		// Skip self-references.
+		if resolved == sourcePath {
+			continue
+		}
+
+		// Skip duplicates.
+		if seen[resolved] {
+			continue
+		}
+		seen[resolved] = true
+
+		// Only include links to known documents.
+		if !knownDocs[resolved] {
+			continue
+		}
+
+		refs = append(refs, Reference{Path: resolved})
+	}
+
+	// Sort for deterministic output.
+	sort.Slice(refs, func(i, j int) bool {
+		return refs[i].Path < refs[j].Path
+	})
+
+	return refs
 }
 
 // chunkRef pairs a chunk ID with its sequence for sorting.

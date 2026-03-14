@@ -185,12 +185,12 @@ func TestGraphRerank_CrossRefBoost_WithMetadata(t *testing.T) {
 		Documents: map[string]*manifest.DocumentEntry{
 			"topics/auth/README.md": {
 				ReferencesTo: []manifest.Reference{
-					{Path: "topics/jwt/README.md", Reason: "link"},
+					{Path: "topics/jwt/README.md"},
 				},
 			},
 			"topics/jwt/README.md": {
 				ReferencedBy: []manifest.Reference{
-					{Path: "topics/auth/README.md", Reason: "link"},
+					{Path: "topics/auth/README.md"},
 				},
 			},
 		},

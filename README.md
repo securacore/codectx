@@ -9,7 +9,7 @@
 <h1 align="center">codectx</h1>
 
 <p align="center">
-  A package manager, compiler, indexer, crawler, and manager of AI-driven documentation management and package creation and distribution.
+  A package manager, compiler, and package manager for AI-driven documentation and AI documentation distribution.
 </p>
 
 <p align="center">

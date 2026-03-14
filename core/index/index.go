@@ -181,11 +181,6 @@ func NewFieldIndex(cfg project.BM25FConfig) *FieldIndex {
 	}
 }
 
-// NewFieldIndexFromConfig creates a FieldIndex from the preferences config.
-func NewFieldIndexFromConfig(cfg project.BM25FConfig) *FieldIndex {
-	return NewFieldIndex(cfg)
-}
-
 // codeBlockPattern matches fenced code blocks in markdown.
 var codeBlockPattern = regexp.MustCompile("(?s)```[^\n]*\n(.*?)```")
 

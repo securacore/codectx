@@ -21,8 +21,6 @@ const hashPrefix = "sha256:"
 // hashes are tracked individually in hashes.yml for incremental compilation.
 // Each name corresponds to a directory under docs/system/topics/.
 var systemInstructionDirs = []string{
-	"taxonomy-generation",
-	"bridge-summaries",
 	"context-assembly",
 }
 
@@ -66,9 +64,9 @@ type Hashes struct {
 	// Files maps relative source file paths to their "sha256:<hex>" content hashes.
 	Files map[string]string `yaml:"files"`
 
-	// System maps system instruction directory names (e.g. "taxonomy-generation")
-	// to their "sha256:<hex>" hashes. These are the authoritative source for
-	// cache invalidation of LLM-generated artifacts.
+	// System maps system instruction directory names (e.g. "context-assembly")
+	// to their "sha256:<hex>" hashes. Used for incremental compilation
+	// cache invalidation when system documentation changes.
 	System map[string]string `yaml:"system"`
 }
 

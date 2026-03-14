@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/securacore/codectx/core/detect"
 	"github.com/securacore/codectx/core/project"
 	"github.com/securacore/codectx/core/registry"
 	"github.com/securacore/codectx/core/tui"
@@ -99,102 +98,6 @@ func TestResolveTarget_FileNotDir(t *testing.T) {
 	_, _, err := resolveTarget([]string{filePath})
 	if err == nil {
 		t.Fatal("expected error when target is a file, not a directory")
-	}
-}
-
-func TestDetectProviderCapabilities_ClaudeOnly(t *testing.T) {
-	t.Parallel()
-
-	result := detect.Result{
-		Tools: []detect.Tool{
-			{Name: "Claude Code", Binary: "claude"},
-		},
-	}
-	hasCLI, hasAPI := detectProviderCapabilities(result)
-	if !hasCLI {
-		t.Error("expected hasCLI=true")
-	}
-	if hasAPI {
-		t.Error("expected hasAPI=false")
-	}
-}
-
-func TestDetectProviderCapabilities_APIOnly(t *testing.T) {
-	t.Parallel()
-
-	result := detect.Result{
-		Providers: []detect.Provider{
-			{Name: "Anthropic", EnvVar: "ANTHROPIC_API_KEY"},
-		},
-	}
-	hasCLI, hasAPI := detectProviderCapabilities(result)
-	if hasCLI {
-		t.Error("expected hasCLI=false")
-	}
-	if !hasAPI {
-		t.Error("expected hasAPI=true")
-	}
-}
-
-func TestDetectProviderCapabilities_Both(t *testing.T) {
-	t.Parallel()
-
-	result := detect.Result{
-		Tools: []detect.Tool{
-			{Name: "Claude Code", Binary: "claude"},
-		},
-		Providers: []detect.Provider{
-			{Name: "Anthropic", EnvVar: "ANTHROPIC_API_KEY"},
-		},
-	}
-	hasCLI, hasAPI := detectProviderCapabilities(result)
-	if !hasCLI {
-		t.Error("expected hasCLI=true")
-	}
-	if !hasAPI {
-		t.Error("expected hasAPI=true")
-	}
-}
-
-func TestDetectProviderCapabilities_Neither(t *testing.T) {
-	t.Parallel()
-
-	result := detect.Result{}
-	hasCLI, hasAPI := detectProviderCapabilities(result)
-	if hasCLI {
-		t.Error("expected hasCLI=false")
-	}
-	if hasAPI {
-		t.Error("expected hasAPI=false")
-	}
-}
-
-func TestAutoSelectProvider_CLI(t *testing.T) {
-	t.Parallel()
-	if got := autoSelectProvider(true, false); got != project.ProviderCLI {
-		t.Errorf("autoSelectProvider(true, false) = %q, want %q", got, project.ProviderCLI)
-	}
-}
-
-func TestAutoSelectProvider_API(t *testing.T) {
-	t.Parallel()
-	if got := autoSelectProvider(false, true); got != project.ProviderAPI {
-		t.Errorf("autoSelectProvider(false, true) = %q, want %q", got, project.ProviderAPI)
-	}
-}
-
-func TestAutoSelectProvider_CLIPrecedence(t *testing.T) {
-	t.Parallel()
-	// CLI takes precedence when both are available.
-	if got := autoSelectProvider(true, true); got != project.ProviderCLI {
-		t.Errorf("autoSelectProvider(true, true) = %q, want %q", got, project.ProviderCLI)
-	}
-}
-
-func TestAutoSelectProvider_Neither(t *testing.T) {
-	t.Parallel()
-	if got := autoSelectProvider(false, false); got != "" {
-		t.Errorf("autoSelectProvider(false, false) = %q, want empty", got)
 	}
 }
 

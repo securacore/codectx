@@ -107,6 +107,15 @@ type Block struct {
 	Tokens int
 }
 
+// LinkRef represents an internal markdown link found in a document.
+type LinkRef struct {
+	// Destination is the raw link target path (e.g., "../jwt/README.md").
+	Destination string
+
+	// Text is the link's display text (e.g., "JWT documentation").
+	Text string
+}
+
 // Document represents a parsed and block-extracted markdown file.
 type Document struct {
 	// Source is the original markdown source bytes.
@@ -114,6 +123,11 @@ type Document struct {
 
 	// Blocks is the ordered sequence of semantic blocks.
 	Blocks []Block
+
+	// Links holds internal markdown links found in the document.
+	// Only links targeting .md files are included; external URLs,
+	// anchor-only links, and duplicates are filtered out.
+	Links []LinkRef
 
 	// MinLevel is the minimum heading level found in the document.
 	// Used for heading level normalization (e.g., if MinLevel is 3,
@@ -128,7 +142,7 @@ type Document struct {
 
 // Parse parses markdown source bytes into a Document with semantic blocks.
 // The blocks preserve heading hierarchy context and are ordered as they
-// appear in the source.
+// appear in the source. Internal markdown links are also extracted.
 func Parse(source []byte) *Document {
 	root := parseAST(source)
 
@@ -146,10 +160,72 @@ func Parse(source []byte) *Document {
 		extractor.extract(child, doc)
 	}
 
+	// Extract internal markdown links from the same AST.
+	doc.Links = collectLinks(root, source)
+
 	// Compute MinLevel.
 	doc.MinLevel = computeMinLevel(doc.Blocks)
 
 	return doc
+}
+
+// collectLinks walks the entire AST recursively to find internal markdown
+// links (those targeting .md files). External URLs, anchor-only links,
+// and duplicates are filtered out.
+func collectLinks(root ast.Node, source []byte) []LinkRef {
+	var links []LinkRef
+	seen := make(map[string]bool)
+
+	_ = ast.Walk(root, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+
+		link, ok := node.(*ast.Link)
+		if !ok {
+			return ast.WalkContinue, nil
+		}
+
+		dest := string(link.Destination)
+
+		// Filter: skip external URLs.
+		if strings.HasPrefix(dest, "http://") || strings.HasPrefix(dest, "https://") {
+			return ast.WalkContinue, nil
+		}
+
+		// Filter: skip anchor-only links (#section).
+		if strings.HasPrefix(dest, "#") {
+			return ast.WalkContinue, nil
+		}
+
+		// Filter: skip non-markdown links.
+		// Strip fragment (#section) before checking extension.
+		cleanDest := dest
+		if idx := strings.Index(cleanDest, "#"); idx >= 0 {
+			cleanDest = cleanDest[:idx]
+		}
+		if !strings.HasSuffix(strings.ToLower(cleanDest), ".md") {
+			return ast.WalkContinue, nil
+		}
+
+		// Deduplicate by cleaned destination.
+		if seen[cleanDest] {
+			return ast.WalkContinue, nil
+		}
+		seen[cleanDest] = true
+
+		// Extract link display text.
+		text := renderInlineText(link, source)
+
+		links = append(links, LinkRef{
+			Destination: cleanDest,
+			Text:        text,
+		})
+
+		return ast.WalkContinue, nil
+	})
+
+	return links
 }
 
 // blockExtractor maintains state during block extraction.

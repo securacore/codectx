@@ -78,8 +78,8 @@ type ManifestEntry struct {
 	Adjacent *Adjacency `yaml:"adjacent,omitempty"`
 
 	// BridgeToNext is a summary bridging this chunk to the next.
-	// Populated deterministically (heading transition + RAKE + last sentence),
-	// then optionally overwritten by LLM augmentation if enabled.
+	// Generated deterministically using heading transitions, RAKE key
+	// phrase extraction, and last-sentence analysis.
 	BridgeToNext *string `yaml:"bridge_to_next"`
 
 	// SpecChunk is the ID of the corresponding spec chunk, if one exists.
@@ -128,7 +128,7 @@ func BuildManifest(chunks []chunk.Chunk, encoding string, bridgeHash *string, ch
 			TotalInFile:  c.TotalInFile,
 			Tokens:       c.Tokens,
 			Terms:        terms,
-			BridgeToNext: nil, // Populated by deterministic + optional LLM bridges.
+			BridgeToNext: nil, // Populated by deterministic bridge generation.
 		}
 
 		m.TotalTokens += c.Tokens

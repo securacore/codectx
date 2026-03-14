@@ -10,8 +10,8 @@ import (
 func TestSystemFiles_ReturnsAllExpectedFiles(t *testing.T) {
 	files := embed.SystemFiles()
 
-	if len(files) != 9 {
-		t.Fatalf("expected 9 system files, got %d", len(files))
+	if len(files) != 5 {
+		t.Fatalf("expected 5 system files, got %d", len(files))
 	}
 
 	// Verify all dest paths start with "system/".
@@ -75,10 +75,6 @@ func TestSystemFiles_CoversExpectedTopics(t *testing.T) {
 		"system/foundation/compiler-philosophy/README.spec.md": false,
 		"system/foundation/documentation-protocol/README.md":   false,
 		"system/foundation/history/README.md":                  false,
-		"system/topics/taxonomy-generation/README.md":          false,
-		"system/topics/taxonomy-generation/README.spec.md":     false,
-		"system/topics/bridge-summaries/README.md":             false,
-		"system/topics/bridge-summaries/README.spec.md":        false,
 		"system/topics/context-assembly/README.md":             false,
 	}
 

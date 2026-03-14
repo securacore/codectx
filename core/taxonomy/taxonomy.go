@@ -58,10 +58,6 @@ type Taxonomy struct {
 	// Encoding is the tokenizer encoding used (e.g. "cl100k_base").
 	Encoding string `yaml:"encoding"`
 
-	// CompiledWith is the LLM model used for taxonomy augmentation.
-	// Empty until LLM augmentation (Step 11) populates it.
-	CompiledWith string `yaml:"compiled_with,omitempty"`
-
 	// CompiledAt is the ISO 8601 timestamp of compilation.
 	CompiledAt string `yaml:"compiled_at"`
 
@@ -83,7 +79,7 @@ type Term struct {
 	Canonical string `yaml:"canonical"`
 
 	// Aliases are alternative labels (SKOS altLabel).
-	// Empty until LLM augmentation (Step 11) populates them.
+	// Populated by corpus mining, POS extraction, and dictionary lookup.
 	Aliases []string `yaml:"aliases,omitempty"`
 
 	// Broader is the parent term key in the hierarchy, or empty for top-level.

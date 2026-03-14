@@ -187,12 +187,6 @@ func TestDetectInstructionChanges_NoChanges(t *testing.T) {
 
 	ic := compile.DetectInstructionChanges(system, system)
 
-	if ic.TaxonomyGeneration {
-		t.Error("TaxonomyGeneration should be false")
-	}
-	if ic.BridgeSummaries {
-		t.Error("BridgeSummaries should be false")
-	}
 	if ic.ContextAssembly {
 		t.Error("ContextAssembly should be false")
 	}
@@ -201,23 +195,18 @@ func TestDetectInstructionChanges_NoChanges(t *testing.T) {
 	}
 }
 
-func TestDetectInstructionChanges_TaxonomyChanged(t *testing.T) {
+func TestDetectInstructionChanges_ContextChanged(t *testing.T) {
 	prev := map[string]string{
-		"taxonomy-generation": "sha256:old",
-		"bridge-summaries":    "sha256:bbb",
+		"context-assembly": "sha256:old",
 	}
 	curr := map[string]string{
-		"taxonomy-generation": "sha256:new",
-		"bridge-summaries":    "sha256:bbb",
+		"context-assembly": "sha256:new",
 	}
 
 	ic := compile.DetectInstructionChanges(curr, prev)
 
-	if !ic.TaxonomyGeneration {
-		t.Error("TaxonomyGeneration should be true")
-	}
-	if ic.BridgeSummaries {
-		t.Error("BridgeSummaries should be false")
+	if !ic.ContextAssembly {
+		t.Error("ContextAssembly should be true")
 	}
 	if !ic.AnyChanged() {
 		t.Error("AnyChanged should be true")
@@ -239,52 +228,25 @@ func TestDetectInstructionChanges_NewDirectory(t *testing.T) {
 
 func TestDetectInstructionChanges_RemovedDirectory(t *testing.T) {
 	prev := map[string]string{
-		"bridge-summaries": "sha256:old",
+		"context-assembly": "sha256:old",
 	}
 	curr := map[string]string{}
 
 	ic := compile.DetectInstructionChanges(curr, prev)
 
-	if !ic.BridgeSummaries {
-		t.Error("BridgeSummaries should be true when dir is removed")
+	if !ic.ContextAssembly {
+		t.Error("ContextAssembly should be true when dir is removed")
 	}
 }
 
 func TestDetectInstructionChanges_BothMissing(t *testing.T) {
-	// Neither prev nor curr has context-assembly.
-	prev := map[string]string{
-		"taxonomy-generation": "sha256:aaa",
-	}
-	curr := map[string]string{
-		"taxonomy-generation": "sha256:aaa",
-	}
+	prev := map[string]string{}
+	curr := map[string]string{}
 
 	ic := compile.DetectInstructionChanges(curr, prev)
 
 	if ic.ContextAssembly {
 		t.Error("ContextAssembly should be false when missing in both")
-	}
-}
-
-func TestDetectInstructionChanges_AllChanged(t *testing.T) {
-	prev := map[string]string{
-		"taxonomy-generation": "sha256:old1",
-		"bridge-summaries":    "sha256:old2",
-		"context-assembly":    "sha256:old3",
-	}
-	curr := map[string]string{
-		"taxonomy-generation": "sha256:new1",
-		"bridge-summaries":    "sha256:new2",
-		"context-assembly":    "sha256:new3",
-	}
-
-	ic := compile.DetectInstructionChanges(curr, prev)
-
-	if !ic.TaxonomyGeneration || !ic.BridgeSummaries || !ic.ContextAssembly {
-		t.Error("all should be changed")
-	}
-	if !ic.AnyChanged() {
-		t.Error("AnyChanged should be true")
 	}
 }
 

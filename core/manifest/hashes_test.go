@@ -272,19 +272,12 @@ func TestHashDir_NestedFiles(t *testing.T) {
 func TestHashSystemDirs_HashesExistingDirs(t *testing.T) {
 	topicsDir := t.TempDir()
 
-	// Create two of three system instruction dirs.
-	taxDir := filepath.Join(topicsDir, "taxonomy-generation")
-	bridgeDir := filepath.Join(topicsDir, "bridge-summaries")
-	if err := os.MkdirAll(taxDir, 0o755); err != nil {
+	// Create the context-assembly system instruction dir.
+	ctxDir := filepath.Join(topicsDir, "context-assembly")
+	if err := os.MkdirAll(ctxDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(bridgeDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(taxDir, "README.md"), []byte("# Taxonomy"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(bridgeDir, "README.md"), []byte("# Bridges"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(ctxDir, "README.md"), []byte("# Context Assembly"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -293,17 +286,11 @@ func TestHashSystemDirs_HashesExistingDirs(t *testing.T) {
 		t.Fatalf("HashSystemDirs: %v", err)
 	}
 
-	if len(hashes) != 2 {
-		t.Errorf("expected 2 entries, got %d", len(hashes))
+	if len(hashes) != 1 {
+		t.Errorf("expected 1 entry, got %d", len(hashes))
 	}
-	if _, ok := hashes["taxonomy-generation"]; !ok {
-		t.Error("expected taxonomy-generation hash")
-	}
-	if _, ok := hashes["bridge-summaries"]; !ok {
-		t.Error("expected bridge-summaries hash")
-	}
-	if _, ok := hashes["context-assembly"]; ok {
-		t.Error("context-assembly dir does not exist, should not be hashed")
+	if _, ok := hashes["context-assembly"]; !ok {
+		t.Error("expected context-assembly hash")
 	}
 }
 
@@ -320,7 +307,7 @@ func TestHashSystemDirs_SkipsMissingDirs(t *testing.T) {
 	}
 }
 
-func TestHashSystemDirs_AllThreeDirs(t *testing.T) {
+func TestHashSystemDirs_AllDirs(t *testing.T) {
 	topicsDir := t.TempDir()
 
 	for _, name := range manifest.SystemInstructionDirs() {
@@ -338,8 +325,9 @@ func TestHashSystemDirs_AllThreeDirs(t *testing.T) {
 		t.Fatalf("HashSystemDirs: %v", err)
 	}
 
-	if len(hashes) != 3 {
-		t.Errorf("expected 3 entries, got %d", len(hashes))
+	expected := len(manifest.SystemInstructionDirs())
+	if len(hashes) != expected {
+		t.Errorf("expected %d entries, got %d", expected, len(hashes))
 	}
 
 	for _, name := range manifest.SystemInstructionDirs() {

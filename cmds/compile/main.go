@@ -119,7 +119,7 @@ func run(_ context.Context, cmd *cli.Command) error {
 	}
 
 	// --- Step 4: Display summary ---
-	fmt.Print(renderSummary(result, cfg.Name, aiCfg.Compilation.Model, compileCfg.CompiledDir, projectDir, prefsCfg))
+	fmt.Print(renderSummary(result, cfg.Name, compileCfg.CompiledDir, projectDir, prefsCfg))
 
 	// --- Step 5: Display warnings ---
 	if len(result.Warnings) > 0 {
@@ -166,7 +166,7 @@ func renderCompileError(err error) error {
 }
 
 // renderSummary formats the post-compilation summary.
-func renderSummary(result *compile.Result, projectName, model, compiledDir, projectDir string, prefsCfg *project.PreferencesConfig) string {
+func renderSummary(result *compile.Result, projectName, compiledDir, projectDir string, prefsCfg *project.PreferencesConfig) string {
 	var b strings.Builder
 
 	// Success header.
@@ -233,25 +233,21 @@ func renderSummary(result *compile.Result, projectName, model, compiledDir, proj
 		)
 	}
 
+	// Cross-references.
+	if result.CrossRefLinks > 0 {
+		fmt.Fprintf(&b, "%s%s\n", tui.Indent(1),
+			tui.KeyValue("Cross-refs", fmt.Sprintf("%s links across %s documents",
+				tui.FormatNumber(result.CrossRefLinks),
+				tui.FormatNumber(result.CrossRefDocs),
+			)),
+		)
+	}
+
 	// Deterministic bridges.
 	if result.DetBridgeCount > 0 {
 		fmt.Fprintf(&b, "%s%s\n", tui.Indent(1),
 			tui.KeyValue("Bridges", fmt.Sprintf("%s deterministic",
 				tui.FormatNumber(result.DetBridgeCount),
-			)),
-		)
-	}
-
-	// LLM augmentation.
-	if result.LLMSkipped {
-		fmt.Fprintf(&b, "%s%s\n", tui.Indent(1),
-			tui.KeyValue("LLM", fmt.Sprintf("skipped (%s)", result.LLMSkipReason)),
-		)
-	} else if result.LLMAliasCount > 0 || result.LLMBridgeCount > 0 {
-		fmt.Fprintf(&b, "%s%s\n", tui.Indent(1),
-			tui.KeyValue("LLM", fmt.Sprintf("%d aliases, %d bridges (%s)",
-				result.LLMAliasCount, result.LLMBridgeCount,
-				tui.FormatDuration(result.LLMSeconds),
 			)),
 		)
 	}
@@ -275,11 +271,6 @@ func renderSummary(result *compile.Result, projectName, model, compiledDir, proj
 	// Timing.
 	fmt.Fprintf(&b, "%s%s\n", tui.Indent(1),
 		tui.KeyValue("Time", tui.FormatDuration(result.TotalSeconds)),
-	)
-
-	// Configuration info.
-	fmt.Fprintf(&b, "\n%s%s\n", tui.Indent(1),
-		tui.KeyValue("Model", model),
 	)
 
 	// Output path relative to project dir.
@@ -314,15 +305,4 @@ func renderWarnings(warnings []string) string {
 			{Text: "Fix the warnings and recompile:", Command: "codectx compile"},
 		},
 	}.Render()
-}
-
-// countNonZero returns how many of the given ints are greater than zero.
-func countNonZero(values ...int) int {
-	count := 0
-	for _, v := range values {
-		if v > 0 {
-			count++
-		}
-	}
-	return count
 }

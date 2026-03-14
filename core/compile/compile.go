@@ -1,7 +1,6 @@
 package compile
 
 import (
-	"context"
 	"fmt"
 	"math"
 	"os"
@@ -13,7 +12,6 @@ import (
 	codectx "github.com/securacore/codectx/core/context"
 	"github.com/securacore/codectx/core/index"
 	"github.com/securacore/codectx/core/link"
-	"github.com/securacore/codectx/core/llm"
 	"github.com/securacore/codectx/core/manifest"
 	"github.com/securacore/codectx/core/markdown"
 	"github.com/securacore/codectx/core/project"
@@ -30,7 +28,6 @@ const (
 	StageWrite    = "write"
 	StageIndex    = "index"
 	StageTaxonomy = "taxonomy"
-	StageLLM      = "llm"
 	StageManifest = "manifest"
 	StageContext  = "context"
 	StageLink     = "link"
@@ -71,15 +68,6 @@ type Config struct {
 
 	// Taxonomy holds taxonomy extraction settings from preferences.yml.
 	Taxonomy project.TaxonomyConfig
-
-	// Model is the compilation model name from ai.yml (e.g. "claude-sonnet-4-20250514").
-	Model string
-
-	// Provider is the LLM provider from ai.yml ("cli", "api", or "" for auto-detect).
-	Provider string
-
-	// APIKey is the Anthropic API key for the API provider. Empty if using CLI.
-	APIKey string
 
 	// ActiveDeps maps package names to active status.
 	// Only packages with a true value are included in compilation.
@@ -125,15 +113,12 @@ type Result struct {
 	// Taxonomy extraction.
 	TaxonomyTerms int
 
+	// Cross-references.
+	CrossRefLinks int // total forward cross-reference links across all documents
+	CrossRefDocs  int // number of documents with at least one cross-reference
+
 	// Bridge generation.
 	DetBridgeCount int // deterministic bridges (heading + RAKE + last sentence)
-
-	// LLM augmentation.
-	LLMAliasCount  int
-	LLMBridgeCount int
-	LLMSeconds     float64
-	LLMSkipped     bool
-	LLMSkipReason  string
 
 	// Incremental compilation.
 	IncrementalMode bool // true if incremental mode was active (not first compile)
@@ -207,17 +192,14 @@ type pipelineState struct {
 	taxResult    *taxonomy.Result
 	systemHashes map[string]string
 
-	// LLM.
-	augResult *llm.AugmentResult
-
 	// Heuristics (accumulated across stages).
 	heur *manifest.Heuristics
 }
 
 // Run executes the full compilation pipeline. It discovers source files,
-// parses and strips markdown, counts tokens, chunks documents, builds the
-// BM25 search index, extracts taxonomy terms, runs LLM augmentation for
-// alias generation and bridge summaries, and generates all manifest files.
+// parses and strips markdown, counts tokens, chunks documents, builds
+// BM25 and BM25F search indexes, extracts taxonomy terms, generates
+// deterministic bridge summaries, and produces all manifest files.
 //
 // When cfg.Incremental is true and previous hashes exist, only changed files
 // are re-parsed and re-chunked. Unchanged chunks are loaded from disk.
@@ -292,11 +274,6 @@ func Run(cfg Config, progress ProgressFunc) (*Result, error) {
 
 	// --- Build BM25F field-weighted index (needs taxonomy terms) ---
 	if err := ps.stageFieldIndex(); err != nil {
-		return nil, err
-	}
-
-	// --- LLM augmentation ---
-	if err := ps.stageLLM(); err != nil {
 		return nil, err
 	}
 
@@ -645,7 +622,7 @@ func (ps *pipelineState) stageFieldIndex() error {
 
 	fieldStart := time.Now()
 
-	ps.fieldIdx = index.NewFieldIndexFromConfig(ps.cfg.BM25F)
+	ps.fieldIdx = index.NewFieldIndex(ps.cfg.BM25F)
 
 	// Build a map of chunk ID → term keys for the terms field.
 	var termsByChunk map[string][]string
@@ -696,66 +673,6 @@ func (ps *pipelineState) stageTaxonomy() error {
 	return nil
 }
 
-// stageLLM runs LLM augmentation for alias generation and bridge summaries.
-func (ps *pipelineState) stageLLM() error {
-	ps.progress(StageLLM, "Augmenting with LLM")
-
-	llmStart := time.Now()
-	instructionsDir := filepath.Join(ps.cfg.RootDir, ps.cfg.SystemDir, "topics")
-
-	ps.augResult = llm.Augment(context.Background(), llm.AugmentConfig{
-		Provider:        ps.cfg.Provider,
-		APIKey:          ps.cfg.APIKey,
-		Model:           ps.cfg.Model,
-		ClaudeBinary:    "claude",
-		Taxonomy:        ps.taxResult.Taxonomy,
-		Chunks:          ps.allChunks,
-		TaxonomyConfig:  ps.cfg.Taxonomy,
-		InstructionsDir: instructionsDir,
-	})
-
-	// Merge LLM aliases into taxonomy (preserving corpus + dictionary aliases).
-	// Priority: corpus-mined > dictionary > LLM. Existing aliases are kept;
-	// LLM aliases are appended with deduplication.
-	if !ps.augResult.Skipped && len(ps.augResult.Aliases) > 0 {
-		for key, llmAliases := range ps.augResult.Aliases {
-			if term, ok := ps.taxResult.Taxonomy.Terms[key]; ok {
-				mergeAliases(term, llmAliases)
-			}
-		}
-		ps.taxResult.Taxonomy.CompiledWith = ps.cfg.Model
-		taxPath := taxonomy.TaxonomyPath(ps.cfg.CompiledDir)
-		if err := ps.taxResult.Taxonomy.WriteTo(taxPath); err != nil {
-			return fmt.Errorf("rewriting taxonomy with aliases: %w", err)
-		}
-	}
-
-	ps.result.LLMAliasCount = ps.augResult.AliasCount
-	ps.result.LLMBridgeCount = ps.augResult.BridgeCount
-	ps.result.LLMSeconds = time.Since(llmStart).Seconds()
-	ps.result.LLMSkipped = ps.augResult.Skipped
-	ps.result.LLMSkipReason = ps.augResult.SkipReason
-
-	return nil
-}
-
-// mergeAliases appends new aliases to an existing term's alias list,
-// skipping any that already exist. This preserves the priority ordering:
-// corpus-mined and dictionary aliases (added first) appear before LLM
-// aliases in the final list.
-func mergeAliases(term *taxonomy.Term, newAliases []string) {
-	existing := make(map[string]bool, len(term.Aliases))
-	for _, a := range term.Aliases {
-		existing[a] = true
-	}
-	for _, a := range newAliases {
-		if !existing[a] {
-			term.Aliases = append(term.Aliases, a)
-			existing[a] = true
-		}
-	}
-}
-
 // stageManifests generates manifest, metadata, and hashes files.
 func (ps *pipelineState) stageManifests() error {
 	ps.progress(StageManifest, "Generating manifest files")
@@ -782,17 +699,6 @@ func (ps *pipelineState) stageManifests() error {
 	}
 	ps.result.DetBridgeCount = len(detBridges)
 
-	// Apply LLM bridge summaries (when enabled). These overwrite deterministic
-	// bridges with higher-quality LLM-generated text.
-	if !ps.augResult.Skipped && len(ps.augResult.Bridges) > 0 {
-		for id, b := range ps.augResult.Bridges {
-			if entry := mfst.LookupEntry(id); entry != nil {
-				text := b
-				entry.BridgeToNext = &text
-			}
-		}
-	}
-
 	// Preserve bridges from previous manifest for unchanged chunk pairs.
 	if ps.incremental && ps.prevManifest != nil {
 		preserveUnchangedBridges(mfst, ps.prevManifest, ps.unchangedChunkIDs)
@@ -800,6 +706,14 @@ func (ps *pipelineState) stageManifests() error {
 
 	meta := manifest.BuildMetadata(ps.allChunks, ps.blocksBySource)
 	hashes := manifest.BuildHashes(ps.fileHashes, ps.systemHashes)
+
+	// Count cross-reference statistics.
+	for _, entry := range meta.Documents {
+		if len(entry.ReferencesTo) > 0 {
+			ps.result.CrossRefLinks += len(entry.ReferencesTo)
+			ps.result.CrossRefDocs++
+		}
+	}
 
 	ps.heur = manifest.NewHeuristics(ps.cfg.Version, ps.cfg.Encoding)
 	ps.heur.SetSources(&manifest.SourcesSection{
@@ -914,7 +828,7 @@ func (ps *pipelineState) stageLink() {
 // and writes all manifest files. This must be called after all other stages.
 func (ps *pipelineState) stageFinalize(totalStart time.Time) error {
 	// Populate taxonomy heuristics.
-	// Count total aliases across all terms (corpus + dictionary + LLM).
+	// Count total aliases across all terms (corpus + dictionary).
 	totalAliases := 0
 	for _, term := range ps.taxResult.Taxonomy.Terms {
 		totalAliases += len(term.Aliases)
@@ -935,7 +849,6 @@ func (ps *pipelineState) stageFinalize(totalStart time.Time) error {
 		TermsFromPOSExtraction:       ps.taxResult.Stats.TermsFromPOS,
 		CorpusAbbreviationPairs:      ps.taxResult.Stats.CorpusAbbreviationPairs,
 		TermsWithCorpusAliases:       ps.taxResult.Stats.TermsWithCorpusAliases,
-		AliasesFromLLM:               ps.result.LLMAliasCount,
 	})
 
 	timing := &manifest.TimingSection{
@@ -945,7 +858,6 @@ func (ps *pipelineState) stageFinalize(totalStart time.Time) error {
 		Chunking:           ps.result.ChunkSeconds,
 		BM25Indexing:       ps.result.IndexSeconds,
 		TaxonomyExtraction: ps.result.TaxonomySeconds,
-		LLMAugmentation:    ps.result.LLMSeconds,
 		ManifestGeneration: ps.result.ManifestSeconds,
 		ContextAssembly:    ps.result.ContextSeconds,
 		SyncEntryPoints:    ps.result.LinkSeconds,
@@ -964,9 +876,7 @@ func (ps *pipelineState) stageFinalize(totalStart time.Time) error {
 				"taxonomy_extraction", "manifest_generation",
 			},
 			SystemInstructionsChanged: &manifest.SystemInstructionsChanged{
-				TaxonomyGeneration: instrChanges.TaxonomyGeneration,
-				BridgeSummaries:    instrChanges.BridgeSummaries,
-				ContextAssembly:    instrChanges.ContextAssembly,
+				ContextAssembly: instrChanges.ContextAssembly,
 			},
 		})
 	} else {

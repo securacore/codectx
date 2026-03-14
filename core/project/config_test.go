@@ -161,9 +161,6 @@ func TestLoadConfig_InvalidYAML(t *testing.T) {
 func TestDefaultAIConfig_HasSensibleDefaults(t *testing.T) {
 	cfg := project.DefaultAIConfig()
 
-	if cfg.Compilation.Model != "claude-sonnet-4-20250514" {
-		t.Errorf("expected compilation model %q, got %q", "claude-sonnet-4-20250514", cfg.Compilation.Model)
-	}
 	if cfg.Compilation.Encoding != "cl100k_base" {
 		t.Errorf("expected encoding %q, got %q", "cl100k_base", cfg.Compilation.Encoding)
 	}
@@ -206,7 +203,6 @@ func TestAIConfig_WriteAndLoad_Roundtrip(t *testing.T) {
 	path := filepath.Join(dir, "ai.yml")
 
 	original := project.DefaultAIConfig()
-	original.Compilation.Model = "gpt-4o"
 	original.Compilation.Encoding = "o200k_base"
 	original.Consumption.ContextWindow = 128000
 	original.OutputFormat = "xml_tags"
@@ -220,9 +216,6 @@ func TestAIConfig_WriteAndLoad_Roundtrip(t *testing.T) {
 		t.Fatalf("loading ai config: %v", err)
 	}
 
-	if loaded.Compilation.Model != original.Compilation.Model {
-		t.Errorf("compilation model: expected %q, got %q", original.Compilation.Model, loaded.Compilation.Model)
-	}
 	if loaded.Compilation.Encoding != original.Compilation.Encoding {
 		t.Errorf("compilation encoding: expected %q, got %q", original.Compilation.Encoding, loaded.Compilation.Encoding)
 	}
@@ -272,7 +265,6 @@ func TestLoadAIConfigForProject(t *testing.T) {
 	}
 
 	aiCfg := project.DefaultAIConfig()
-	aiCfg.Compilation.Model = "custom-model"
 	if err := aiCfg.WriteToFile(filepath.Join(codectxDir, project.AIConfigFile)); err != nil {
 		t.Fatal(err)
 	}
@@ -281,8 +273,8 @@ func TestLoadAIConfigForProject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadAIConfigForProject: %v", err)
 	}
-	if loaded.Compilation.Model != "custom-model" {
-		t.Errorf("model = %q, want %q", loaded.Compilation.Model, "custom-model")
+	if loaded.Compilation.Encoding != project.DefaultEncoding {
+		t.Errorf("encoding = %q, want %q", loaded.Compilation.Encoding, project.DefaultEncoding)
 	}
 }
 
@@ -483,9 +475,6 @@ func TestDefaultPreferencesConfig_HasSensibleDefaults(t *testing.T) {
 	}
 	if !cfg.Taxonomy.POSExtraction {
 		t.Error("expected POS extraction to be enabled")
-	}
-	if cfg.Taxonomy.LLMAliasGeneration {
-		t.Error("expected LLM alias generation to be disabled by default")
 	}
 	if !cfg.Validation.RequireReadme {
 		t.Error("expected require_readme to be true")

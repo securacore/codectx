@@ -37,22 +37,6 @@ func SystemFiles() []DefaultFile {
 			EmbedPath: "defaults/compiler-philosophy.spec.md",
 		},
 		{
-			DestPath:  "system/topics/taxonomy-generation/README.md",
-			EmbedPath: "defaults/taxonomy-generation.md",
-		},
-		{
-			DestPath:  "system/topics/taxonomy-generation/README.spec.md",
-			EmbedPath: "defaults/taxonomy-generation.spec.md",
-		},
-		{
-			DestPath:  "system/topics/bridge-summaries/README.md",
-			EmbedPath: "defaults/bridge-summaries.md",
-		},
-		{
-			DestPath:  "system/topics/bridge-summaries/README.spec.md",
-			EmbedPath: "defaults/bridge-summaries.spec.md",
-		},
-		{
 			DestPath:  "system/topics/context-assembly/README.md",
 			EmbedPath: "defaults/context-assembly.md",
 		},

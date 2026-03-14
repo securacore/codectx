@@ -81,7 +81,6 @@ type TaxonomySection struct {
 	TermsFromPOSExtraction       int     `yaml:"terms_from_pos_extraction"`
 	CorpusAbbreviationPairs      int     `yaml:"corpus_abbreviation_pairs"`
 	TermsWithCorpusAliases       int     `yaml:"terms_with_corpus_aliases"`
-	AliasesFromLLM               int     `yaml:"aliases_from_llm"`
 }
 
 // SessionSection holds session context assembly statistics.
@@ -122,9 +121,7 @@ type IncrementalSection struct {
 
 // SystemInstructionsChanged tracks which system instruction directories changed.
 type SystemInstructionsChanged struct {
-	TaxonomyGeneration bool `yaml:"taxonomy_generation"`
-	BridgeSummaries    bool `yaml:"bridge_summaries"`
-	ContextAssembly    bool `yaml:"context_assembly"`
+	ContextAssembly bool `yaml:"context_assembly"`
 }
 
 // TimingSection records per-stage timing in seconds.
@@ -135,7 +132,6 @@ type TimingSection struct {
 	Chunking           float64 `yaml:"chunking"`
 	BM25Indexing       float64 `yaml:"bm25_indexing"`
 	TaxonomyExtraction float64 `yaml:"taxonomy_extraction"`
-	LLMAugmentation    float64 `yaml:"llm_augmentation"`
 	ManifestGeneration float64 `yaml:"manifest_generation"`
 	ContextAssembly    float64 `yaml:"context_assembly"`
 	SyncEntryPoints    float64 `yaml:"sync_entry_points"`

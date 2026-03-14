@@ -67,9 +67,9 @@ func chunksFromManifest(mfst *manifest.Manifest, sourcePaths []string) []chunk.L
 	return loaded
 }
 
-// preserveUnchangedAliases copies LLM-generated aliases from the previous
-// taxonomy to the current taxonomy for terms whose source chunks are all
-// unchanged. This skips the expensive LLM alias generation for stable terms.
+// preserveUnchangedAliases copies aliases from the previous taxonomy to
+// the current taxonomy for terms whose source chunks are all unchanged.
+// This avoids re-extracting aliases for stable terms during incremental builds.
 //
 // A term's aliases are preserved if ALL chunks that contributed to the term
 // are in the unchangedChunkIDs set.
@@ -136,7 +136,7 @@ func preserveUnchangedBridges(
 ) {
 	copyBridges := func(currEntries, prevEntries map[string]*manifest.ManifestEntry) {
 		for id, entry := range currEntries {
-			// Skip if already has a bridge (from current LLM pass).
+			// Skip if already has a bridge (from current compilation pass).
 			if entry.BridgeToNext != nil {
 				continue
 			}

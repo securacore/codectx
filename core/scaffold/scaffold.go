@@ -59,15 +59,8 @@ type Options struct {
 	// GitInit controls whether to run `git init` in ProjectDir before scaffolding.
 	GitInit bool
 
-	// Model is the AI model to write to ai.yml. Uses default if empty.
-	Model string
-
 	// Encoding is the tokenizer encoding to write to ai.yml. Uses default if empty.
 	Encoding string
-
-	// Provider is the LLM provider for compilation tasks ("cli" or "api").
-	// Empty means auto-detect at compile time.
-	Provider string
 
 	// ProjectType controls the type field in codectx.yml.
 	// Use project.TypePackage for package authoring projects.
@@ -219,7 +212,7 @@ func Init(opts Options) (*Result, error) {
 	if err := writeConfigs(configPaths{
 		projectDir: opts.ProjectDir, codectxDir: codectxDir,
 		name: name, root: root,
-		model: opts.Model, encoding: opts.Encoding, provider: opts.Provider,
+		encoding:    opts.Encoding,
 		projectType: opts.ProjectType,
 	}); err != nil {
 		return nil, err
@@ -288,8 +281,6 @@ func directories(docsRoot, codectxDir string) []string {
 		filepath.Join(docsRoot, project.SystemDir, "foundation", "compiler-philosophy"),
 		filepath.Join(docsRoot, project.SystemDir, "foundation", "documentation-protocol"),
 		filepath.Join(docsRoot, project.SystemDir, "foundation", "history"),
-		filepath.Join(docsRoot, project.SystemDir, "topics", "taxonomy-generation"),
-		filepath.Join(docsRoot, project.SystemDir, "topics", "bridge-summaries"),
 		filepath.Join(docsRoot, project.SystemDir, "topics", "context-assembly"),
 		filepath.Join(docsRoot, project.SystemDir, "plans"),
 		filepath.Join(docsRoot, project.SystemDir, "prompts"),
@@ -317,9 +308,7 @@ type configPaths struct {
 	codectxDir  string
 	name        string
 	root        string
-	model       string
 	encoding    string
-	provider    string
 	projectType string // "project" or "package"
 }
 
@@ -334,15 +323,8 @@ func writeConfigs(cp configPaths) error {
 
 	// ai.yml in .codectx/.
 	aiCfg := project.DefaultAIConfig()
-	if cp.model != "" {
-		aiCfg.Compilation.Model = cp.model
-		aiCfg.Consumption.Model = cp.model
-	}
 	if cp.encoding != "" {
 		aiCfg.Compilation.Encoding = cp.encoding
-	}
-	if cp.provider != "" {
-		aiCfg.Compilation.Provider = cp.provider
 	}
 	aiPath := filepath.Join(cp.codectxDir, project.AIConfigFile)
 	if err := aiCfg.WriteToFile(aiPath); err != nil {
@@ -406,9 +388,6 @@ type PackageOptions struct {
 
 	// Encoding is the tokenizer encoding for the authoring project.
 	Encoding string
-
-	// Provider is the LLM provider for the authoring project.
-	Provider string
 }
 
 // PackageResult holds the outcome of a package scaffold operation.
@@ -534,9 +513,7 @@ func InitPackage(opts PackageOptions) (*PackageResult, error) {
 		ProjectDir:  absDir,
 		Root:        opts.Root,
 		Name:        opts.Name,
-		Model:       opts.Model,
 		Encoding:    opts.Encoding,
-		Provider:    opts.Provider,
 		ProjectType: project.TypePackage,
 	}
 

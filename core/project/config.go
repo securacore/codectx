@@ -46,17 +46,8 @@ const DefaultContextWindow = 200000
 // DefaultResultsCount is the default number of results returned by codectx query.
 const DefaultResultsCount = 10
 
-// DefaultModel is the fallback AI model when nothing is detected.
-const DefaultModel = "claude-sonnet-4-20250514"
-
 // DefaultEncoding is the fallback tokenizer encoding.
 const DefaultEncoding = "cl100k_base"
-
-// ProviderCLI indicates the local Claude CLI binary for LLM compilation tasks.
-const ProviderCLI = "cli"
-
-// ProviderAPI indicates the Anthropic Messages API for LLM compilation tasks.
-const ProviderAPI = "api"
 
 // DirPerm is the standard directory permission mode used throughout the project.
 const DirPerm = 0755
@@ -265,16 +256,8 @@ type AIConfig struct {
 	OutputFormat string `yaml:"output_format"`
 }
 
-// AICompilationConfig configures the model used during compilation.
+// AICompilationConfig configures compilation settings.
 type AICompilationConfig struct {
-	// Provider is the LLM provider for compilation tasks ("cli" or "api").
-	// "cli" invokes the local Claude CLI binary; "api" uses the Anthropic
-	// Messages API directly. Empty string means auto-detect at compile time.
-	Provider string `yaml:"provider,omitempty"`
-
-	// Model is the AI model used for alias generation and bridge summaries.
-	Model string `yaml:"model"`
-
 	// Encoding is the tokenizer encoding for token counting.
 	Encoding string `yaml:"encoding"`
 }
@@ -292,16 +275,13 @@ type AIConsumptionConfig struct {
 }
 
 // DefaultAIConfig returns an AIConfig with sensible defaults.
-// The default model and encoding are sourced from the detect package
-// to ensure consistency across detection, configuration, and scaffolding.
 func DefaultAIConfig() AIConfig {
 	return AIConfig{
 		Compilation: AICompilationConfig{
-			Model:    DefaultModel,
 			Encoding: DefaultEncoding,
 		},
 		Consumption: AIConsumptionConfig{
-			Model:         DefaultModel,
+			Model:         "claude-sonnet-4-20250514",
 			ContextWindow: DefaultContextWindow,
 			ResultsCount:  DefaultResultsCount,
 		},
@@ -572,9 +552,6 @@ type TaxonomyConfig struct {
 
 	// POSExtraction enables POS-based term extraction.
 	POSExtraction bool `yaml:"pos_extraction"`
-
-	// LLMAliasGeneration enables LLM pass for alias generation.
-	LLMAliasGeneration bool `yaml:"llm_alias_generation"`
 }
 
 // ValidationConfig controls documentation linting and validation.
@@ -700,10 +677,9 @@ func DefaultPreferencesConfig() PreferencesConfig {
 		BM25F: DefaultBM25FConfig(),
 		Query: DefaultQueryConfig(),
 		Taxonomy: TaxonomyConfig{
-			MinTermFrequency:   2,
-			MaxAliasCount:      10,
-			POSExtraction:      true,
-			LLMAliasGeneration: false,
+			MinTermFrequency: 2,
+			MaxAliasCount:    10,
+			POSExtraction:    true,
 		},
 		Validation: ValidationConfig{
 			RequireReadme:   true,

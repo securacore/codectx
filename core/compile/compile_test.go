@@ -28,7 +28,7 @@ func setupTestProject(t *testing.T) (string, string) {
 	mustWriteFile(t, filepath.Join(root, "foundation", "overview.md"),
 		"# Project Overview\n\nThis project provides authentication services.\n\n## Architecture\n\nThe system uses a microservices architecture with JWT tokens.\n")
 	mustWriteFile(t, filepath.Join(root, "topics", "auth.md"),
-		"# Authentication\n\nAuthentication is handled via JWT tokens.\n\n## JWT Tokens\n\nTokens are signed with RS256.\n\n## Refresh Flow\n\nRefresh tokens expire after 7 days.\n")
+		"# Authentication\n\nAuthentication is handled via JWT tokens. See [Project Overview](../foundation/overview.md) for architecture context.\n\n## JWT Tokens\n\nTokens are signed with RS256.\n\n## Refresh Flow\n\nRefresh tokens expire after 7 days.\n")
 	mustWriteFile(t, filepath.Join(root, "topics", "auth.spec.md"),
 		"# Authentication\n\nThe authentication system was designed with security first.\n\n## JWT Tokens\n\nWe chose RS256 because it allows public key verification.\n")
 	mustWriteFile(t, filepath.Join(root, project.SystemDir, "topics", "taxonomy-generation", "README.md"),
@@ -39,8 +39,6 @@ func setupTestProject(t *testing.T) (string, string) {
 
 func defaultTestConfig(rootDir, compiledDir string) compile.Config {
 	taxCfg := project.DefaultPreferencesConfig().Taxonomy
-	// Disable LLM augmentation in tests to avoid real API/CLI calls.
-	taxCfg.LLMAliasGeneration = false
 
 	return compile.Config{
 		ProjectDir:  filepath.Dir(rootDir),
@@ -51,6 +49,7 @@ func defaultTestConfig(rootDir, compiledDir string) compile.Config {
 		Version:     "test-v0.1.0",
 		Chunking:    project.DefaultPreferencesConfig().Chunking,
 		BM25:        project.DefaultPreferencesConfig().BM25,
+		BM25F:       project.DefaultBM25FConfig(),
 		Validation:  project.DefaultPreferencesConfig().Validation,
 		Taxonomy:    taxCfg,
 		ActiveDeps:  nil,
@@ -119,7 +118,6 @@ func TestRun_FullPipeline(t *testing.T) {
 		compile.StageWrite,
 		compile.StageIndex,
 		compile.StageTaxonomy,
-		compile.StageLLM,
 		compile.StageManifest,
 	}
 	for _, expected := range expectedStages {
@@ -133,17 +131,6 @@ func TestRun_FullPipeline(t *testing.T) {
 		if !found {
 			t.Errorf("expected progress stage %q, but it was not reported", expected)
 		}
-	}
-
-	// Verify LLM augmentation was skipped (disabled in test config).
-	if !result.LLMSkipped {
-		t.Error("expected LLM augmentation to be skipped in test")
-	}
-	if result.LLMAliasCount != 0 {
-		t.Errorf("expected 0 LLM aliases, got %d", result.LLMAliasCount)
-	}
-	if result.LLMBridgeCount != 0 {
-		t.Errorf("expected 0 LLM bridges, got %d", result.LLMBridgeCount)
 	}
 }
 
@@ -203,6 +190,95 @@ func TestRun_BM25IndexExistsAndLoadable(t *testing.T) {
 
 	if totalResults == 0 {
 		t.Error("expected BM25 query to return results")
+	}
+}
+
+func TestRun_BM25FIndexExistsAndLoadable(t *testing.T) {
+	rootDir, compiledDir := setupTestProject(t)
+	cfg := defaultTestConfig(rootDir, compiledDir)
+
+	_, err := compile.Run(cfg, nil)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	// Load the BM25F field index.
+	fieldIdx, err := index.LoadFieldIndex(compiledDir)
+	if err != nil {
+		t.Fatalf("loading BM25F field index: %v", err)
+	}
+
+	// Verify it has documents in the objects index.
+	objIdx := fieldIdx.Indexes[index.IndexObjects]
+	if objIdx == nil {
+		t.Fatal("expected non-nil objects BM25F index")
+	}
+	if objIdx.DocCount == 0 {
+		t.Error("expected objects BM25F index to have documents")
+	}
+
+	// Query with weighted terms should return results.
+	query := []index.WeightedTerm{{Text: "jwt", Weight: 1.0, Tier: "original"}}
+	results := fieldIdx.QueryAllWeighted(query, 5)
+	totalResults := 0
+	for _, r := range results {
+		totalResults += len(r)
+	}
+	if totalResults == 0 {
+		t.Error("expected BM25F query to return results")
+	}
+}
+
+func TestRun_CrossReferencesPopulated(t *testing.T) {
+	rootDir, compiledDir := setupTestProject(t)
+	cfg := defaultTestConfig(rootDir, compiledDir)
+
+	result, err := compile.Run(cfg, nil)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	// The test fixture has auth.md linking to foundation/overview.md.
+	if result.CrossRefLinks == 0 {
+		t.Error("expected CrossRefLinks > 0 (auth.md links to foundation/overview.md)")
+	}
+	if result.CrossRefDocs == 0 {
+		t.Error("expected CrossRefDocs > 0")
+	}
+
+	// Load metadata and verify cross-references.
+	meta, err := manifest.LoadMetadata(manifest.MetadataPath(compiledDir))
+	if err != nil {
+		t.Fatalf("loading metadata: %v", err)
+	}
+
+	// auth.md should reference foundation/overview.md.
+	authDoc := meta.Documents["topics/auth.md"]
+	if authDoc == nil {
+		t.Fatal("expected metadata entry for topics/auth.md")
+	}
+	if len(authDoc.ReferencesTo) == 0 {
+		t.Error("expected auth.md to have ReferencesTo entries")
+	}
+
+	foundOverview := false
+	for _, ref := range authDoc.ReferencesTo {
+		if ref.Path == "foundation/overview.md" {
+			foundOverview = true
+			break
+		}
+	}
+	if !foundOverview {
+		t.Errorf("expected auth.md to reference foundation/overview.md, got %+v", authDoc.ReferencesTo)
+	}
+
+	// foundation/overview.md should be referenced by auth.md.
+	overviewDoc := meta.Documents["foundation/overview.md"]
+	if overviewDoc == nil {
+		t.Fatal("expected metadata entry for foundation/overview.md")
+	}
+	if len(overviewDoc.ReferencedBy) == 0 {
+		t.Error("expected foundation/overview.md to have ReferencedBy entries")
 	}
 }
 
@@ -728,10 +804,6 @@ func TestDeterministicSearchPipeline(t *testing.T) {
 	rootDir, compiledDir := setupDeterministicSearchProject(t)
 
 	taxCfg := project.DefaultPreferencesConfig().Taxonomy
-	// LLM is now disabled by default; verify that.
-	if taxCfg.LLMAliasGeneration {
-		t.Fatal("expected LLMAliasGeneration to be false by default")
-	}
 	// Use low min frequency for test (content is small).
 	taxCfg.MinTermFrequency = 1
 
@@ -754,15 +826,7 @@ func TestDeterministicSearchPipeline(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 
-	// 1. Verify LLM was skipped (deterministic-only pipeline).
-	if !result.LLMSkipped {
-		t.Error("expected LLM augmentation to be skipped")
-	}
-	if result.LLMAliasCount != 0 {
-		t.Errorf("expected 0 LLM aliases, got %d", result.LLMAliasCount)
-	}
-
-	// 2. Verify taxonomy was created.
+	// 1. Verify taxonomy was created.
 	if result.TaxonomyTerms == 0 {
 		t.Fatal("expected non-zero taxonomy terms")
 	}

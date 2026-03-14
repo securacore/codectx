@@ -325,3 +325,137 @@ func assertHeading(t *testing.T, block Block, expected []string) {
 		}
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Link extraction
+// ---------------------------------------------------------------------------
+
+func TestParse_ExtractsInternalLinks(t *testing.T) {
+	input := `# Auth
+
+See [JWT docs](../jwt/README.md) for token details.
+
+Also check [OAuth setup](../oauth/README.md).
+`
+	doc := Parse([]byte(input))
+
+	if len(doc.Links) != 2 {
+		t.Fatalf("expected 2 links, got %d: %+v", len(doc.Links), doc.Links)
+	}
+	if doc.Links[0].Destination != "../jwt/README.md" {
+		t.Errorf("link[0].Destination = %q, want ../jwt/README.md", doc.Links[0].Destination)
+	}
+	if doc.Links[0].Text != "JWT docs" {
+		t.Errorf("link[0].Text = %q, want 'JWT docs'", doc.Links[0].Text)
+	}
+	if doc.Links[1].Destination != "../oauth/README.md" {
+		t.Errorf("link[1].Destination = %q, want ../oauth/README.md", doc.Links[1].Destination)
+	}
+}
+
+func TestParse_FiltersExternalLinks(t *testing.T) {
+	input := `# Page
+
+See [Google](https://google.com) and [HTTP link](http://example.com).
+
+Also see [local doc](./other.md).
+`
+	doc := Parse([]byte(input))
+
+	// Should only capture the local .md link, not the external URLs.
+	if len(doc.Links) != 1 {
+		t.Fatalf("expected 1 link (local only), got %d: %+v", len(doc.Links), doc.Links)
+	}
+	if doc.Links[0].Destination != "./other.md" {
+		t.Errorf("link.Destination = %q, want ./other.md", doc.Links[0].Destination)
+	}
+}
+
+func TestParse_FiltersAnchorOnlyLinks(t *testing.T) {
+	input := `# Page
+
+See [section below](#details) for more.
+
+Also see [other doc](./other.md).
+`
+	doc := Parse([]byte(input))
+
+	if len(doc.Links) != 1 {
+		t.Fatalf("expected 1 link (no anchor-only), got %d: %+v", len(doc.Links), doc.Links)
+	}
+	if doc.Links[0].Destination != "./other.md" {
+		t.Errorf("link.Destination = %q, want ./other.md", doc.Links[0].Destination)
+	}
+}
+
+func TestParse_StripsFragmentFromDestination(t *testing.T) {
+	input := `# Page
+
+See [JWT section](../jwt/README.md#tokens) for details.
+`
+	doc := Parse([]byte(input))
+
+	if len(doc.Links) != 1 {
+		t.Fatalf("expected 1 link, got %d", len(doc.Links))
+	}
+	// Fragment should be stripped.
+	if doc.Links[0].Destination != "../jwt/README.md" {
+		t.Errorf("link.Destination = %q, want ../jwt/README.md (fragment stripped)", doc.Links[0].Destination)
+	}
+}
+
+func TestParse_DeduplicatesLinks(t *testing.T) {
+	input := `# Page
+
+See [JWT docs](../jwt/README.md) here.
+
+And [JWT again](../jwt/README.md) here too.
+`
+	doc := Parse([]byte(input))
+
+	if len(doc.Links) != 1 {
+		t.Fatalf("expected 1 deduplicated link, got %d: %+v", len(doc.Links), doc.Links)
+	}
+}
+
+func TestParse_NoLinks(t *testing.T) {
+	input := `# Simple
+
+Just a paragraph with no links.
+`
+	doc := Parse([]byte(input))
+
+	if len(doc.Links) != 0 {
+		t.Errorf("expected 0 links, got %d: %+v", len(doc.Links), doc.Links)
+	}
+}
+
+func TestParse_FiltersNonMarkdownLinks(t *testing.T) {
+	input := `# Page
+
+Download [the PDF](./report.pdf) and see [the image](./diagram.png).
+
+But also check [the docs](./other.md).
+`
+	doc := Parse([]byte(input))
+
+	if len(doc.Links) != 1 {
+		t.Fatalf("expected 1 link (.md only), got %d: %+v", len(doc.Links), doc.Links)
+	}
+	if doc.Links[0].Destination != "./other.md" {
+		t.Errorf("link.Destination = %q, want ./other.md", doc.Links[0].Destination)
+	}
+}
+
+func TestParse_LinksInLists(t *testing.T) {
+	input := `# Related
+
+- [Auth docs](../auth/README.md)
+- [Config docs](../config/README.md)
+`
+	doc := Parse([]byte(input))
+
+	if len(doc.Links) != 2 {
+		t.Fatalf("expected 2 links from list, got %d: %+v", len(doc.Links), doc.Links)
+	}
+}

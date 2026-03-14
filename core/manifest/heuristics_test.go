@@ -210,7 +210,6 @@ func TestSetTiming(t *testing.T) {
 		Chunking:           8.4,
 		BM25Indexing:       3.2,
 		TaxonomyExtraction: 0.0,
-		LLMAugmentation:    22.1,
 		ManifestGeneration: 4.5,
 		ContextAssembly:    3.8,
 		SyncEntryPoints:    1.4,
@@ -235,9 +234,7 @@ func TestSetIncremental(t *testing.T) {
 		StagesSkipped: []string{"taxonomy_extraction"},
 		StagesRerun:   []string{"chunking", "bm25_indexing", "manifest_generation"},
 		SystemInstructionsChanged: &manifest.SystemInstructionsChanged{
-			TaxonomyGeneration: false,
-			BridgeSummaries:    true,
-			ContextAssembly:    false,
+			ContextAssembly: true,
 		},
 	})
 
@@ -250,8 +247,8 @@ func TestSetIncremental(t *testing.T) {
 	if len(h.Incremental.StagesRerun) != 3 {
 		t.Errorf("expected 3 rerun stages, got %d", len(h.Incremental.StagesRerun))
 	}
-	if !h.Incremental.SystemInstructionsChanged.BridgeSummaries {
-		t.Error("expected BridgeSummaries to be true")
+	if !h.Incremental.SystemInstructionsChanged.ContextAssembly {
+		t.Error("expected ContextAssembly to be true")
 	}
 }
 
