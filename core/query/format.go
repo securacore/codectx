@@ -112,9 +112,86 @@ func FormatQueryResults(r *QueryResult) string {
 	return b.String()
 }
 
+// PromptSummary holds metadata for the combined prompt output header and footer.
+type PromptSummary struct {
+	RawQuery      string // original search string
+	ExpandedQuery string // post-expansion display string
+	SelectedCount int    // number of chunks auto-selected
+	SelectedTotal int    // total tokens of selected chunks
+	QueryTotal    int    // total number of query results
+	Budget        int    // computed token budget
+	BudgetFormula string // human-readable formula, e.g. "450 × 3 × 1.0"
+}
+
+// FormatPromptHeader renders the header shown before the generated document
+// content in prompt output.
+//
+// Output format (styled):
+//
+//	-> Prompt: "How do I create a React component"
+//	   Expanded: react compon ui widget
+//	   Selected: 3 chunks (1,247 tokens) from 8 query results
+//	   Budget: 1,350 tokens (450 × 3 × 1.0)
+func FormatPromptHeader(s *PromptSummary) string {
+	var b strings.Builder
+
+	// Header: mirrors the query command's "-> Results for:" pattern.
+	fmt.Fprintf(&b, "\n%s Prompt: %s\n",
+		tui.Arrow(),
+		tui.StyleBold.Render(fmt.Sprintf("%q", s.RawQuery)),
+	)
+
+	// Expanded query: mirrors FormatQueryResults — only shown when different.
+	if s.ExpandedQuery != "" && s.ExpandedQuery != s.RawQuery {
+		fmt.Fprintf(&b, "%s%s\n",
+			tui.Indent(1),
+			tui.KeyValue("Expanded", tui.StyleMuted.Render(s.ExpandedQuery)),
+		)
+	}
+
+	// Selection summary.
+	fmt.Fprintf(&b, "%s%s\n",
+		tui.Indent(1),
+		tui.KeyValue("Selected", fmt.Sprintf("%s chunks (%s tokens) from %s query results",
+			tui.StyleBold.Render(fmt.Sprintf("%d", s.SelectedCount)),
+			tui.FormatNumber(s.SelectedTotal),
+			tui.FormatNumber(s.QueryTotal),
+		)),
+	)
+
+	// Budget with formula.
+	fmt.Fprintf(&b, "%s%s\n",
+		tui.Indent(1),
+		tui.KeyValue("Budget", fmt.Sprintf("%s tokens (%s)",
+			tui.FormatNumber(s.Budget),
+			tui.StyleMuted.Render(s.BudgetFormula),
+		)),
+	)
+
+	b.WriteString("\n")
+	return b.String()
+}
+
+// FormatPromptNoResults renders the no-results message for the prompt command.
+// Mirrors the FormatQueryResults empty-results pattern.
+func FormatPromptNoResults(rawQuery string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "\n%s No results found for %s\n\n",
+		tui.Warning(),
+		tui.StyleBold.Render(fmt.Sprintf("%q", rawQuery)),
+	)
+	return b.String()
+}
+
+// FormatPromptFooter renders the footer shown after the generated document
+// content in prompt output. Reuses FormatGenerateSummary for the generate
+// metadata and related chunks.
+func FormatPromptFooter(r *GenerateResult, historyPath, filePath string, cacheHit bool) string {
+	return FormatGenerateSummary(r, historyPath, filePath, cacheHit)
+}
+
 // formatUnifiedEntries writes numbered entries from the RRF-fused result list,
 // showing the index sources that contributed to each result.
-// formatUnifiedEntries writes numbered entries from the RRF-fused result list.
 func formatUnifiedEntries(b *strings.Builder, entries []ResultEntry) {
 	formatEntriesWithPrecision(b, entries, "%.4f", true)
 }

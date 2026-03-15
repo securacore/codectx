@@ -226,6 +226,17 @@ func renderSummary(result *compile.Result, projectName, compiledDir, projectDir 
 		)
 	}
 
+	// Prompt budget.
+	if result.PromptBudget > 0 {
+		label := fmt.Sprintf("%s tokens (%s)",
+			tui.FormatNumber(result.PromptBudget),
+			result.PromptBudgetFormula,
+		)
+		fmt.Fprintf(&b, "%s%s\n", tui.Indent(1),
+			tui.KeyValue("CLI codectx prompt | default search budget", label),
+		)
+	}
+
 	// Taxonomy terms.
 	if result.TaxonomyTerms > 0 {
 		fmt.Fprintf(&b, "%s%s\n", tui.Indent(1),

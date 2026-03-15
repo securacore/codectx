@@ -69,6 +69,9 @@ type Config struct {
 	// Taxonomy holds taxonomy extraction settings from preferences.yml.
 	Taxonomy project.TaxonomyConfig
 
+	// Prompt holds prompt command auto-selection settings from preferences.yml.
+	Prompt project.PromptConfig
+
 	// ActiveDeps maps package names to active status.
 	// Only packages with a true value are included in compilation.
 	ActiveDeps map[string]bool
@@ -109,6 +112,10 @@ type Result struct {
 	SessionTokens  int
 	SessionBudget  int
 	SessionEntries []SessionEntryResult
+
+	// Prompt command budget (computed from chunking + prompt config).
+	PromptBudget        int    // effective token budget for codectx prompt
+	PromptBudgetFormula string // human-readable formula, e.g. "450 × 3 × 1.0"
 
 	// Taxonomy extraction.
 	TaxonomyTerms int
@@ -773,6 +780,23 @@ func (ps *pipelineState) stageContext() error {
 	ps.result.SessionTokens = assembly.TotalTokens
 	ps.result.SessionBudget = assembly.Budget
 	ps.result.Warnings = append(ps.result.Warnings, assembly.Warnings...)
+
+	// Compute prompt budget from chunking + prompt config.
+	chunkTarget := ps.cfg.Chunking.TargetTokens
+	if chunkTarget <= 0 {
+		chunkTarget = 450
+	}
+	promptBudget := ps.cfg.Prompt.EffectiveBudget(chunkTarget, nil)
+	mult := ps.cfg.Prompt.BudgetMultiplier
+	if mult <= 0 {
+		mult = project.DefaultPromptBudgetMultiplier
+	}
+	promptFormula := fmt.Sprintf("%d × %.0f × %.1f", chunkTarget, mult, 1+ps.cfg.Prompt.BudgetDelta)
+
+	ps.result.PromptBudget = promptBudget
+	ps.result.PromptBudgetFormula = promptFormula
+	assembly.PromptBudget = promptBudget
+	assembly.PromptBudgetFormula = promptFormula
 
 	for _, entry := range assembly.Entries {
 		ps.result.SessionEntries = append(ps.result.SessionEntries, SessionEntryResult{

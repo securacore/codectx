@@ -42,6 +42,14 @@ type AssemblyResult struct {
 	// Entries holds per-entry statistics.
 	Entries []EntryResult
 
+	// PromptBudget is the computed token budget for the codectx prompt command.
+	// Set by the compile pipeline after assembly, written to context.md header.
+	PromptBudget int
+
+	// PromptBudgetFormula is the human-readable formula for the prompt budget.
+	// E.g., "450 × 3 × 1.0".
+	PromptBudgetFormula string
+
 	// Warnings are any issues encountered during assembly.
 	Warnings []string
 }

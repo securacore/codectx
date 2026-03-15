@@ -18,10 +18,12 @@ func TestWriteContextMD_CreatesFile(t *testing.T) {
 	compiledDir := filepath.Join(dir, "compiled")
 
 	result := &context.AssemblyResult{
-		Content:     "## Coding Standards\n\nFollow these rules.\n",
-		TotalTokens: 100,
-		Budget:      30000,
-		Utilization: 0.33,
+		Content:             "## Coding Standards\n\nFollow these rules.\n",
+		TotalTokens:         100,
+		Budget:              30000,
+		Utilization:         0.33,
+		PromptBudget:        1350,
+		PromptBudgetFormula: "450 × 3 × 1.0",
 	}
 
 	if err := context.WriteContextMD(compiledDir, result); err != nil {
@@ -45,6 +47,9 @@ func TestWriteContextMD_CreatesFile(t *testing.T) {
 	}
 	if !strings.Contains(content, "100 / 30,000 budget") {
 		t.Error("expected token count and budget")
+	}
+	if !strings.Contains(content, "CLI codectx prompt | default search budget: 1,350 tokens (450 × 3 × 1.0)") {
+		t.Error("expected prompt budget line in header")
 	}
 	if !strings.Contains(content, "Compiled:") {
 		t.Error("expected compiled timestamp")
@@ -135,6 +140,60 @@ func TestWriteContextMD_ZeroBudget(t *testing.T) {
 	}
 	if !strings.Contains(content, "50") {
 		t.Error("expected token count")
+	}
+}
+
+func TestWriteContextMD_PromptBudgetNoFormula(t *testing.T) {
+	dir := t.TempDir()
+
+	result := &context.AssemblyResult{
+		Content:      "## Test\n\nContent.\n",
+		TotalTokens:  50,
+		Budget:       30000,
+		PromptBudget: 1350,
+		// PromptBudgetFormula deliberately empty.
+	}
+
+	if err := context.WriteContextMD(dir, result); err != nil {
+		t.Fatalf("WriteContextMD: %v", err)
+	}
+
+	data, err := os.ReadFile(context.ContextPath(dir))
+	if err != nil {
+		t.Fatalf("reading context.md: %v", err)
+	}
+
+	content := string(data)
+	if !strings.Contains(content, "1,350 tokens") {
+		t.Error("expected prompt budget value")
+	}
+	// Should NOT contain parenthesized formula when formula is empty.
+	if strings.Contains(content, "(") {
+		t.Errorf("should not contain formula parenthetical when formula is empty, got:\n%s", content)
+	}
+}
+
+func TestWriteContextMD_NoPromptBudget(t *testing.T) {
+	dir := t.TempDir()
+
+	result := &context.AssemblyResult{
+		Content:     "## Test\n\nContent.\n",
+		TotalTokens: 50,
+		Budget:      30000,
+	}
+
+	if err := context.WriteContextMD(dir, result); err != nil {
+		t.Fatalf("WriteContextMD: %v", err)
+	}
+
+	data, err := os.ReadFile(context.ContextPath(dir))
+	if err != nil {
+		t.Fatalf("reading context.md: %v", err)
+	}
+
+	content := string(data)
+	if strings.Contains(content, "codectx prompt") {
+		t.Errorf("should not show prompt budget when PromptBudget is 0, got:\n%s", content)
 	}
 }
 

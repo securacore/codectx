@@ -63,6 +63,20 @@ func renderContextMD(result *AssemblyResult) string {
 		)
 	}
 
+	if result.PromptBudget > 0 {
+		formula := result.PromptBudgetFormula
+		if formula != "" {
+			fmt.Fprintf(&b, "> CLI codectx prompt | default search budget: %s tokens (%s)\n",
+				tui.FormatNumber(result.PromptBudget),
+				formula,
+			)
+		} else {
+			fmt.Fprintf(&b, "> CLI codectx prompt | default search budget: %s tokens\n",
+				tui.FormatNumber(result.PromptBudget),
+			)
+		}
+	}
+
 	fmt.Fprintf(&b, "> Compiled: %s\n", time.Now().UTC().Format(time.RFC3339))
 
 	// Add the assembled content.

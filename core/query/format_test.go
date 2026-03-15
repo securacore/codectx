@@ -417,3 +417,134 @@ func TestFormatGenerateSummary_CacheHit(t *testing.T) {
 		t.Error("missing [from cache] annotation")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// FormatPromptHeader
+// ---------------------------------------------------------------------------
+
+func TestFormatPromptHeader_Basic(t *testing.T) {
+	s := &query.PromptSummary{
+		RawQuery:      "jwt auth",
+		ExpandedQuery: "jwt auth authentication oauth",
+		SelectedCount: 3,
+		SelectedTotal: 1247,
+		QueryTotal:    8,
+		Budget:        1350,
+		BudgetFormula: "450 × 3 × 1.0",
+	}
+
+	got := query.FormatPromptHeader(s)
+
+	if !strings.Contains(got, `"jwt auth"`) {
+		t.Errorf("missing query in header, got:\n%s", got)
+	}
+	if !strings.Contains(got, "Expanded:") {
+		t.Error("missing expanded query display")
+	}
+	if !strings.Contains(got, "authentication oauth") {
+		t.Error("missing expanded query terms")
+	}
+	if !strings.Contains(got, "3") {
+		t.Error("missing selected chunk count")
+	}
+	if !strings.Contains(got, "1,247") {
+		t.Error("missing selected token count")
+	}
+	if !strings.Contains(got, "8") {
+		t.Error("missing query total count")
+	}
+	if !strings.Contains(got, "1,350") {
+		t.Error("missing budget value")
+	}
+	if !strings.Contains(got, "450") {
+		t.Error("missing budget formula")
+	}
+	if !strings.Contains(got, "Selected:") {
+		t.Error("missing Selected label (KeyValue pattern)")
+	}
+	if !strings.Contains(got, "Budget:") {
+		t.Error("missing Budget label (KeyValue pattern)")
+	}
+	if !strings.Contains(got, "query results") {
+		t.Error("missing 'query results' suffix in Selected line")
+	}
+}
+
+func TestFormatPromptHeader_NoExpansion(t *testing.T) {
+	s := &query.PromptSummary{
+		RawQuery:      "test",
+		ExpandedQuery: "test",
+		SelectedCount: 1,
+		SelectedTotal: 400,
+		QueryTotal:    1,
+		Budget:        1350,
+		BudgetFormula: "450 × 3 × 1.0",
+	}
+
+	got := query.FormatPromptHeader(s)
+
+	if strings.Contains(got, "Expanded:") {
+		t.Error("should not show Expanded when same as raw query")
+	}
+}
+
+func TestFormatPromptHeader_EmptyExpandedQuery(t *testing.T) {
+	s := &query.PromptSummary{
+		RawQuery:      "test",
+		ExpandedQuery: "",
+		SelectedCount: 1,
+		SelectedTotal: 400,
+		QueryTotal:    1,
+		Budget:        1350,
+		BudgetFormula: "450 × 3 × 1.0",
+	}
+
+	got := query.FormatPromptHeader(s)
+
+	if strings.Contains(got, "Expanded:") {
+		t.Error("should not show Expanded when ExpandedQuery is empty")
+	}
+}
+
+func TestFormatPromptFooter_CacheHit(t *testing.T) {
+	r := &query.GenerateResult{
+		TotalTokens: 500,
+		ContentHash: "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+		ChunkIDs:    []string{"obj:abc123.01"},
+	}
+
+	got := query.FormatPromptFooter(r, "", "", true)
+
+	if !strings.Contains(got, "[from cache]") {
+		t.Error("missing [from cache] annotation in prompt footer")
+	}
+}
+
+func TestFormatPromptNoResults(t *testing.T) {
+	got := query.FormatPromptNoResults("React component")
+
+	if !strings.Contains(got, "No results found") {
+		t.Error("missing 'No results found' message")
+	}
+	if !strings.Contains(got, `"React component"`) {
+		t.Error("missing query string in no-results message")
+	}
+}
+
+func TestFormatPromptFooter_DelegatesToGenerateSummary(t *testing.T) {
+	r := &query.GenerateResult{
+		TotalTokens: 500,
+		ContentHash: "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+		ChunkIDs:    []string{"obj:abc123.01"},
+		Sources:     []string{"topics/test.md"},
+	}
+
+	got := query.FormatPromptFooter(r, "docs/.codectx/history/docs/test.md", "", false)
+
+	if !strings.Contains(got, "Generated") {
+		t.Error("missing Generated header from footer")
+	}
+	if !strings.Contains(got, "obj:abc123.01") {
+		t.Error("missing chunk ID in footer")
+	}
+}

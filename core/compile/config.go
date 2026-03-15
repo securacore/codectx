@@ -37,6 +37,7 @@ func BuildConfig(
 		BM25F:       prefsCfg.BM25F,
 		Validation:  prefsCfg.Validation,
 		Taxonomy:    prefsCfg.Taxonomy,
+		Prompt:      prefsCfg.Prompt,
 		ActiveDeps:  activeDeps,
 		Session:     cfg.Session,
 	}

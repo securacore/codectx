@@ -77,7 +77,7 @@ func run(_ context.Context, cmd *cli.Command) error {
 	compiledDir := corequery.CompiledDir(projectDir, cfg)
 
 	// --- Step 3: Determine topN ---
-	topN := resolveTopN(int(cmd.Int("top")), projectDir, cfg)
+	topN := shared.ResolveTopN(int(cmd.Int("top")), projectDir, cfg)
 
 	// --- Step 4: Load preferences for indexer selection ---
 	prefsCfg, prefsErr := project.LoadPreferencesConfigForProject(projectDir, cfg)
@@ -133,24 +133,4 @@ func run(_ context.Context, cmd *cli.Command) error {
 	}
 
 	return nil
-}
-
-// resolveTopN determines the number of query results to return.
-// In BM25F mode this is the total unified result count; in BM25 mode
-// it is per index type. If flagValue is positive, it's used directly.
-// Otherwise, the default is loaded from the AI config or falls back
-// to project.DefaultResultsCount.
-func resolveTopN(flagValue int, projectDir string, cfg *project.Config) int {
-	if flagValue > 0 {
-		return flagValue
-	}
-
-	if cfg != nil {
-		aiCfg, aiErr := project.LoadAIConfigForProject(projectDir, cfg)
-		if aiErr == nil && aiCfg.Consumption.ResultsCount > 0 {
-			return aiCfg.Consumption.ResultsCount
-		}
-	}
-
-	return project.DefaultResultsCount
 }

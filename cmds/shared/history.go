@@ -8,6 +8,7 @@ package shared
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/securacore/codectx/core/history"
 	"github.com/securacore/codectx/core/project"
@@ -40,4 +41,42 @@ func WarnBestEffort(action string, err error) {
 		Title:  fmt.Sprintf("%s failed", action),
 		Detail: []string{err.Error()},
 	}.Render())
+}
+
+// BuildHistoryPath builds a display-friendly relative path to a history
+// doc file. If the path cannot be made relative to the current directory,
+// the absolute path is returned. Used by generate and prompt commands.
+func BuildHistoryPath(histDir, docFile string) string {
+	if docFile == "" {
+		return ""
+	}
+	fullPath := filepath.Join(histDir, history.DocsDir, docFile)
+	if cwd, cwdErr := os.Getwd(); cwdErr == nil {
+		if realCwd, evalErr := filepath.EvalSymlinks(cwd); evalErr == nil {
+			cwd = realCwd
+		}
+		if rel, relErr := filepath.Rel(cwd, fullPath); relErr == nil {
+			return rel
+		}
+	}
+	return fullPath
+}
+
+// ResolveTopN determines the number of query results to return.
+// If flagValue is positive, it is used directly. Otherwise, the default
+// is loaded from the AI config or falls back to project.DefaultResultsCount.
+// Used by both query and prompt commands.
+func ResolveTopN(flagValue int, projectDir string, cfg *project.Config) int {
+	if flagValue > 0 {
+		return flagValue
+	}
+
+	if cfg != nil {
+		aiCfg, aiErr := project.LoadAIConfigForProject(projectDir, cfg)
+		if aiErr == nil && aiCfg.Consumption.ResultsCount > 0 {
+			return aiCfg.Consumption.ResultsCount
+		}
+	}
+
+	return project.DefaultResultsCount
 }

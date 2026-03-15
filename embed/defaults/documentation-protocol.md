@@ -8,43 +8,47 @@ The compiled documentation is the authoritative starting point for all work. It 
 
 You MUST begin every task by consulting the documentation. There are no exceptions.
 
-### 1. Query
+### 1. Prompt (quick search)
+
+```
+codectx prompt "your search terms"
+```
+
+Queries the compiled documentation and automatically generates the top results into a single reading document. This is the recommended first step for any task — it searches, selects, and assembles relevant chunks in one operation.
+
+ALWAYS prompt before starting any development task. The output contains the project's patterns, conventions, and constraints relevant to your search terms.
+
+### 2. Query + Generate (detailed search)
+
+When prompt results are insufficient or you need fine-grained control over which chunks to include, use query and generate separately.
 
 ```
 codectx query "your search terms"
 ```
 
-Returns ranked results across instruction chunks (how-to), reasoning chunks (why), and system chunks (compiler behavior). Each result shows a chunk ID, heading, token count, and relevance score.
-
-ALWAYS query before starting any development task. Query to understand existing patterns, conventions, and constraints before writing or modifying code.
-
-### 2. Generate
-
-After EVERY query that returns results, you MUST run `codectx generate` on the top results. This is not optional — query and generate are an inseparable pair. Do not skip this step even when chunk headings appear unrelated to your task.
+Returns ranked results with chunk IDs, headings, and scores.
 
 ```
 codectx generate "obj:id1,obj:id2,spec:id3"
 ```
 
-Assembles requested chunks into a single document. Use chunk IDs from query results. The output includes heading hierarchy, bridge summaries at content gaps, and a list of related chunks not included.
+Assembles specific chunks into a single document. Use chunk IDs from query results. Use `--file <path>` to write to a file instead of stdout.
 
-Use `--file <path>` to write the document to a file instead of stdout.
-
-Query results show only chunk headings and scores — not content. Headings are structural breadcrumbs, not summaries of what the chunk contains. You MUST read the actual generated content before making any determination about whether the documentation covers a topic. Judging by titles alone will cause you to miss relevant content — taxonomy expansion and bridge summaries surface related information that headings do not reveal.
+After EVERY query that returns results, you MUST run `codectx generate` on the top results. This is not optional — query and generate are an inseparable pair. Do not skip this step even when chunk headings appear unrelated to your task. Query results show only chunk headings and scores — not content. You MUST read the actual generated content before making any determination about whether the documentation covers a topic.
 
 ### 3. Act
 
 The generated output establishes the project's conventions. These are authoritative — when the documentation defines a pattern, follow it. Use the documented conventions as the foundation for your work, then apply your engineering knowledge to fill gaps and accomplish the task.
 
-**Before answering, cite your source.** State which `codectx generate` output informed your approach, referencing the chunk IDs. If the documentation covers the topic, your work must align with it. If it does not, say what you queried and found, then proceed using your engineering judgment shaped by the project's documented patterns and philosophy.
+**Before answering, cite your source.** State which `codectx prompt` or `codectx generate` output informed your approach, referencing the chunk IDs. If the documentation covers the topic, your work must align with it. If it does not, say what you queried and found, then proceed using your engineering judgment shaped by the project's documented patterns and philosophy.
 
 **NEVER read raw documentation files.** Do not supplement by reading files from `docs/`, `foundation/`, `topics/`, `plans/`, `prompts/`, or `system/` directories. These are compiler source files — not meant for direct consumption.
 
 ### 4. Re-query
 
-When your investigation reveals new terms, components, or patterns not covered by the initial query, run `codectx query` again with new search terms. Repeat until you have reviewed all relevant documentation.
+When your investigation reveals new terms, components, or patterns not covered by the initial search, run `codectx prompt` or `codectx query` again with new search terms. Repeat until you have reviewed all relevant documentation.
 
-**Before concluding a topic is not documented, try at least 3 queries with different terms and generate the top results from each.** Vary your search terms — use synonyms, related concepts, broader terms, and narrower terms. The taxonomy expansion will surface related content, but only if your query terms are close enough to match. A single failed query is not sufficient evidence that a topic is undocumented. Each query must be followed by `codectx generate` — running queries without generating is equivalent to skipping the documentation step entirely.
+**Before concluding a topic is not documented, try at least 3 searches with different terms.** Vary your search terms — use synonyms, related concepts, broader terms, and narrower terms. The taxonomy expansion will surface related content, but only if your query terms are close enough to match. A single failed search is not sufficient evidence that a topic is undocumented. If using `codectx query`, each query must be followed by `codectx generate` — running queries without generating is equivalent to skipping the documentation step entirely.
 
 ### 5. Validate
 
@@ -52,8 +56,8 @@ Before completing a task, query for the areas you changed to confirm your implem
 
 ## Rules
 
-- **MUST** use `codectx query` as the sole method for finding documentation. NEVER use grep, find, cat, or any file-reading tool on documentation directories.
-- **MUST** use `codectx generate` to retrieve documentation content. NEVER read raw markdown files from the docs tree.
+- **MUST** use `codectx prompt` or `codectx query` as the sole method for finding documentation. NEVER use grep, find, cat, or any file-reading tool on documentation directories.
+- **MUST** use `codectx prompt` or `codectx generate` to retrieve documentation content. NEVER read raw markdown files from the docs tree.
 - **MUST** re-query when new terms or concepts emerge during a task.
 - **MUST** validate changes against documentation before finalizing.
 - **MUST** cite which generated chunks informed your approach when answering or acting.

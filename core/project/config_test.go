@@ -402,6 +402,49 @@ func TestPreferencesConfig_WriteAndLoad_Roundtrip(t *testing.T) {
 	if loaded.Validation.RequireHeadings != original.Validation.RequireHeadings {
 		t.Errorf("require headings: expected %v, got %v", original.Validation.RequireHeadings, loaded.Validation.RequireHeadings)
 	}
+	if loaded.Prompt.BudgetMultiplier != original.Prompt.BudgetMultiplier {
+		t.Errorf("prompt multiplier: expected %f, got %f", original.Prompt.BudgetMultiplier, loaded.Prompt.BudgetMultiplier)
+	}
+	if loaded.Prompt.BudgetDelta != original.Prompt.BudgetDelta {
+		t.Errorf("prompt delta: expected %f, got %f", original.Prompt.BudgetDelta, loaded.Prompt.BudgetDelta)
+	}
+}
+
+func TestPreferencesConfig_WriteAndLoad_PromptCustomValues(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "preferences.yml")
+
+	original := project.DefaultPreferencesConfig()
+	original.Prompt.BudgetMultiplier = 5
+	original.Prompt.BudgetDelta = 0.15
+
+	if err := original.WriteToFile(path); err != nil {
+		t.Fatalf("writing: %v", err)
+	}
+
+	loaded, err := project.LoadPreferencesConfig(path)
+	if err != nil {
+		t.Fatalf("loading: %v", err)
+	}
+
+	if loaded.Prompt.BudgetMultiplier != 5 {
+		t.Errorf("multiplier: got %f, want 5", loaded.Prompt.BudgetMultiplier)
+	}
+	if loaded.Prompt.BudgetDelta != 0.15 {
+		t.Errorf("delta: got %f, want 0.15", loaded.Prompt.BudgetDelta)
+	}
+}
+
+func TestPromptConfig_EffectiveBudget_ZeroChunkTarget(t *testing.T) {
+	p := project.PromptConfig{
+		BudgetMultiplier: 3,
+		BudgetDelta:      0.0,
+	}
+	// 0 × 3 × 1.0 = 0, but floor at chunkTarget (0)
+	got := p.EffectiveBudget(0, nil)
+	if got != 0 {
+		t.Errorf("budget = %d, want 0 for zero chunkTarget", got)
+	}
 }
 
 func TestLoadPreferencesConfig_InvalidPath(t *testing.T) {
@@ -1171,5 +1214,127 @@ func TestDefaultPreferencesConfig_HasBM25FFields(t *testing.T) {
 	}
 	if cfg.Query.RRF.K != 60 {
 		t.Errorf("Query RRF K = %f, want 60", cfg.Query.RRF.K)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// PromptConfig
+// ---------------------------------------------------------------------------
+
+func TestDefaultPreferencesConfig_HasPromptDefaults(t *testing.T) {
+	cfg := project.DefaultPreferencesConfig()
+
+	if cfg.Prompt.BudgetMultiplier != project.DefaultPromptBudgetMultiplier {
+		t.Errorf("prompt multiplier = %f, want %f", cfg.Prompt.BudgetMultiplier, project.DefaultPromptBudgetMultiplier)
+	}
+	if cfg.Prompt.BudgetDelta != 0.0 {
+		t.Errorf("prompt delta = %f, want 0.0", cfg.Prompt.BudgetDelta)
+	}
+}
+
+func TestPromptConfig_EffectiveBudget_Defaults(t *testing.T) {
+	p := project.PromptConfig{
+		BudgetMultiplier: 3,
+		BudgetDelta:      0.0,
+	}
+	// 450 × 3 × 1.0 = 1350
+	got := p.EffectiveBudget(450, nil)
+	if got != 1350 {
+		t.Errorf("budget = %d, want 1350", got)
+	}
+}
+
+func TestPromptConfig_EffectiveBudget_PositiveDelta(t *testing.T) {
+	p := project.PromptConfig{
+		BudgetMultiplier: 3,
+		BudgetDelta:      0.1,
+	}
+	// 450 × 3 × 1.1 = 1485 (float: 1485.0000000000002, ceil → 1486)
+	got := p.EffectiveBudget(450, nil)
+	if got != 1486 {
+		t.Errorf("budget = %d, want 1486", got)
+	}
+}
+
+func TestPromptConfig_EffectiveBudget_NegativeDelta(t *testing.T) {
+	p := project.PromptConfig{
+		BudgetMultiplier: 3,
+		BudgetDelta:      -0.2,
+	}
+	// 450 × 3 × 0.8 = 1080
+	got := p.EffectiveBudget(450, nil)
+	if got != 1080 {
+		t.Errorf("budget = %d, want 1080", got)
+	}
+}
+
+func TestPromptConfig_EffectiveBudget_DeltaOverride(t *testing.T) {
+	p := project.PromptConfig{
+		BudgetMultiplier: 3,
+		BudgetDelta:      0.0, // config says 0.0
+	}
+	delta := 0.5
+	// 450 × 3 × 1.5 = 2025
+	got := p.EffectiveBudget(450, &delta)
+	if got != 2025 {
+		t.Errorf("budget = %d, want 2025", got)
+	}
+}
+
+func TestPromptConfig_EffectiveBudget_ZeroMultiplierDefaultsTo3(t *testing.T) {
+	p := project.PromptConfig{
+		BudgetMultiplier: 0, // should default to 3
+		BudgetDelta:      0.0,
+	}
+	// 450 × 3 × 1.0 = 1350
+	got := p.EffectiveBudget(450, nil)
+	if got != 1350 {
+		t.Errorf("budget = %d, want 1350", got)
+	}
+}
+
+func TestPromptConfig_EffectiveBudget_NegativeMultiplierDefaultsTo3(t *testing.T) {
+	p := project.PromptConfig{
+		BudgetMultiplier: -1,
+		BudgetDelta:      0.0,
+	}
+	got := p.EffectiveBudget(450, nil)
+	if got != 1350 {
+		t.Errorf("budget = %d, want 1350", got)
+	}
+}
+
+func TestPromptConfig_EffectiveBudget_FloorAtChunkTarget(t *testing.T) {
+	p := project.PromptConfig{
+		BudgetMultiplier: 1,
+		BudgetDelta:      -0.99, // 450 × 1 × 0.01 = 4.5 → should floor at 450
+	}
+	got := p.EffectiveBudget(450, nil)
+	if got != 450 {
+		t.Errorf("budget = %d, want 450 (floor at chunk target)", got)
+	}
+}
+
+func TestPromptConfig_EffectiveBudget_CeilsUp(t *testing.T) {
+	p := project.PromptConfig{
+		BudgetMultiplier: 3,
+		BudgetDelta:      0.0,
+	}
+	// 451 × 3 × 1.0 = 1353
+	got := p.EffectiveBudget(451, nil)
+	if got != 1353 {
+		t.Errorf("budget = %d, want 1353", got)
+	}
+}
+
+func TestPromptConfig_EffectiveBudget_LargerChunkTarget(t *testing.T) {
+	p := project.PromptConfig{
+		BudgetMultiplier: 3,
+		BudgetDelta:      0.0,
+	}
+	// 800 × 3 × 1.0 = 2400
+	got := p.EffectiveBudget(800, nil)
+	if got != 2400 {
+		t.Errorf("budget = %d, want 2400", got)
 	}
 }

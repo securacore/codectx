@@ -6,6 +6,7 @@ package project
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 
@@ -361,6 +362,9 @@ type PreferencesConfig struct {
 
 	// Validation configures documentation linting and validation.
 	Validation ValidationConfig `yaml:"validation"`
+
+	// Prompt configures the prompt command's auto-selection behavior.
+	Prompt PromptConfig `yaml:"prompt"`
 }
 
 // SearchConfig controls package search and discovery behavior.
@@ -570,6 +574,47 @@ type ValidationConfig struct {
 	RequireHeadings bool `yaml:"require_headings"`
 }
 
+// PromptConfig controls the `codectx prompt` auto-selection behavior.
+// The prompt command combines query + generate into a single operation,
+// auto-selecting the top results within a computed token budget.
+type PromptConfig struct {
+	// BudgetMultiplier is the base number of chunks to target.
+	// Budget = chunk_target_tokens × BudgetMultiplier × (1 + BudgetDelta).
+	// Defaults to 3.
+	BudgetMultiplier float64 `yaml:"budget_multiplier"`
+
+	// BudgetDelta scales the budget up or down incrementally.
+	// 0.0 = no change, 0.1 = +10%, -0.2 = -20%.
+	// Defaults to 0.0.
+	BudgetDelta float64 `yaml:"budget_delta"`
+}
+
+// DefaultPromptBudgetMultiplier is the default number of chunk targets
+// used in the prompt budget calculation.
+const DefaultPromptBudgetMultiplier = 3.0
+
+// EffectiveBudget computes the token budget for chunk auto-selection.
+// chunkTarget is the configured chunk target size in tokens
+// (typically from ChunkingConfig.TargetTokens).
+// deltaOverride, if non-nil, replaces the configured BudgetDelta
+// (used by the --delta CLI flag for per-command overrides).
+func (p PromptConfig) EffectiveBudget(chunkTarget int, deltaOverride *float64) int {
+	mult := p.BudgetMultiplier
+	if mult <= 0 {
+		mult = DefaultPromptBudgetMultiplier
+	}
+	delta := p.BudgetDelta
+	if deltaOverride != nil {
+		delta = *deltaOverride
+	}
+	budget := float64(chunkTarget) * mult * (1 + delta)
+	// Always allow at least one chunk's worth.
+	if budget < float64(chunkTarget) {
+		return chunkTarget
+	}
+	return int(math.Ceil(budget))
+}
+
 // EffectiveAutoCompile returns whether auto-compilation is enabled.
 // Returns true when AutoCompile is nil (field absent from config file),
 // preserving backwards compatibility for existing preferences.yml files.
@@ -687,6 +732,10 @@ func DefaultPreferencesConfig() PreferencesConfig {
 			RequireSpec:     false,
 			MaxFileTokens:   10000,
 			RequireHeadings: true,
+		},
+		Prompt: PromptConfig{
+			BudgetMultiplier: DefaultPromptBudgetMultiplier,
+			BudgetDelta:      0.0,
 		},
 	}
 }

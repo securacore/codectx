@@ -14,6 +14,7 @@ import (
 	linkcmd "github.com/securacore/codectx/cmds/link"
 	newcmd "github.com/securacore/codectx/cmds/new"
 	plancmd "github.com/securacore/codectx/cmds/plan"
+	promptcmd "github.com/securacore/codectx/cmds/prompt"
 	publishcmd "github.com/securacore/codectx/cmds/publish"
 	querycmd "github.com/securacore/codectx/cmds/query"
 	removecmd "github.com/securacore/codectx/cmds/remove"
@@ -41,6 +42,7 @@ func main() {
 			linkcmd.Command,
 			newcmd.Command,
 			plancmd.Command,
+			promptcmd.Command,
 			publishcmd.Command,
 			querycmd.Command,
 			removecmd.Command,

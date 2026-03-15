@@ -163,7 +163,7 @@ func run(_ context.Context, cmd *cli.Command) error {
 	}
 
 	// --- Step 7: Output ---
-	historyPath := buildHistoryPath(histDir, docFile)
+	historyPath := shared.BuildHistoryPath(histDir, docFile)
 	summary := corequery.FormatGenerateSummary(result, historyPath, filePath, false)
 
 	return outputDocument([]byte(result.Document), summary, filePath)
@@ -222,7 +222,7 @@ func serveCacheHit(docPath, filePath, histDir string, chunkIDs []string, compile
 		ContentHash: contentHash,
 		ChunkIDs:    chunkIDs,
 	}
-	historyPath := buildHistoryPath(histDir, docFile)
+	historyPath := shared.BuildHistoryPath(histDir, docFile)
 	summary := corequery.FormatGenerateSummary(cacheResult, historyPath, filePath, true)
 
 	// Output.
@@ -247,21 +247,4 @@ func outputDocument(content []byte, summary, filePath string) error {
 		fmt.Fprint(os.Stderr, summary)
 	}
 	return nil
-}
-
-// buildHistoryPath builds a relative path to a history doc file for display.
-func buildHistoryPath(histDir, docFile string) string {
-	if docFile == "" {
-		return ""
-	}
-	fullPath := filepath.Join(histDir, history.DocsDir, docFile)
-	if cwd, cwdErr := os.Getwd(); cwdErr == nil {
-		if realCwd, evalErr := filepath.EvalSymlinks(cwd); evalErr == nil {
-			cwd = realCwd
-		}
-		if rel, relErr := filepath.Rel(cwd, fullPath); relErr == nil {
-			return rel
-		}
-	}
-	return fullPath
 }
