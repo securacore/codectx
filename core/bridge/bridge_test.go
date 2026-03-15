@@ -3,6 +3,9 @@ package bridge
 import (
 	"strings"
 	"testing"
+
+	"github.com/securacore/codectx/core/chunk"
+	"github.com/securacore/codectx/core/manifest"
 )
 
 func TestHeadingBridge_DifferentSections(t *testing.T) {
@@ -209,5 +212,121 @@ func TestGenerate_OnlyHeadingTransition(t *testing.T) {
 	got := generate(input)
 	if !strings.Contains(got, "Completed: Setup") {
 		t.Errorf("expected heading transition, got: %s", got)
+	}
+}
+
+// --- GenerateAll ---
+
+func TestGenerateAll_BasicPairs(t *testing.T) {
+	chunks := []chunk.Chunk{
+		{ID: "obj:aaa.01", Type: chunk.ChunkObject, Source: "docs/auth.md", Heading: "Auth", Sequence: 1, Content: "Authentication overview with detailed explanation of the token lifecycle."},
+		{ID: "obj:aaa.02", Type: chunk.ChunkObject, Source: "docs/auth.md", Heading: "Auth > JWT", Sequence: 2, Content: "JWT token signing uses RS256 algorithm for production security."},
+		{ID: "obj:aaa.03", Type: chunk.ChunkObject, Source: "docs/auth.md", Heading: "Auth > JWT > Refresh", Sequence: 3, Content: "Refresh tokens are rotated on every use."},
+		{ID: "obj:bbb.01", Type: chunk.ChunkObject, Source: "docs/database.md", Heading: "Database", Sequence: 1, Content: "Database connection pooling and query optimization strategies."},
+		{ID: "obj:bbb.02", Type: chunk.ChunkObject, Source: "docs/database.md", Heading: "Database > Migrations", Sequence: 2, Content: "Schema migrations run in a transaction with automatic rollback."},
+	}
+
+	mfst := &manifest.Manifest{
+		Objects: make(map[string]*manifest.ManifestEntry),
+		Specs:   make(map[string]*manifest.ManifestEntry),
+		System:  make(map[string]*manifest.ManifestEntry),
+	}
+
+	bridges := GenerateAll(chunks, mfst)
+
+	// Should generate bridges for adjacent pairs within the same file:
+	// auth.md: chunk 1->2, chunk 2->3 (2 bridges)
+	// database.md: chunk 1->2 (1 bridge)
+	if len(bridges) != 3 {
+		t.Fatalf("expected 3 bridges, got %d", len(bridges))
+	}
+
+	// Verify bridges exist for the correct chunk IDs (the "prev" chunk gets the bridge).
+	for _, id := range []string{"obj:aaa.01", "obj:aaa.02", "obj:bbb.01"} {
+		if _, ok := bridges[id]; !ok {
+			t.Errorf("expected bridge for %q", id)
+		}
+	}
+
+	// Verify no bridge for last chunks in each file.
+	for _, id := range []string{"obj:aaa.03", "obj:bbb.02"} {
+		if _, ok := bridges[id]; ok {
+			t.Errorf("unexpected bridge for last chunk %q", id)
+		}
+	}
+
+	// No cross-file bridges: bbb.01 bridge should not reference auth headings.
+	if b, ok := bridges["obj:bbb.01"]; ok {
+		if strings.Contains(b, "Auth") {
+			t.Errorf("bridge for bbb.01 should not reference auth headings, got: %s", b)
+		}
+	}
+}
+
+func TestGenerateAll_SkipsSpecChunks(t *testing.T) {
+	chunks := []chunk.Chunk{
+		{ID: "obj:aaa.01", Type: chunk.ChunkObject, Source: "docs/auth.md", Heading: "Auth", Sequence: 1, Content: "Authentication overview."},
+		{ID: "spec:ccc.01", Type: chunk.ChunkSpec, Source: "docs/auth.md", Heading: "Auth", Sequence: 2, Content: "Spec reasoning for auth design decisions."},
+		{ID: "obj:aaa.02", Type: chunk.ChunkObject, Source: "docs/auth.md", Heading: "Auth > JWT", Sequence: 3, Content: "JWT token signing uses RS256 algorithm."},
+	}
+
+	mfst := &manifest.Manifest{
+		Objects: make(map[string]*manifest.ManifestEntry),
+		Specs:   make(map[string]*manifest.ManifestEntry),
+		System:  make(map[string]*manifest.ManifestEntry),
+	}
+
+	bridges := GenerateAll(chunks, mfst)
+
+	// The spec chunk should be excluded from bridge generation.
+	// Only obj:aaa.01 -> obj:aaa.02 should produce a bridge.
+	if _, ok := bridges["spec:ccc.01"]; ok {
+		t.Error("spec chunk should not receive a bridge")
+	}
+
+	if len(bridges) != 1 {
+		t.Fatalf("expected 1 bridge (obj:aaa.01 -> obj:aaa.02), got %d", len(bridges))
+	}
+	if _, ok := bridges["obj:aaa.01"]; !ok {
+		t.Error("expected bridge for obj:aaa.01")
+	}
+}
+
+func TestGenerateAll_SkipsExistingBridges(t *testing.T) {
+	chunks := []chunk.Chunk{
+		{ID: "obj:aaa.01", Type: chunk.ChunkObject, Source: "docs/auth.md", Heading: "Auth", Sequence: 1, Content: "Authentication overview with detailed explanation."},
+		{ID: "obj:aaa.02", Type: chunk.ChunkObject, Source: "docs/auth.md", Heading: "Auth > JWT", Sequence: 2, Content: "JWT token signing uses RS256 algorithm for security."},
+		{ID: "obj:aaa.03", Type: chunk.ChunkObject, Source: "docs/auth.md", Heading: "Auth > JWT > Refresh", Sequence: 3, Content: "Refresh tokens are rotated on every use."},
+	}
+
+	existingBridge := "Existing bridge summary from cache."
+	mfst := &manifest.Manifest{
+		Objects: map[string]*manifest.ManifestEntry{
+			"obj:aaa.01": {
+				Type:         "object",
+				Source:       "docs/auth.md",
+				Heading:      "Auth",
+				Sequence:     1,
+				BridgeToNext: &existingBridge,
+			},
+		},
+		Specs:  make(map[string]*manifest.ManifestEntry),
+		System: make(map[string]*manifest.ManifestEntry),
+	}
+
+	bridges := GenerateAll(chunks, mfst)
+
+	// obj:aaa.01 already has a bridge in the manifest — should be skipped.
+	if _, ok := bridges["obj:aaa.01"]; ok {
+		t.Error("should skip chunk pair where manifest already has a bridge")
+	}
+
+	// obj:aaa.02 -> obj:aaa.03 has no existing bridge — should be generated.
+	if _, ok := bridges["obj:aaa.02"]; !ok {
+		t.Error("expected bridge for obj:aaa.02 (no existing bridge in manifest)")
+	}
+
+	if len(bridges) != 1 {
+		t.Fatalf("expected 1 bridge (skipping existing), got %d", len(bridges))
 	}
 }

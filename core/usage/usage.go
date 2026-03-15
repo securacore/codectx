@@ -16,6 +16,7 @@ import (
 
 	"github.com/securacore/codectx/core/history"
 	"github.com/securacore/codectx/core/project"
+	"github.com/securacore/codectx/embed"
 	"gopkg.in/yaml.v3"
 )
 
@@ -134,9 +135,9 @@ func ReadGlobal(path string) Metrics {
 	return readOrInit(path)
 }
 
-// InitFile creates a usage file with zero values if it does not exist.
+// initFile creates a usage file with zero values if it does not exist.
 // Never overwrites an existing file.
-func InitFile(path, projectName, header string) error {
+func initFile(path, projectName, header string) error {
 	if _, err := os.Stat(path); err == nil {
 		return nil // file exists, do not overwrite
 	}
@@ -149,13 +150,45 @@ func InitFile(path, projectName, header string) error {
 }
 
 // InitLocalFile creates usage.yml with zero values if it does not exist.
+// Uses the embedded commented template for self-documenting defaults.
 func InitLocalFile(path string) error {
-	return InitFile(path, "", localHeader)
+	if _, err := os.Stat(path); err == nil {
+		return nil // file exists, do not overwrite
+	}
+
+	tmpl, err := embed.ReadConfigTemplate("usage.yml")
+	if err != nil {
+		// Fall back to struct-based write if template is unavailable.
+		return initFile(path, "", localHeader)
+	}
+
+	return project.WriteConfigFromTemplate(path, tmpl, struct {
+		FirstSeen int64
+	}{
+		FirstSeen: time.Now().UnixNano(),
+	})
 }
 
 // InitGlobalFile creates global_usage.yml with zero values if it does not exist.
+// Uses the embedded commented template for self-documenting defaults.
 func InitGlobalFile(path, projectName string) error {
-	return InitFile(path, projectName, globalHeader)
+	if _, err := os.Stat(path); err == nil {
+		return nil // file exists, do not overwrite
+	}
+
+	tmpl, err := embed.ReadConfigTemplate("global-usage.yml")
+	if err != nil {
+		// Fall back to struct-based write if template is unavailable.
+		return initFile(path, projectName, globalHeader)
+	}
+
+	return project.WriteConfigFromTemplate(path, tmpl, struct {
+		Project   string
+		FirstSeen int64
+	}{
+		Project:   projectName,
+		FirstSeen: time.Now().UnixNano(),
+	})
 }
 
 // --- Internal helpers ---

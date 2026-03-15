@@ -1,0 +1,265 @@
+# codectx compiler preferences
+# Compiler and pipeline configuration. Checked into version control.
+# Full reference: https://github.com/securacore/codectx/docs/product/configuration.md
+
+# When true, commands that change project state (init, update)
+# automatically run the compilation pipeline after completing.
+# Set to false if you prefer to run `codectx compile` manually.
+auto_compile: true
+
+# When true, `codectx compile` auto-repairs missing directories,
+# restores deleted system default files, and manages .gitkeep files
+# in empty content directories. `codectx repair` always runs
+# regardless of this setting.
+scaffold_maintenance: true
+
+# --------------------------------------------------------------------------
+# Chunk compilation settings
+# Controls how documentation is split into searchable chunks.
+# Consistent chunk sizes are critical for search quality — when all chunks
+# are approximately the same length, BM25 scoring becomes purely about
+# term relevance rather than document length.
+# --------------------------------------------------------------------------
+chunking:
+  # Target chunk size in tokens. The chunker accumulates semantic blocks
+  # (paragraphs, code blocks, lists, tables) until reaching this count.
+  # Smaller values = more precise search results, less context per chunk.
+  # Larger values = more context per chunk, but less granular retrieval.
+  target_tokens: 450
+
+  # Minimum chunk size in tokens. Prevents tiny fragments that would
+  # score disproportionately high in BM25 due to length normalization.
+  min_tokens: 200
+
+  # Maximum chunk size in tokens (hard ceiling). Atomic blocks like code
+  # blocks and tables that exceed this become oversized chunks, flagged
+  # in the manifest. They are never split.
+  max_tokens: 800
+
+  # Fraction of target_tokens at which to break early if the next block
+  # would push the chunk over target. 0.8 means break after 80% of target.
+  # Higher values = tighter clustering around target, more frequent breaks.
+  # Lower values = more variation in chunk sizes, fewer breaks.
+  flexibility_window: 0.8
+
+  # Number of hex characters from the SHA-256 content hash used in chunk IDs.
+  # Longer hashes reduce collision probability in very large corpora.
+  # Valid range: 8-64. Default: 16.
+  hash_length: 16
+
+# --------------------------------------------------------------------------
+# Indexer selection
+# Controls which BM25 scoring implementation is used at query time.
+# Both indexes are always built during compilation, so you can switch
+# between them instantly without recompiling.
+# --------------------------------------------------------------------------
+
+# Which BM25 implementation to use for query scoring.
+# "bm25"  — Flat bag-of-words scorer. Each chunk is one document.
+# "bm25f" — Field-weighted scorer. Heading, body, code, and terms fields
+#           are scored separately with configurable weights. (Recommended)
+indexer: bm25f
+
+# --------------------------------------------------------------------------
+# Flat BM25 index parameters (used when indexer: bm25)
+# --------------------------------------------------------------------------
+bm25:
+  # Term frequency saturation. Higher values allow term frequency to
+  # contribute more to the score before saturating. Range: 1.2-2.0 typical.
+  k1: 1.2
+
+  # Document length normalization. 0 = no normalization (long and short
+  # chunks score equally). 1 = full normalization (shorter chunks strongly
+  # favored). With consistent chunk sizes, this has minimal effect.
+  b: 0.75
+
+# --------------------------------------------------------------------------
+# BM25F field-weighted index parameters (used when indexer: bm25f)
+# Scores heading, body, code, and taxonomy terms fields separately,
+# then combines them with configurable weights and per-field length
+# normalization.
+# --------------------------------------------------------------------------
+bm25f:
+  # Term frequency saturation (same semantics as bm25.k1).
+  k1: 1.2
+
+  # Per-field scoring weights and length normalization.
+  # weight: how much a term match in this field contributes to the score.
+  # b: per-field length normalization (0 = none, 1 = full).
+  fields:
+    # Headings are the author's strongest signal about what a chunk covers.
+    # High weight, low length normalization (headings are intentionally short).
+    heading:
+      weight: 3.0
+      b: 0.3
+
+    # Taxonomy-assigned terms are curated signals, not raw text.
+    # High weight, no length normalization (term lists are fixed-size).
+    terms:
+      weight: 2.0
+      b: 0.0
+
+    # Prose paragraphs are the baseline field.
+    # Standard weight and standard BM25 length normalization.
+    body:
+      weight: 1.0
+      b: 0.75
+
+    # Fenced code blocks. Code identifiers matter but tokenize differently
+    # from prose. Moderate weight, moderate normalization (code blocks vary
+    # widely in size).
+    code:
+      weight: 0.6
+      b: 0.5
+
+# --------------------------------------------------------------------------
+# Query pipeline configuration
+# Controls the four-layer query pipeline: taxonomy expansion, BM25/BM25F
+# scoring, Reciprocal Rank Fusion, and graph-based re-ranking.
+# --------------------------------------------------------------------------
+query:
+  # Taxonomy query expansion: broadens queries using aliases and term
+  # relationships from the compiled taxonomy. A search for "auth" also
+  # matches "authentication", "login", "sign-in", etc.
+  expansion:
+    # Set to false to disable taxonomy expansion entirely.
+    # Queries will use only the exact terms provided.
+    enabled: true
+
+    # Weight multiplier for taxonomy alias matches (e.g., "auth" -> "authentication").
+    # 1.0 means aliases are treated as equivalent to original query terms.
+    alias_weight: 1.0
+
+    # Weight multiplier for narrower (child) term matches.
+    # Lower than aliases because child terms are related but more specific.
+    narrower_weight: 0.7
+
+    # Weight multiplier for related (lateral) term matches.
+    # Lowest weight because related terms are contextually adjacent but
+    # may not be directly relevant.
+    related_weight: 0.4
+
+    # Maximum total expanded terms to prevent query explosion on
+    # broad terms with many aliases and relationships.
+    max_expansion_terms: 20
+
+  # Reciprocal Rank Fusion: merges ranked result lists from all three
+  # indexes (objects, specs, system) into one unified ranking without
+  # requiring scores to be on the same scale.
+  rrf:
+    # Smoothing constant. Higher values reduce the influence of exact rank
+    # position. Standard default is 60; rarely needs tuning.
+    k: 60
+
+    # Per-index importance multipliers. Controls how much each index
+    # contributes to the fused ranking.
+    index_weights:
+      # Instruction chunks — the primary documentation the AI needs.
+      objects: 1.0
+      # Reasoning chunks — explains why decisions were made.
+      specs: 0.7
+      # Compiler/system documentation — lower priority for most queries.
+      system: 0.3
+
+  # Graph-based re-ranking: after RRF fusion, boosts chunks that are
+  # structurally connected to other high-scoring results.
+  graph_rerank:
+    # Set to false to disable graph re-ranking entirely.
+    # Results will use pure RRF scores without structural boosting.
+    enabled: true
+
+    # Boost multiplier when an adjacent chunk (previous/next in same file)
+    # also appears in the top results. Adjacency is a strong coherence signal.
+    adjacent_boost: 0.15
+
+    # Boost multiplier when the paired spec/object counterpart also scored.
+    # If both instruction and reasoning for a topic scored, the topic is
+    # deeply relevant.
+    spec_boost: 0.20
+
+    # Boost multiplier when a cross-referenced document also has scored chunks.
+    # Documents that reference each other share topic territory.
+    cross_ref_boost: 0.10
+
+# --------------------------------------------------------------------------
+# Taxonomy extraction settings
+# Controls how the controlled vocabulary is built from documentation content.
+# --------------------------------------------------------------------------
+taxonomy:
+  # Minimum corpus-wide frequency to include a term in the taxonomy.
+  # Terms appearing in fewer chunks than this are excluded.
+  # Higher values = smaller, more focused taxonomy.
+  min_term_frequency: 2
+
+  # Maximum aliases per canonical term. Prevents taxonomy bloat.
+  # Beyond 10 aliases, additional entries tend to cause false positive
+  # matches in BM25 search.
+  max_alias_count: 10
+
+  # Enable POS-based (part-of-speech) term extraction.
+  # When true, the compiler uses NLP to extract compound technical terms
+  # like "dependency injection" and "middleware chain" from body text.
+  # When false, only structural extraction (headings, code identifiers,
+  # bold terms) is used.
+  pos_extraction: true
+
+# --------------------------------------------------------------------------
+# Documentation validation
+# Controls linting and structural checks during compilation.
+# --------------------------------------------------------------------------
+validation:
+  # Require every topic directory to have a README.md entry point.
+  require_readme: true
+
+  # Require .spec.md reasoning files for every documentation file.
+  # Recommended but not required by default.
+  require_spec: false
+
+  # Warn if a single source markdown file exceeds this token count.
+  # Large files should be broken into sub-topic files for better
+  # chunk granularity and search precision.
+  max_file_tokens: 10000
+
+  # Warn if a markdown file has no heading structure.
+  # Headings drive chunk boundaries and taxonomy extraction.
+  require_headings: true
+
+# --------------------------------------------------------------------------
+# Prompt command configuration
+# Controls the `codectx prompt` auto-selection behavior.
+#
+# The prompt command combines query + generate into a single atomic
+# operation. It searches for relevant chunks, auto-selects the top
+# results that fit within a token budget, and assembles them into a
+# reading document — all in one call.
+#
+# The token budget determines how many chunks are included:
+#   budget = chunk_target_tokens x budget_multiplier x (1 + budget_delta)
+#
+# At defaults (target=450, multiplier=4, delta=0):
+#   budget = 450 x 4 x 1.0 = 1,800 tokens (~4 chunks)
+#
+# The budget is a ceiling, not a target. The prompt command fills from
+# highest-scoring to lowest until adding another chunk would exceed the
+# budget. Smaller budgets produce tighter, more focused results. Larger
+# budgets include more context at the cost of more tokens.
+#
+# You can override the budget per-call:
+#   codectx prompt --budget 3000 "query"     # explicit token budget
+#   codectx prompt --delta 0.5 "query"       # +50% over configured budget
+# --------------------------------------------------------------------------
+prompt:
+  # Base multiplier for the auto-selection budget calculation.
+  # This effectively controls how many chunks worth of content the prompt
+  # command includes. At the default chunk target of 450 tokens:
+  #   multiplier 3 = ~1,350 tokens (~3 chunks)
+  #   multiplier 4 = ~1,800 tokens (~4 chunks)
+  #   multiplier 5 = ~2,250 tokens (~5 chunks)
+  # Higher values include more context from lower-scoring results.
+  budget_multiplier: 4.0
+
+  # Scales the budget up or down incrementally from the base.
+  # 0.0 = no change, 0.1 = +10% budget, -0.2 = -20% budget.
+  # Use this for project-wide tuning without changing the multiplier.
+  # Override per-call with: codectx prompt --delta 0.5 "query"
+  budget_delta: 0.0

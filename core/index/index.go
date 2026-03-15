@@ -92,18 +92,18 @@ func (idx *Index) BuildFromChunks(chunks []chunk.Chunk) {
 	}
 }
 
-// Query runs a search query against a specific index type.
+// query runs a search query against a specific index type.
 // The raw query string is tokenized using the domain-aware tokenizer
 // before scoring.
 //
 // Returns up to topN results sorted by score descending.
 // If topN <= 0, all matching results are returned.
-func (idx *Index) Query(indexType IndexType, query string, topN int) []ScoredResult {
+func (idx *Index) query(indexType IndexType, q string, topN int) []ScoredResult {
 	bm25, ok := idx.Indexes[indexType]
 	if !ok {
 		return nil
 	}
-	tokens := Tokenize(query)
+	tokens := Tokenize(q)
 	if len(tokens) == 0 {
 		return nil
 	}

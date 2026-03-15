@@ -145,11 +145,14 @@ codectx compile
 Output:
 
 ```
-Compiled: 3 files -> 8 chunks (3,420 tokens)
-Taxonomy: 24 terms, 67 aliases
-Session: 0 / 30,000 tokens (0.0%)
-Changes: 3 new, 0 modified, 0 unchanged
-Time: 2.1s
+✓ Compilation complete
+  Compiled: 3 files -> 8 chunks (3,420 tokens)
+  CLI codectx prompt | default search budget: 1,800 tokens (450 × 4 × 1.0)
+  Taxonomy: 24 terms extracted
+  Session: 0 / 30,000 tokens (0.0%)
+  Changes: 3 new, 0 modified, 0 unchanged
+  Time: 2.1s
+  Output: docs/.codectx/compiled
 ```
 
 The compiler has:
@@ -176,28 +179,34 @@ codectx query "token validation"
 Output:
 
 ```
-Results for: "token validation"
-Expanded: "token validation jwt bearer-token token-validation"
+-> Results for: "token validation"
+  Expanded: token validation jwt bearer-token
 
-Instructions:
-1. [score: 8.42] obj:a1b2c3.02 -- Authentication > JWT Token Management > Token Validation
-   Source: docs/topics/authentication/README.md (chunk 2/3, 312 tokens)
+Results (3, bm25f + rrf)
+  1. [score: 0.0234] obj:a1b2c3.02 — Authentication > JWT Token Management > Token Validation
+     Source: docs/topics/authentication/README.md (chunk 2/3, 312 tokens)
+     Indexes: objects:#1
 
-2. [score: 6.18] obj:a1b2c3.03 -- Authentication > JWT Token Management > Refresh Flow
-   Source: docs/topics/authentication/README.md (chunk 3/3, 284 tokens)
+  2. [score: 0.0198] obj:a1b2c3.03 — Authentication > JWT Token Management > Refresh Flow
+     Source: docs/topics/authentication/README.md (chunk 3/3, 284 tokens)
+     Indexes: objects:#2
 
-Reasoning:
-1. [score: 5.91] spec:d4e5f6.01 -- Authentication Reasoning > Why JWT Over Session Tokens
-   Source: docs/topics/authentication/README.spec.md (chunk 1/2, 198 tokens)
+  3. [score: 0.0165] spec:d4e5f6.01 — Authentication Reasoning > Why JWT Over Session Tokens
+     Source: docs/topics/authentication/README.spec.md (chunk 1/2, 198 tokens)
+     Indexes: specs:#1
+
+  Total: 794 tokens across 3 results
 
 Related chunks (adjacent to top results, not scored):
-  obj:a1b2c3.01 -- Authentication > JWT Token Management
+  obj:a1b2c3.01 — Authentication > JWT Token Management
+
+Run "codectx generate" with the top chunk IDs above to read their full content.
 ```
 
 The search:
 - Expanded "token" to include taxonomy aliases like "jwt" and "bearer-token"
-- Scored results across separate indexes for instructions and reasoning
-- Fused the rankings into a single ordered list
+- Scored results using BM25F with field-weighted scoring across all three indexes
+- Fused the rankings via Reciprocal Rank Fusion into a single interleaved list
 - Included adjacent chunks as related context
 
 Use `--top N` to control how many results are returned:
@@ -221,11 +230,11 @@ The generated document appears on stdout with content grouped by type — instru
 The summary appears on stderr:
 
 ```
--> Generated (794 tokens, hash: e7f8a9b0c1d2)
+✓ Generated (794 tokens, hash: e7f8a9b0c1d2)
   History: .codectx/history/docs/1741532401000000000.e7f8a9b0c1d2.md
   Contains: obj:a1b2c3.02, obj:a1b2c3.03, spec:d4e5f6.01
   Related chunks not included:
-    obj:a1b2c3.01 -- Authentication > JWT Token Management (246 tokens)
+    obj:a1b2c3.01 — Authentication > JWT Token Management (246 tokens)
 ```
 
 Write to a file instead:
@@ -272,7 +281,7 @@ codectx session list
 Output:
 
 ```
-Always-loaded session context (1,840 / 30,000 tokens):
+-> Always-loaded session context (1,840 / 30,000 tokens (6.1%))
 
   foundation/coding-standards    1,840 tokens
 ```

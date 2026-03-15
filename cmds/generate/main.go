@@ -26,9 +26,6 @@ package generate
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
-	"time"
 
 	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/history"
@@ -117,7 +114,29 @@ func run(_ context.Context, cmd *cli.Command) error {
 	// --- Step 3: Cache lookup (unless --no-cache) ---
 	if !noCache {
 		if docPath, hit := history.GenerateCacheLookup(histDir, chunkIDs, compiledDir); hit {
-			return serveCacheHit(docPath, filePath, histDir, chunkIDs, compiledDir, usageFile, caller)
+			res, err := shared.ServeCacheHit(shared.CacheHitParams{
+				DocPath:     docPath,
+				ChunkIDs:    chunkIDs,
+				HistDir:     histDir,
+				CompiledDir: compiledDir,
+				UsageFile:   usageFile,
+				Caller:      caller,
+			})
+			if err != nil {
+				return err
+			}
+			cacheResult := &corequery.GenerateResult{
+				TotalTokens: res.TokenCount,
+				ContentHash: res.Hash,
+				ChunkIDs:    chunkIDs,
+			}
+			historyPath := shared.BuildHistoryPath(histDir, res.DocFile)
+			summary := corequery.FormatGenerateSummary(cacheResult, historyPath, filePath, true)
+			return shared.OutputDocument(shared.OutputDocumentParams{
+				Content:  res.Content,
+				FilePath: filePath,
+				Footer:   summary,
+			})
 		}
 	}
 
@@ -166,85 +185,9 @@ func run(_ context.Context, cmd *cli.Command) error {
 	historyPath := shared.BuildHistoryPath(histDir, docFile)
 	summary := corequery.FormatGenerateSummary(result, historyPath, filePath, false)
 
-	return outputDocument([]byte(result.Document), summary, filePath)
-}
-
-// serveCacheHit handles a generate cache hit: reads the cached document,
-// outputs it, writes a chunks entry with cache_hit=true, and updates usage.
-func serveCacheHit(docPath, filePath, histDir string, chunkIDs []string, compiledDir, usageFile string, caller history.CallerContext) error {
-	content, err := os.ReadFile(docPath)
-	if err != nil {
-		return fmt.Errorf("reading cached document: %w", err)
-	}
-
-	// Compute hashes for the entry.
-	contentHash := history.ContentHash(content)
-	compileHash, _ := history.CompileHash(compiledDir)
-
-	// Recover token count from the most recent matching chunks entry.
-	tokenCount := 0
-	if entries, readErr := history.ReadChunksHistory(histDir, 0); readErr == nil {
-		for _, e := range entries {
-			if e.ContentHash == contentHash {
-				tokenCount = e.TokenCount
-				break
-			}
-		}
-	}
-
-	// Write chunks entry recording the cache hit (best-effort).
-	docFile := filepath.Base(docPath)
-	entry := history.ChunksEntry{
-		Ts:           time.Now().UnixNano(),
-		ChunkSetHash: history.ChunkSetHash(chunkIDs),
-		Chunks:       chunkIDs,
-		TokenCount:   tokenCount,
-		ContentHash:  contentHash,
-		CompileHash:  compileHash,
-		DocFile:      docFile,
-		CacheHit:     true,
-		Caller:       caller.Caller,
-		SessionID:    caller.SessionID,
-		Model:        caller.Model,
-	}
-	if writeErr := history.WriteChunksEntry(histDir, entry); writeErr != nil {
-		shared.WarnBestEffort("Writing cache-hit entry", writeErr)
-	}
-
-	// Update usage (best-effort).
-	if usageErr := usage.UpdateGenerate(usageFile, tokenCount, true, caller); usageErr != nil {
-		shared.WarnBestEffort("Updating usage metrics", usageErr)
-	}
-
-	// Build a GenerateResult for the shared summary formatter.
-	cacheResult := &corequery.GenerateResult{
-		TotalTokens: tokenCount,
-		ContentHash: contentHash,
-		ChunkIDs:    chunkIDs,
-	}
-	historyPath := shared.BuildHistoryPath(histDir, docFile)
-	summary := corequery.FormatGenerateSummary(cacheResult, historyPath, filePath, true)
-
-	// Output.
-	return outputDocument(content, summary, filePath)
-}
-
-// outputDocument writes the generated document to the appropriate destination.
-// In --file mode, the document is written to a file and the summary to stdout.
-// In default mode, the document goes to stdout and the summary to stderr.
-func outputDocument(content []byte, summary, filePath string) error {
-	if filePath != "" {
-		if err := os.WriteFile(filePath, content, project.FilePerm); err != nil {
-			fmt.Print(tui.ErrorMsg{
-				Title:  "Failed to write file",
-				Detail: []string{err.Error()},
-			}.Render())
-			return fmt.Errorf("writing file: %w", err)
-		}
-		fmt.Print(summary)
-	} else {
-		fmt.Print(string(content))
-		fmt.Fprint(os.Stderr, summary)
-	}
-	return nil
+	return shared.OutputDocument(shared.OutputDocumentParams{
+		Content:  []byte(result.Document),
+		FilePath: filePath,
+		Footer:   summary,
+	})
 }

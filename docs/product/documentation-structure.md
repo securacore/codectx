@@ -94,8 +94,10 @@ docs/                              # Default root (configurable)
       README.spec.md               # Why these instructions work
   system/                          # Compiler behavior (editable)
     foundation/
-      compiler-philosophy/
-        README.md
+      documentation-protocol/
+        README.md                  # How AI tools use codectx
+      history/
+        README.md                  # How AI tools use codectx history
     topics/
       taxonomy-generation/
         README.md                  # Alias generation instructions
@@ -149,10 +151,11 @@ The `system/` directory contains documentation about the compiler itself, using 
 
 ### What Lives in System
 
-- **`system/foundation/`** — General compiler philosophy and principles
-- **`system/topics/taxonomy-generation/`** — Instructions for generating taxonomy aliases
-- **`system/topics/bridge-summaries/`** — Instructions for generating chunk boundary bridges
+- **`system/foundation/documentation-protocol/`** — Instructions for how AI tools interact with codectx
+- **`system/foundation/history/`** — Instructions for how AI tools use codectx history commands
 - **`system/topics/context-assembly/`** — Instructions for assembling session context
+- **`system/topics/taxonomy-generation/`** — Instructions for generating taxonomy aliases (created as needed)
+- **`system/topics/bridge-summaries/`** — Instructions for generating chunk boundary bridges (created as needed)
 - **`system/plans/`** — Empty on init, available for compiler migration plans
 - **`system/prompts/`** — Automation scripts for compiler-adjacent tasks
 

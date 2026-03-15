@@ -29,11 +29,15 @@ codectx compile --incremental=false    # Force full recompilation
 Output:
 
 ```
-Compiled: 342 files -> 4,850 chunks (2,134,500 tokens)
-Taxonomy: 12,847 terms, 48,203 aliases
-Session: 28,450 / 30,000 tokens (94.8%)
-Changes: 3 new, 7 modified, 332 unchanged
-Time: 47.3s
+✓ Compilation complete
+  Compiled: 342 files -> 4,850 chunks (2,134,500 tokens)
+  CLI codectx prompt | default search budget: 1,800 tokens (450 × 4 × 1.0)
+  Taxonomy: 12,847 terms extracted
+  Session: 28,450 / 30,000 tokens (94.8%)
+  Index: bm25 + bm25f (objects: 3800, specs: 620, system: 430, active: bm25f)
+  Changes: 3 new, 7 modified, 332 unchanged
+  Time: 47.3s
+  Output: docs/.codectx/compiled
 ```
 
 Incremental compilation is enabled by default — only changed files are reprocessed.
@@ -74,16 +78,16 @@ Query and generate in a single atomic operation. Searches for relevant chunks an
 codectx prompt "jwt token refresh flow"
 codectx prompt --top 5 --budget 2000 "error handling"
 codectx prompt --file output.md "authentication patterns"
-codectx prompt --delta "obj:a1b2c3.01" "middleware chain"
+codectx prompt --delta 0.2 "middleware chain"
 ```
 
 | Flag | Description |
 |------|-------------|
 | `--top N` | Number of query results to consider |
-| `--budget N` | Maximum token count for the assembled document |
+| `--budget N` | Maximum token count for the assembled document (overrides multiplier calculation) |
 | `--file <path>` | Write document to a file instead of stdout |
 | `--no-cache` | Bypass generate cache |
-| `--delta <ids>` | Exclude specific chunk IDs from results (already loaded) |
+| `--delta N` | Override budget delta for this invocation (e.g. `0.1` = +10%, `-0.2` = -20%) |
 
 ---
 

@@ -10,8 +10,8 @@ import (
 func TestSystemFiles_ReturnsAllExpectedFiles(t *testing.T) {
 	files := embed.SystemFiles()
 
-	if len(files) != 5 {
-		t.Fatalf("expected 5 system files, got %d", len(files))
+	if len(files) != 3 {
+		t.Fatalf("expected 3 system files, got %d", len(files))
 	}
 
 	// Verify all dest paths start with "system/".
@@ -71,11 +71,9 @@ func TestSystemFiles_CoversExpectedTopics(t *testing.T) {
 	files := embed.SystemFiles()
 
 	expectedPaths := map[string]bool{
-		"system/foundation/compiler-philosophy/README.md":      false,
-		"system/foundation/compiler-philosophy/README.spec.md": false,
-		"system/foundation/documentation-protocol/README.md":   false,
-		"system/foundation/history/README.md":                  false,
-		"system/topics/context-assembly/README.md":             false,
+		"system/foundation/documentation-protocol/README.md": false,
+		"system/foundation/history/README.md":                false,
+		"system/topics/context-assembly/README.md":           false,
 	}
 
 	for _, f := range files {
@@ -88,5 +86,85 @@ func TestSystemFiles_CoversExpectedTopics(t *testing.T) {
 		if !found {
 			t.Errorf("expected system file not found: %s", path)
 		}
+	}
+}
+
+// --- PackageTemplateFiles ---
+
+func TestPackageTemplateFiles_ReturnsExpectedFiles(t *testing.T) {
+	files := embed.PackageTemplateFiles()
+
+	if len(files) != 1 {
+		t.Fatalf("expected 1 package template file, got %d", len(files))
+	}
+
+	// Verify dest path is the release workflow.
+	if files[0].DestPath != ".github/workflows/release.yml" {
+		t.Errorf("expected dest path %q, got %q", ".github/workflows/release.yml", files[0].DestPath)
+	}
+
+	// Verify embed path is within package/.
+	if !strings.HasPrefix(files[0].EmbedPath, "package/") {
+		t.Errorf("expected embed path to start with package/, got %q", files[0].EmbedPath)
+	}
+}
+
+func TestReadPackageFile_ReadsContent(t *testing.T) {
+	data, err := embed.ReadPackageFile("package/release.yml")
+	if err != nil {
+		t.Fatalf("failed to read package/release.yml: %v", err)
+	}
+	if len(data) == 0 {
+		t.Error("expected package/release.yml to have content")
+	}
+}
+
+func TestReadPackageFile_ErrorsOnMissing(t *testing.T) {
+	_, err := embed.ReadPackageFile("package/nonexistent.yml")
+	if err == nil {
+		t.Error("expected error for nonexistent package file")
+	}
+}
+
+// --- Config templates ---
+
+func TestReadConfigTemplate_ReadsAllTemplates(t *testing.T) {
+	templates := []string{
+		"codectx.yml",
+		"ai.yml",
+		"preferences.yml",
+		"package-codectx.yml",
+		"usage.yml",
+		"global-usage.yml",
+	}
+
+	for _, name := range templates {
+		t.Run(name, func(t *testing.T) {
+			data, err := embed.ReadConfigTemplate(name)
+			if err != nil {
+				t.Fatalf("failed to read config template %q: %v", name, err)
+			}
+			if len(data) == 0 {
+				t.Errorf("expected config template %q to have content", name)
+			}
+			if !strings.HasPrefix(string(data), "#") {
+				t.Errorf("expected config template %q to start with YAML comment (#), got %q", name, string(data[:20]))
+			}
+		})
+	}
+}
+
+func TestReadConfigTemplate_ErrorsOnMissing(t *testing.T) {
+	_, err := embed.ReadConfigTemplate("nonexistent.yml")
+	if err == nil {
+		t.Error("expected error for nonexistent config template")
+	}
+}
+
+func TestConfigTemplatePath_Format(t *testing.T) {
+	got := embed.ConfigTemplatePath("ai.yml")
+	want := "defaults/config/ai.yml.tmpl"
+	if got != want {
+		t.Errorf("ConfigTemplatePath(%q) = %q, want %q", "ai.yml", got, want)
 	}
 }

@@ -1,0 +1,33 @@
+# codectx local machine usage — gitignored
+# Rolled into global_usage.yml on codectx compile.
+# This file tracks usage on this machine only. It is reset to zero
+# after each successful compile sync.
+
+# Total tokens generated across all codectx generate invocations
+# on this machine since the last compile sync.
+total_tokens: 0
+
+# Number of times codectx query was called on this machine.
+query_invocations: 0
+
+# Number of times codectx generate was called on this machine.
+generate_invocations: 0
+
+# Number of generate invocations served from the document cache
+# instead of running the full assembly pipeline.
+cache_hits: 0
+
+# Token consumption broken down by calling tool.
+# Automatically detected via environment variables and parent process.
+# Common callers: claude, cursor, copilot, unknown.
+tokens_by_caller: {}
+
+# Token consumption broken down by AI model identifier.
+# Detected from CODECTX_MODEL or ANTHROPIC_MODEL environment variables.
+tokens_by_model: {}
+
+# Nanosecond Unix timestamp of the first recorded invocation.
+first_seen: {{.FirstSeen}}
+
+# Nanosecond Unix timestamp of the most recent invocation.
+last_updated: 0

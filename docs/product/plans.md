@@ -79,23 +79,23 @@ codectx plan status auth-migration
 Output:
 
 ```
-Plan: Authentication System Migration
-Status: in-progress (step 2 of 3)
-Progress: 1 step completed, 1 in progress, 1 pending
+-> Plan: Authentication System Migration
+  Status: in-progress (step 2 of 3)
+  Progress: 1 step completed, 1 in progress, 1 pending
 
-Current step: Implement token service refactor
-  Started: 2025-03-07T09:00:00Z
-  Notes: User service and payment service updated. Order service remaining.
-  Stored queries:
-    - "token service refactor implementation"
-    - "order service authentication"
+  Current step: Implement token service refactor
+    Started: 2025-03-07T09:00:00Z
+    Notes: User service and payment service updated. Order service remaining.
+    Stored queries:
+      - "token service refactor implementation"
+      - "order service authentication"
 
-Dependencies:
-  + foundation/architecture-principles -- unchanged
-  ! topics/authentication/jwt-tokens -- content changed since last update
+  Dependencies:
+    ✓ foundation/architecture-principles — unchanged
+    ⚠ topics/authentication/jwt-tokens — content changed since last update
 
-Blocked steps:
-  Step 3 (Migration testing) -- blocked by step 2
+  Blocked steps:
+    Step 3 (Migration testing) — blocked by step 2
 ```
 
 Status checks are lightweight — they read `plan.yml` and compare dependency hashes without loading any documentation context.
@@ -115,16 +115,17 @@ The resume flow detects whether the underlying documentation has changed since t
 If all dependency hashes match, the stored chunk IDs are still valid. codectx replays the current step's chunks via `codectx generate` for instant context reconstruction:
 
 ```
-Plan: Authentication System Migration
-Status: in-progress (step 2 of 3)
-Dependencies: all unchanged
+-> Plan: Authentication System Migration
+  Status: in-progress (step 2 of 3)
+  Dependencies: all unchanged ✓
 
-Replaying context for step 2...
--> Generated (1,847 tokens, hash: e7f8a9b0c1d2)
+  Replaying context for step 2...
+
+✓ Generated (1,847 tokens, hash: e7f8a9b0c1d2)
   Contains: obj:a1b2c3.04, obj:d4e5f6.02, obj:d4e5f6.03, obj:x9y8z7.01, spec:x9y8z7.01
 
-Current step: Implement token service refactor
-Notes: User service and payment service updated. Order service remaining.
+  Current step: Implement token service refactor
+    Notes: User service and payment service updated. Order service remaining.
 ```
 
 The AI has exact context reconstruction — the same chunks it was working with before, loaded instantly.
@@ -134,18 +135,18 @@ The AI has exact context reconstruction — the same chunks it was working with 
 If any dependency's content hash has changed, stored chunk IDs may be stale. codectx reports which dependencies changed and provides the stored queries:
 
 ```
-Plan: Authentication System Migration
-Status: in-progress (step 2 of 3)
+-> Plan: Authentication System Migration
+  Status: in-progress (step 2 of 3)
 
-Documentation changes since last update:
-  ! topics/authentication/jwt-tokens -- content changed
-  + foundation/architecture-principles -- unchanged
+  Documentation changes since last update:
+    ⚠ topics/authentication/jwt-tokens — content changed
+    ✓ foundation/architecture-principles — unchanged
 
-Stored chunks may be stale. Stored queries for current step:
-  - "token service refactor implementation"
-  - "order service authentication"
+  Stored chunks may be stale. Stored queries for current step:
+    - "token service refactor implementation"
+    - "order service authentication"
 
-Recommendation: Re-run stored queries to refresh context with updated documentation.
+  Recommendation: Re-run stored queries to refresh context with updated documentation.
 ```
 
 The AI uses the stored queries to run `codectx query` for each one, selects new chunks from fresh results, and updates `plan.yml` with new chunks and hashes.

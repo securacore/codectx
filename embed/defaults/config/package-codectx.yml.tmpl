@@ -1,0 +1,27 @@
+# codectx package manifest
+# See: https://github.com/securacore/codectx
+# Full reference: https://github.com/securacore/codectx/docs/product/package-manager.md
+
+# Package name. Used in dependency declarations as "name@author".
+# Consumers install with: codectx add {{.Name}}@{{.Author}}
+name: {{.Name}}
+
+# GitHub username or organization that owns this package.
+# The package resolves to github.com/author/codectx-name on the registry.
+author: {{.Author}}
+
+# Package version in semver format (major.minor.patch).
+# Git tags (v1.0.0) correspond to versions. Consumers can pin to a
+# specific version or use "latest" to track the newest semver tag.
+version: "0.1.0"
+{{- if .Description}}
+
+# One-line description shown in search results and package listings.
+description: {{.Description}}
+{{- end}}
+
+# Dependencies this package requires.
+# Uses semver ranges (e.g., ">=1.0.0") — the consumer's codectx.lock
+# resolves exact versions. Only declare packages your documentation
+# references or depends on.
+dependencies: {}

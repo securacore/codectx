@@ -9,6 +9,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"text/template"
 
 	"gopkg.in/yaml.v3"
 )
@@ -580,7 +581,7 @@ type ValidationConfig struct {
 type PromptConfig struct {
 	// BudgetMultiplier is the base number of chunks to target.
 	// Budget = chunk_target_tokens × BudgetMultiplier × (1 + BudgetDelta).
-	// Defaults to 3.
+	// Defaults to 4.
 	BudgetMultiplier float64 `yaml:"budget_multiplier"`
 
 	// BudgetDelta scales the budget up or down incrementally.
@@ -591,7 +592,7 @@ type PromptConfig struct {
 
 // DefaultPromptBudgetMultiplier is the default number of chunk targets
 // used in the prompt budget calculation.
-const DefaultPromptBudgetMultiplier = 3.0
+const DefaultPromptBudgetMultiplier = 4.0
 
 // EffectiveBudget computes the token budget for chunk auto-selection.
 // chunkTarget is the configured chunk target size in tokens
@@ -840,4 +841,32 @@ func WriteYAMLFile(path string, header string, v any) error {
 	}
 
 	return os.WriteFile(path, append([]byte(header), buf.Bytes()...), FilePerm)
+}
+
+// WriteConfigFromTemplate renders an embedded config template with the given
+// data and writes the result to path. Used during initial project/package
+// scaffolding to produce self-documenting config files with per-field comments.
+//
+// The templateContent is the raw template bytes (from embed.ReadConfigTemplate).
+// The data is a struct or map with fields matching the template's {{.Field}} references.
+//
+// Existing WriteToFile methods (struct → YAML marshal) are preserved for
+// programmatic config rewrites (session add, version bump, etc.) where
+// comments are not needed.
+func WriteConfigFromTemplate(path string, templateContent []byte, data any) error {
+	tmpl, err := template.New(filepath.Base(path)).Parse(string(templateContent))
+	if err != nil {
+		return fmt.Errorf("parsing config template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return fmt.Errorf("executing config template: %w", err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(path), DirPerm); err != nil {
+		return fmt.Errorf("creating directory: %w", err)
+	}
+
+	return os.WriteFile(path, buf.Bytes(), FilePerm)
 }

@@ -30,22 +30,22 @@ codectx history queries
 ```
 
 ```
-Recent queries (last 10):
+-> Query history (42 entries)
 
-  1. jwt authentication                               30 results   2m ago
+  1. "jwt authentication"  30 results  2m ago
      Expanded: jwt authentication bearer-token authn oauth
-     Caller:   claude  Session: sess_abc123
-     Compile:  x7y8z9 (current)
+     Caller: claude  Session: sess_abc123
+     Compile: x7y8z9 (current)
 
-  2. error handling middleware                        28 results  14m ago
+  2. "error handling middleware"  28 results  14m ago
      Expanded: error handling middleware error-boundary
-     Caller:   claude  Session: sess_abc123
-     Compile:  x7y8z9 (current)
+     Caller: claude  Session: sess_abc123
+     Compile: x7y8z9 (current)
 
-  3. database connection pooling                      30 results   3d ago
+  3. "database connection pooling"  30 results  3d ago
      Expanded: database connection pooling db pool
-     Caller:   cursor  Session: unknown
-     Compile:  a1b2c3 (stale -- recompiled since this query)
+     Caller: cursor  Session: unknown
+     Compile: a1b2c3 (stale)
 ```
 
 ```bash
@@ -53,16 +53,16 @@ codectx history chunks
 ```
 
 ```
-Recent generates (last 10):
+-> Generate history (18 entries)
 
-  1. a1b2c3d4e5f6   1,772 tokens   2m ago
-     obj:a1b2c3.01, obj:a1b2c3.02, obj:d4e5f6.02, spec:f7g8h9.01
-     Caller: claude  Session: sess_abc123  [from cache: no]
+  1. a1b2c3d4e5f6  1,772 tokens  2m ago
+     Chunks: obj:a1b2c3.01, obj:a1b2c3.02, obj:d4e5f6.02, spec:f7g8h9.01
+     Caller: claude  Session: sess_abc123  Cache: no
      Compile: x7y8z9 (current)
 
-  2. b2c3d4e5f6a1   2,104 tokens  14m ago
-     obj:b2c3d4.01, obj:b2c3d4.02, obj:b2c3d4.03
-     Caller: claude  Session: sess_abc123  [from cache: yes]
+  2. b2c3d4e5f6a1  2,104 tokens  14m ago
+     Chunks: obj:b2c3d4.01, obj:b2c3d4.02, obj:b2c3d4.03
+     Caller: claude  Session: sess_abc123  Cache: yes
      Compile: x7y8z9 (current)
 ```
 
@@ -104,7 +104,7 @@ Sorting chunk IDs before hashing ensures order doesn't affect the cache key — 
 On a cache hit, the generate pipeline skips all assembly steps. The cached document is read from disk and printed to stdout. Output is identical to a normal invocation. The `[from cache]` annotation appears only in the summary:
 
 ```
--> Generated (1,772 tokens, hash: a1b2c3d4e5f6) [from cache]
+✓ Generated (1,772 tokens, hash: a1b2c3d4e5f6) [from cache]
   History: .codectx/history/docs/1741532401000000000.a1b2c3d4e5f6.md
   Contains: obj:a1b2c3.01, obj:a1b2c3.02, obj:d4e5f6.02, spec:f7g8h9.01
 ```
@@ -185,27 +185,34 @@ codectx usage
 ```
 
 ```
-Token usage (local machine):
+-> Token usage (local machine)
 
-  Total tokens generated:      821,903
-  Query invocations:               347
-  Generate invocations:             89
-  Cache hit rate:               46.1%  (41 / 89)
+  Total tokens generated: 821,903
+  Query invocations: 347
+  Generate invocations: 89
+  Cache hit rate: 46.1%  (41 / 89)
 
   By caller:
-    claude                     601,450 tokens  (73.2%)
-    cursor                     198,203 tokens  (24.1%)
-    unknown                     22,250 tokens   (2.7%)
+    claude: 601,450 tokens  (73.2%)
+    cursor: 198,203 tokens  (24.1%)
+    unknown: 22,250 tokens   (2.7%)
 
-  Tracking since: 2025-03-09   Last updated: 2025-03-14
-  Last synced to global:       2025-03-13 (on compile)
+  By model:
+    claude-sonnet-4: 601,450 tokens  (73.2%)
+    unknown: 220,453 tokens  (26.8%)
 
-Project lifetime (global_usage.yml):
+  Tracking since: 2025-03-09
+  Last updated: 2025-03-14
+  Last compile sync: 2025-03-13
 
-  Total tokens generated:    5,621,903
-  Query invocations:             2,847
-  Generate invocations:            612
-  Cache hit rate:               48.7%  (298 / 612)
+-> Project lifetime (global_usage.yml)
+
+  Total tokens generated: 5,621,903
+  Query invocations: 2,847
+  Generate invocations: 612
+  Cache hit rate: 48.7%  (298 / 612)
+  First recorded: 2025-03-09
+  Last compile sync: 2025-03-13
 ```
 
 Flags:

@@ -44,19 +44,22 @@ codectx search "react patterns"
 Output:
 
 ```
-Search results for: "react patterns"
+-> Results for: "react patterns"
 
-1. react-patterns@community (v2.4.0)
-   github.com/community/codectx-react-patterns
-   React component and hook patterns for AI-driven development
+  Found 3 packages (2 installable)
 
-2. react-testing@community (v1.1.0)
-   github.com/community/codectx-react-testing
-   Testing patterns and strategies for React applications
+  1. react-patterns@community v2.4.0
+     Repo: community/codectx-react-patterns (* 342)
+     React component and hook patterns for AI-driven development
 
-3. react-nextjs@webteam (v3.0.2)
-   github.com/webteam/codectx-react-nextjs
-   Next.js and React integration patterns
+  2. react-testing@community v1.1.0
+     Repo: community/codectx-react-testing (* 89)
+     Testing patterns and strategies for React applications
+
+  3. react-nextjs@webteam  ⚠ no version tags
+     Repo: webteam/codectx-react-nextjs
+
+  Add with: codectx add react-patterns@community:latest
 ```
 
 ---
@@ -126,18 +129,24 @@ codectx update
 Output:
 
 ```
-Resolving dependencies...
-  react-patterns@community: 2.3.1 -> 2.4.0 (updated)
-    -> github.com/community/codectx-react-patterns@v2.4.0
-  company-standards@acme: 2.0.0 (unchanged)
-  tailwind-guide@designteam: 2.1.0 (unchanged)
-  javascript-fundamentals@community: 1.3.0 (transitive, unchanged)
+-> Resolving dependencies...
+  -> react-patterns@community: 2.3.1 -> 2.4.0
+  ✓ new-feature-docs@someone: 1.0.0 (new)
+  - company-standards@acme: 2.0.0 (unchanged)
+  - tailwind-guide@designteam: 2.1.0 (unchanged)
 
-Updated codectx.lock
-Downloaded: react-patterns@community:2.4.0
+-> Downloading 2 changed packages
 
-Recompiling (1 package changed)...
-Compiled: 348 files -> 4,803 chunks (2,178,200 tokens)
+  ✓ react-patterns@community v2.4.0
+  ✓ new-feature-docs@someone v1.0.0
+
+✓ Updated codectx.lock
+
+-> Recompiling (2 packages changed)...
+
+✓ Compilation complete
+  Compiled: 348 files -> 4,803 chunks (2,178,200 tokens)
+  Time: 12.4s
 ```
 
 `codectx update` handles the full cycle: resolve, download, and recompile if content changed.

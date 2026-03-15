@@ -1,0 +1,38 @@
+# codectx AI configuration
+# Model and behavior settings for compilation and consumption.
+# Checked into version control (no secrets).
+# For API keys and local overrides, use ai.local.yml (gitignored).
+# Full reference: https://github.com/securacore/codectx/docs/product/configuration.md
+
+compilation:
+  # Tokenizer encoding used for all token counting operations:
+  # chunk boundaries, session budgets, manifest metadata, and validation.
+  # cl100k_base works within ~10% variance across modern models (GPT-4,
+  # Claude, etc.) for English prose. Only change if you need exact
+  # model-specific tokenization for billing estimates.
+  # Valid values: cl100k_base, o200k_base, p50k_base, r50k_base
+  encoding: {{.Encoding}}
+
+consumption:
+  # Target AI model for consumption. Affects context budget calculations
+  # and is recorded in history entries for audit purposes.
+  model: {{.Model}}
+
+  # Target model's context window size in tokens.
+  # Used for budget calculations and capacity planning.
+  context_window: {{.ContextWindow}}
+
+  # Default number of results returned by `codectx query`.
+  # The unified RRF pipeline fuses results across object, spec, and system
+  # indexes, so higher counts give the rank fusion and graph re-ranking
+  # more candidates to work with.
+  # Override per-call with: codectx query --top N "..."
+  results_count: {{.ResultsCount}}
+
+# Format for generated documents produced by `codectx generate`.
+# Controls how chunk content is assembled and presented.
+# Valid values:
+#   markdown  — Standard markdown with headings and formatting (default)
+#   xml_tags  — Content wrapped in XML tags for models that prefer structured input
+#   plain     — Minimal formatting, plain text output
+output_format: {{.OutputFormat}}

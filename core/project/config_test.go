@@ -1281,26 +1281,26 @@ func TestPromptConfig_EffectiveBudget_DeltaOverride(t *testing.T) {
 	}
 }
 
-func TestPromptConfig_EffectiveBudget_ZeroMultiplierDefaultsTo3(t *testing.T) {
+func TestPromptConfig_EffectiveBudget_ZeroMultiplierDefaultsTo4(t *testing.T) {
 	p := project.PromptConfig{
-		BudgetMultiplier: 0, // should default to 3
+		BudgetMultiplier: 0, // should default to 4
 		BudgetDelta:      0.0,
 	}
-	// 450 × 3 × 1.0 = 1350
+	// 450 × 4 × 1.0 = 1800
 	got := p.EffectiveBudget(450, nil)
-	if got != 1350 {
-		t.Errorf("budget = %d, want 1350", got)
+	if got != 1800 {
+		t.Errorf("budget = %d, want 1800", got)
 	}
 }
 
-func TestPromptConfig_EffectiveBudget_NegativeMultiplierDefaultsTo3(t *testing.T) {
+func TestPromptConfig_EffectiveBudget_NegativeMultiplierDefaultsTo4(t *testing.T) {
 	p := project.PromptConfig{
 		BudgetMultiplier: -1,
 		BudgetDelta:      0.0,
 	}
 	got := p.EffectiveBudget(450, nil)
-	if got != 1350 {
-		t.Errorf("budget = %d, want 1350", got)
+	if got != 1800 {
+		t.Errorf("budget = %d, want 1800", got)
 	}
 }
 

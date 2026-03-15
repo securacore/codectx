@@ -25,9 +25,6 @@ package prompt
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
-	"time"
 
 	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/history"
@@ -117,11 +114,7 @@ func run(_ context.Context, cmd *cli.Command) error {
 	usageFile := usage.LocalPath(projectDir, cfg)
 	caller := history.ResolveCallerContext()
 
-	prefsCfg, prefsErr := project.LoadPreferencesConfigForProject(projectDir, cfg)
-	if prefsErr != nil {
-		shared.WarnBestEffort("Loading preferences", prefsErr)
-		prefsCfg = &project.PreferencesConfig{}
-	}
+	prefsCfg := shared.LoadPreferencesOrDefault(projectDir, cfg)
 
 	// --- Step 3: Compute budget ---
 	chunkTarget := prefsCfg.Chunking.TargetTokens
@@ -210,11 +203,48 @@ func run(_ context.Context, cmd *cli.Command) error {
 	// --- Step 9: Cache lookup (unless --no-cache) ---
 	if !noCache {
 		if docPath, hit := history.GenerateCacheLookup(histDir, chunkIDs, compiledDir); hit {
-			return serveCacheHit(
-				docPath, filePath, histDir, chunkIDs, compiledDir, usageFile, caller,
-				queryStr, result.ExpandedQuery, len(chunkIDs), selectedTokens,
-				totalResults, budget, budgetFormula,
-			)
+			res, cacheErr := shared.ServeCacheHit(shared.CacheHitParams{
+				DocPath:     docPath,
+				ChunkIDs:    chunkIDs,
+				HistDir:     histDir,
+				CompiledDir: compiledDir,
+				UsageFile:   usageFile,
+				Caller:      caller,
+			})
+			if cacheErr != nil {
+				return cacheErr
+			}
+
+			// Use recovered token count for display if available.
+			displayTokens := selectedTokens
+			if res.TokenCount > 0 {
+				displayTokens = res.TokenCount
+			}
+
+			header := corequery.FormatPromptHeader(&corequery.PromptSummary{
+				RawQuery:      queryStr,
+				ExpandedQuery: result.ExpandedQuery,
+				SelectedCount: len(chunkIDs),
+				SelectedTotal: displayTokens,
+				QueryTotal:    totalResults,
+				Budget:        budget,
+				BudgetFormula: budgetFormula,
+			})
+
+			cacheResult := &corequery.GenerateResult{
+				TotalTokens: res.TokenCount,
+				ContentHash: res.Hash,
+				ChunkIDs:    chunkIDs,
+			}
+			historyPath := shared.BuildHistoryPath(histDir, res.DocFile)
+			footer := corequery.FormatPromptFooter(cacheResult, historyPath, filePath, true)
+
+			return shared.OutputDocument(shared.OutputDocumentParams{
+				Content:  res.Content,
+				FilePath: filePath,
+				Header:   header,
+				Footer:   footer,
+			})
 		}
 	}
 
@@ -269,7 +299,12 @@ func run(_ context.Context, cmd *cli.Command) error {
 	historyPath := shared.BuildHistoryPath(histDir, docFile)
 	footer := corequery.FormatPromptFooter(genResult, historyPath, filePath, false)
 
-	return outputDocument([]byte(genResult.Document), header, footer, filePath)
+	return shared.OutputDocument(shared.OutputDocumentParams{
+		Content:  []byte(genResult.Document),
+		FilePath: filePath,
+		Header:   header,
+		Footer:   footer,
+	})
 }
 
 // collectAllResults returns a flat slice of all query results in score order.
@@ -309,105 +344,4 @@ func selectChunks(results []corequery.ResultEntry, budget int) ([]string, int) {
 		total += r.Tokens
 	}
 	return selected, total
-}
-
-// serveCacheHit handles a generate cache hit for the prompt command.
-func serveCacheHit(
-	docPath, filePath, histDir string,
-	chunkIDs []string, compiledDir, usageFile string,
-	caller history.CallerContext,
-	rawQuery, expandedQuery string,
-	selectedCount, selectedTokens, queryTotal, budget int,
-	budgetFormula string,
-) error {
-	content, err := os.ReadFile(docPath)
-	if err != nil {
-		return fmt.Errorf("reading cached document: %w", err)
-	}
-
-	contentHash := history.ContentHash(content)
-	compileHash, _ := history.CompileHash(compiledDir)
-
-	// Recover token count from the most recent matching chunks entry.
-	tokenCount := 0
-	if entries, readErr := history.ReadChunksHistory(histDir, 0); readErr == nil {
-		for _, e := range entries {
-			if e.ContentHash == contentHash {
-				tokenCount = e.TokenCount
-				break
-			}
-		}
-	}
-
-	// Write chunks entry recording the cache hit (best-effort).
-	docFile := filepath.Base(docPath)
-	entry := history.ChunksEntry{
-		Ts:           time.Now().UnixNano(),
-		ChunkSetHash: history.ChunkSetHash(chunkIDs),
-		Chunks:       chunkIDs,
-		TokenCount:   tokenCount,
-		ContentHash:  contentHash,
-		CompileHash:  compileHash,
-		DocFile:      docFile,
-		CacheHit:     true,
-		Caller:       caller.Caller,
-		SessionID:    caller.SessionID,
-		Model:        caller.Model,
-	}
-	if writeErr := history.WriteChunksEntry(histDir, entry); writeErr != nil {
-		shared.WarnBestEffort("Writing cache-hit entry", writeErr)
-	}
-
-	if usageErr := usage.UpdateGenerate(usageFile, tokenCount, true, caller); usageErr != nil {
-		shared.WarnBestEffort("Updating usage metrics", usageErr)
-	}
-
-	// Use recovered token count for display if available.
-	displayTokens := selectedTokens
-	if tokenCount > 0 {
-		displayTokens = tokenCount
-	}
-
-	header := corequery.FormatPromptHeader(&corequery.PromptSummary{
-		RawQuery:      rawQuery,
-		ExpandedQuery: expandedQuery,
-		SelectedCount: selectedCount,
-		SelectedTotal: displayTokens,
-		QueryTotal:    queryTotal,
-		Budget:        budget,
-		BudgetFormula: budgetFormula,
-	})
-
-	cacheResult := &corequery.GenerateResult{
-		TotalTokens: tokenCount,
-		ContentHash: contentHash,
-		ChunkIDs:    chunkIDs,
-	}
-	historyPath := shared.BuildHistoryPath(histDir, docFile)
-	footer := corequery.FormatPromptFooter(cacheResult, historyPath, filePath, true)
-
-	return outputDocument(content, header, footer, filePath)
-}
-
-// outputDocument writes the generated document to the appropriate destination.
-// In --file mode, the document is written to a file and the header+footer to stdout.
-// In default mode, the header goes to stderr, the document to stdout, and the
-// footer to stderr.
-func outputDocument(content []byte, header, footer, filePath string) error {
-	if filePath != "" {
-		if err := os.WriteFile(filePath, content, project.FilePerm); err != nil {
-			fmt.Print(tui.ErrorMsg{
-				Title:  "Failed to write file",
-				Detail: []string{err.Error()},
-			}.Render())
-			return fmt.Errorf("writing file: %w", err)
-		}
-		fmt.Print(header)
-		fmt.Print(footer)
-	} else {
-		fmt.Fprint(os.Stderr, header)
-		fmt.Print(string(content))
-		fmt.Fprint(os.Stderr, footer)
-	}
-	return nil
 }

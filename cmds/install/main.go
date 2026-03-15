@@ -16,7 +16,6 @@ import (
 	"path/filepath"
 
 	"github.com/securacore/codectx/cmds/shared"
-	"github.com/securacore/codectx/core/project"
 	"github.com/securacore/codectx/core/registry"
 	"github.com/securacore/codectx/core/tui"
 	"github.com/urfave/cli/v3"
@@ -43,25 +42,21 @@ func run(ctx context.Context, _ *cli.Command) error {
 	}
 
 	if len(cfg.Dependencies) == 0 {
-		fmt.Printf("\n%s No dependencies declared in codectx.yml\n\n", tui.Warning())
+		shared.WarnNoDependencies()
 		return nil
 	}
 
-	rootDir := project.RootDir(projectDir, cfg)
-	lockPath := filepath.Join(rootDir, registry.LockFileName)
-	packagesDir := project.PackagesPath(rootDir)
-
-	reg := cfg.EffectiveRegistry()
+	paths := shared.ResolveRegistryPaths(projectDir, cfg)
 
 	// Step 2: Check if lock is current.
-	lf, lockErr := registry.LoadLock(lockPath)
+	lf, lockErr := registry.LoadLock(paths.LockPath)
 	if lockErr == nil && registry.LockCurrent(lf, cfg.Dependencies) {
 		// Lock is up to date — install from lock.
-		return installFromLock(ctx, lf, packagesDir)
+		return installFromLock(ctx, lf, paths.PackagesDir)
 	}
 
 	// Step 3: Resolve and install.
-	return shared.ResolveAndInstall(ctx, cfg, reg, rootDir, packagesDir, lockPath)
+	return shared.ResolveAndInstall(ctx, cfg, paths.Registry, paths.RootDir, paths.PackagesDir, paths.LockPath)
 }
 
 // installFromLock installs packages using pinned versions from the lock file.

@@ -56,7 +56,7 @@ codectx session list
 Output:
 
 ```
-Always-loaded session context (28,450 / 30,000 tokens):
+-> Always-loaded session context (28,450 / 30,000 tokens (94.8%))
 
   foundation/coding-standards                              8,200 tokens
   foundation/architecture-principles                       6,100 tokens

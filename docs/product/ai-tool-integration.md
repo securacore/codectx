@@ -143,9 +143,9 @@ codectx usage
 
 ```
   By caller:
-    claude                     601,450 tokens  (73.2%)
-    cursor                     198,203 tokens  (24.1%)
-    unknown                     22,250 tokens   (2.7%)
+    claude: 601,450 tokens  (73.2%)
+    cursor: 198,203 tokens  (24.1%)
+    unknown: 22,250 tokens   (2.7%)
 ```
 
 History entries also record caller context, enabling audit trails per tool.

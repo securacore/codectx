@@ -1,0 +1,37 @@
+# codectx project lifetime usage — checked into version control
+# Updated on codectx compile from local usage.yml.
+# This file accumulates usage across all machines and developers
+# over the lifetime of the project. Merge conflicts on integer
+# counters are resolved manually.
+
+# Total tokens generated across all codectx generate invocations
+# over the entire project lifetime.
+total_tokens: 0
+
+# Total number of codectx query invocations across all machines.
+query_invocations: 0
+
+# Total number of codectx generate invocations across all machines.
+generate_invocations: 0
+
+# Total number of generate invocations served from cache.
+cache_hits: 0
+
+# Lifetime token consumption broken down by calling tool.
+tokens_by_caller: {}
+
+# Lifetime token consumption broken down by AI model identifier.
+tokens_by_model: {}
+
+# Project name from codectx.yml, recorded for identification.
+project: {{.Project}}
+
+# Nanosecond Unix timestamp of the first recorded invocation.
+first_seen: {{.FirstSeen}}
+
+# Nanosecond Unix timestamp of the most recent usage sync.
+last_updated: 0
+
+# Nanosecond Unix timestamp of the most recent codectx compile
+# that synced local usage into this file.
+last_compile: 0

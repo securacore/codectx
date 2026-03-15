@@ -10,18 +10,18 @@ type ValidationResult struct {
 	Errors []string
 }
 
-// OK returns true if there are no errors (warnings are acceptable).
-func (v *ValidationResult) OK() bool {
+// ok returns true if there are no errors (warnings are acceptable).
+func (v *ValidationResult) ok() bool {
 	return len(v.Errors) == 0
 }
 
-// HasWarnings returns true if there are any warnings.
-func (v *ValidationResult) HasWarnings() bool {
+// hasWarnings returns true if there are any warnings.
+func (v *ValidationResult) hasWarnings() bool {
 	return len(v.Warnings) > 0
 }
 
-// Merge combines another ValidationResult into this one.
-func (v *ValidationResult) Merge(other *ValidationResult) {
+// merge combines another ValidationResult into this one.
+func (v *ValidationResult) merge(other *ValidationResult) {
 	if other == nil {
 		return
 	}

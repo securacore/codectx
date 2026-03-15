@@ -191,12 +191,9 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	fmt.Printf("\n%s Added %s\n", tui.Success(), tui.StyleAccent.Render(depKey))
 	printTargetInfo(target)
 
-	rootDir := project.RootDir(projectDir, cfg)
-	lockPath := filepath.Join(rootDir, registry.LockFileName)
-	packagesDir := project.PackagesPath(rootDir)
-	reg := cfg.EffectiveRegistry()
+	paths := shared.ResolveRegistryPaths(projectDir, cfg)
 
-	return shared.ResolveAndInstall(ctx, cfg, reg, rootDir, packagesDir, lockPath)
+	return shared.ResolveAndInstall(ctx, cfg, paths.Registry, paths.RootDir, paths.PackagesDir, paths.LockPath)
 }
 
 // resolveAuthor searches GitHub for packages matching the partial key's name
@@ -259,7 +256,7 @@ func resolveAuthor(ctx context.Context, partial registry.PartialDepKey, showUnin
 	// Filter out uninstallable packages unless --show-uninstallable is set.
 	var hidden int
 	if !showUninstallable {
-		results, hidden = filterInstallable(results)
+		results, hidden = shared.FilterInstallable(results)
 	}
 
 	// Handle results.
@@ -367,12 +364,6 @@ func filterExactName(results []registry.SearchResult, name string) []registry.Se
 	return filtered
 }
 
-// filterInstallable removes results that don't have a release archive.
-// Returns the filtered list and the count of hidden results.
-func filterInstallable(results []registry.SearchResult) ([]registry.SearchResult, int) {
-	return shared.FilterInstallable(results)
-}
-
 // authorSuggestions builds suggestion entries listing each available author
 // for a multi-match scenario in non-interactive mode.
 func authorSuggestions(results []registry.SearchResult, partial registry.PartialDepKey) []tui.Suggestion {
@@ -426,18 +417,8 @@ func resolveTarget(cmd *cli.Command, cfg *project.Config, projectDir string) (de
 	flagPackage := cmd.Bool("package")
 	flagBoth := cmd.Bool("both")
 
-	flagCount := shared.BoolCount(flagProject, flagPackage, flagBoth)
-	if flagCount > 1 {
-		fmt.Print(tui.ErrorMsg{
-			Title: "Conflicting flags",
-			Detail: []string{
-				fmt.Sprintf("Only one of %s, %s, or %s may be specified.",
-					tui.StyleCommand.Render("--project"),
-					tui.StyleCommand.Render("--package"),
-					tui.StyleCommand.Render("--both"),
-				),
-			},
-		}.Render())
+	if errMsg := shared.ValidateExclusiveTargetFlags(flagProject, flagPackage, flagBoth); errMsg != "" {
+		fmt.Print(errMsg)
 		return 0, fmt.Errorf("conflicting target flags")
 	}
 

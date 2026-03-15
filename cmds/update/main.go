@@ -10,7 +10,6 @@ package update
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"sort"
 
 	"github.com/securacore/codectx/cmds/shared"
@@ -133,21 +132,17 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	if len(cfg.Dependencies) == 0 {
-		fmt.Printf("\n%s No dependencies declared in codectx.yml\n\n", tui.Warning())
+		shared.WarnNoDependencies()
 		return nil
 	}
 
 	forceCompile := cmd.IsSet("compile") && cmd.Bool("compile")
 	skipCompile := cmd.IsSet("no-compile") && cmd.Bool("no-compile")
 
-	rootDir := project.RootDir(projectDir, cfg)
-	lockPath := filepath.Join(rootDir, registry.LockFileName)
-	packagesDir := project.PackagesPath(rootDir)
-
-	reg := cfg.EffectiveRegistry()
+	paths := shared.ResolveRegistryPaths(projectDir, cfg)
 
 	// Load existing lock for comparison.
-	oldLock, _ := registry.LoadLock(lockPath)
+	oldLock, _ := registry.LoadLock(paths.LockPath)
 
 	rc, err := shared.NewResolveContext()
 	if err != nil {
@@ -160,7 +155,7 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	var resolveErr error
 
 	if err = shared.RunWithSpinner("Resolving dependencies...", func() {
-		result, resolveErr = registry.Resolve(ctx, cfg.Dependencies, reg, rc.Tags, rc.Configs)
+		result, resolveErr = registry.Resolve(ctx, cfg.Dependencies, paths.Registry, rc.Tags, rc.Configs)
 	}); err != nil {
 		return fmt.Errorf("spinner: %w", err)
 	}
@@ -229,13 +224,13 @@ func run(ctx context.Context, cmd *cli.Command) error {
 		fmt.Printf("\n%s Downloading %d changed packages\n\n",
 			tui.Arrow(), len(changedPackages))
 
-		if _, installErr := shared.InstallPackages(ctx, rc.Installer, changedPackages, packagesDir); installErr != nil {
+		if _, installErr := shared.InstallPackages(ctx, rc.Installer, changedPackages, paths.PackagesDir); installErr != nil {
 			return installErr
 		}
 	}
 
 	// Step 5: Write lock file (no commit SHAs for archive-based installs).
-	if err := shared.SaveLockOrError(lockPath, result, nil, reg); err != nil {
+	if err := shared.SaveLockOrError(paths.LockPath, result, nil, paths.Registry); err != nil {
 		return err
 	}
 
@@ -268,16 +263,9 @@ func run(ctx context.Context, cmd *cli.Command) error {
 		return aiErr
 	}
 
-	prefsCfg, prefsErr := project.LoadPreferencesConfigForProject(projectDir, cfg)
-	if prefsErr != nil {
-		fmt.Print(tui.ErrorMsg{
-			Title:  "Failed to load preferences",
-			Detail: []string{prefsErr.Error()},
-		}.Render())
-		return prefsErr
-	}
+	prefsCfg := shared.LoadPreferencesOrDefault(projectDir, cfg)
 
-	compileCfg := compile.BuildConfig(projectDir, rootDir, cfg, aiCfg, prefsCfg)
+	compileCfg := compile.BuildConfig(projectDir, paths.RootDir, cfg, aiCfg, prefsCfg)
 
 	var compileResult *compile.Result
 	var compileErr error
@@ -310,13 +298,6 @@ func shouldAutoCompile(
 	cfg *project.Config,
 	forceCompile, skipCompile bool,
 ) bool {
-	// Load preferences to check auto_compile setting.
-	prefsCfg, err := project.LoadPreferencesConfigForProject(projectDir, cfg)
-	if err != nil {
-		// If preferences can't be loaded, default to compiling.
-		// The actual compile step will report the error with details.
-		prefsCfg = &project.PreferencesConfig{}
-	}
-
+	prefsCfg := shared.LoadPreferencesOrDefault(projectDir, cfg)
 	return shared.ShouldAutoCompile(prefsCfg, forceCompile, skipCompile, "recompile")
 }

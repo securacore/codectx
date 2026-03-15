@@ -125,7 +125,7 @@ func run(ctx context.Context, cmd *cli.Command) error {
 
 	var hiddenCount int
 	if !showUninstallable {
-		results, hiddenCount = filterInstallable(results)
+		results, hiddenCount = shared.FilterInstallable(results)
 	}
 
 	// Sort: installable results first, then no-release, then no-tags.
@@ -168,12 +168,6 @@ func countInstallable(results []registry.SearchResult) int {
 		}
 	}
 	return n
-}
-
-// filterInstallable removes results that don't have a release archive.
-// Returns the filtered list and the count of hidden results.
-func filterInstallable(results []registry.SearchResult) ([]registry.SearchResult, int) {
-	return shared.FilterInstallable(results)
 }
 
 // shouldShowUninstallable checks the project preferences for the

@@ -29,14 +29,6 @@ type DefaultFile struct {
 func SystemFiles() []DefaultFile {
 	return []DefaultFile{
 		{
-			DestPath:  "system/foundation/compiler-philosophy/README.md",
-			EmbedPath: "defaults/compiler-philosophy.md",
-		},
-		{
-			DestPath:  "system/foundation/compiler-philosophy/README.spec.md",
-			EmbedPath: "defaults/compiler-philosophy.spec.md",
-		},
-		{
 			DestPath:  "system/topics/context-assembly/README.md",
 			EmbedPath: "defaults/context-assembly.md",
 		},
@@ -82,4 +74,19 @@ func PackageTemplateFiles() []PackageTemplateFile {
 // ReadPackageFile reads an embedded file from the package templates filesystem.
 func ReadPackageFile(path string) ([]byte, error) {
 	return packageTemplates.ReadFile(path)
+}
+
+// ConfigTemplateFile returns the path to a config template within the embedded
+// defaults filesystem. Template names correspond to files in defaults/config/:
+// "codectx.yml", "ai.yml", "preferences.yml", "package-codectx.yml",
+// "usage.yml", "global-usage.yml".
+func ConfigTemplatePath(name string) string {
+	return "defaults/config/" + name + ".tmpl"
+}
+
+// ReadConfigTemplate reads an embedded config template by name.
+// The name should be the base config file name without extension
+// (e.g., "codectx.yml", "ai.yml", "preferences.yml").
+func ReadConfigTemplate(name string) ([]byte, error) {
+	return defaults.ReadFile(ConfigTemplatePath(name))
 }

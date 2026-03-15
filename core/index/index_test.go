@@ -178,7 +178,7 @@ func TestQuery_FindsRelevantChunks(t *testing.T) {
 	idx := New(1.2, 0.75)
 	idx.BuildFromChunks(testChunks())
 
-	results := idx.Query(IndexObjects, "JWT authentication", 10)
+	results := idx.query(IndexObjects, "JWT authentication", 10)
 	if len(results) == 0 {
 		t.Fatal("expected results for 'JWT authentication' in objects")
 	}
@@ -198,7 +198,7 @@ func TestQuery_SpecIndexIsolated(t *testing.T) {
 	idx.BuildFromChunks(testChunks())
 
 	// Query the spec index for "JWT".
-	results := idx.Query(IndexSpecs, "JWT", 10)
+	results := idx.query(IndexSpecs, "JWT", 10)
 	if len(results) == 0 {
 		t.Fatal("expected results for 'JWT' in specs")
 	}
@@ -215,7 +215,7 @@ func TestQuery_SystemIndexIsolated(t *testing.T) {
 	idx := New(1.2, 0.75)
 	idx.BuildFromChunks(testChunks())
 
-	results := idx.Query(IndexSystem, "taxonomy", 10)
+	results := idx.query(IndexSystem, "taxonomy", 10)
 	if len(results) == 0 {
 		t.Fatal("expected results for 'taxonomy' in system")
 	}
@@ -228,7 +228,7 @@ func TestQuery_NoResultsForUnrelatedQuery(t *testing.T) {
 	idx := New(1.2, 0.75)
 	idx.BuildFromChunks(testChunks())
 
-	results := idx.Query(IndexObjects, "completely unrelated xyzzy", 10)
+	results := idx.query(IndexObjects, "completely unrelated xyzzy", 10)
 	if len(results) != 0 {
 		t.Errorf("expected 0 results, got %d", len(results))
 	}
@@ -238,7 +238,7 @@ func TestQuery_EmptyQuery(t *testing.T) {
 	idx := New(1.2, 0.75)
 	idx.BuildFromChunks(testChunks())
 
-	results := idx.Query(IndexObjects, "", 10)
+	results := idx.query(IndexObjects, "", 10)
 	if results != nil {
 		t.Errorf("expected nil for empty query, got %v", results)
 	}
@@ -248,7 +248,7 @@ func TestQuery_StopwordOnlyQuery(t *testing.T) {
 	idx := New(1.2, 0.75)
 	idx.BuildFromChunks(testChunks())
 
-	results := idx.Query(IndexObjects, "the is a", 10)
+	results := idx.query(IndexObjects, "the is a", 10)
 	if results != nil {
 		t.Errorf("expected nil for stopword-only query, got %v", results)
 	}
@@ -258,7 +258,7 @@ func TestQuery_UnknownIndexType(t *testing.T) {
 	idx := New(1.2, 0.75)
 	idx.BuildFromChunks(testChunks())
 
-	results := idx.Query(IndexType("bogus"), "jwt", 10)
+	results := idx.query(IndexType("bogus"), "jwt", 10)
 	if results != nil {
 		t.Errorf("expected nil for unknown index type, got %v", results)
 	}
@@ -388,8 +388,8 @@ func TestSaveLoad_QueryAfterLoad(t *testing.T) {
 	}
 
 	// Query the loaded index — should produce identical results.
-	origResults := original.Query(IndexObjects, "JWT authentication", 10)
-	loadResults := loaded.Query(IndexObjects, "JWT authentication", 10)
+	origResults := original.query(IndexObjects, "JWT authentication", 10)
+	loadResults := loaded.query(IndexObjects, "JWT authentication", 10)
 
 	if len(origResults) != len(loadResults) {
 		t.Fatalf("result count mismatch: %d vs %d", len(origResults), len(loadResults))
@@ -461,13 +461,13 @@ func TestBuildFromChunks_IndexesContentNotMetaHeader(t *testing.T) {
 	idx.BuildFromChunks(chunks)
 
 	// Should find the content term.
-	results := idx.Query(IndexObjects, "unique-search-term-abc123", 10)
+	results := idx.query(IndexObjects, "unique-search-term-abc123", 10)
 	if len(results) == 0 {
 		t.Error("expected to find chunk by its content")
 	}
 
 	// Should NOT find meta header fields like "codectx:meta" or "source:".
-	metaResults := idx.Query(IndexObjects, "codectx:meta", 10)
+	metaResults := idx.query(IndexObjects, "codectx:meta", 10)
 	if len(metaResults) > 0 {
 		t.Error("should not find meta header content in index")
 	}
@@ -492,13 +492,13 @@ func TestBuildFromChunks_TokenizesBlockContent(t *testing.T) {
 	idx.BuildFromChunks(chunks)
 
 	// Should find compound terms.
-	results := idx.Query(IndexObjects, "error-handling", 10)
+	results := idx.query(IndexObjects, "error-handling", 10)
 	if len(results) == 0 {
 		t.Error("expected to find 'error-handling' as compound term")
 	}
 
 	// Should find dotted paths.
-	results = idx.Query(IndexObjects, "jwt.Verify", 10)
+	results = idx.query(IndexObjects, "jwt.Verify", 10)
 	if len(results) == 0 {
 		t.Error("expected to find 'jwt.verify' as dotted path")
 	}
@@ -675,7 +675,7 @@ func TestSearch_EmptyIndex(t *testing.T) {
 	idx := New(1.2, 0.75)
 	idx.BuildFromChunks(nil)
 
-	results := idx.Query(IndexObjects, "some query term", 10)
+	results := idx.query(IndexObjects, "some query term", 10)
 	if len(results) != 0 {
 		t.Errorf("expected 0 results from empty index, got %d", len(results))
 	}

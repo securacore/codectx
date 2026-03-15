@@ -894,7 +894,7 @@ func TestClassifySource_Spec(t *testing.T) {
 func TestClassifySource_System(t *testing.T) {
 	tests := []string{
 		"system/topics/taxonomy/README.md",
-		"system/foundation/compiler-philosophy/README.md",
+		"system/foundation/documentation-protocol/README.md",
 		"system/prompts/compile.md",
 	}
 	for _, src := range tests {

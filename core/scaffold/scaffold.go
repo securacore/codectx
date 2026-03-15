@@ -278,7 +278,6 @@ func directories(docsRoot, codectxDir string) []string {
 		filepath.Join(docsRoot, "prompts"),
 
 		// System documentation (compiler instructions).
-		filepath.Join(docsRoot, project.SystemDir, "foundation", "compiler-philosophy"),
 		filepath.Join(docsRoot, project.SystemDir, "foundation", "documentation-protocol"),
 		filepath.Join(docsRoot, project.SystemDir, "foundation", "history"),
 		filepath.Join(docsRoot, project.SystemDir, "topics", "context-assembly"),
@@ -312,29 +311,67 @@ type configPaths struct {
 	projectType string // "project" or "package"
 }
 
-// writeConfigs creates the three configuration files.
+// writeConfigs creates the three configuration files using embedded templates
+// with per-field comments for self-documenting defaults.
 func writeConfigs(cp configPaths) error {
 	// codectx.yml at project root.
-	cfg := project.DefaultConfig(cp.name, cp.root, cp.projectType)
 	cfgPath := filepath.Join(cp.projectDir, project.ConfigFileName)
-	if err := cfg.WriteToFile(cfgPath); err != nil {
+	cfgTmpl, err := embed.ReadConfigTemplate("codectx.yml")
+	if err != nil {
+		return fmt.Errorf("reading codectx.yml template: %w", err)
+	}
+	cfgType := ""
+	if cp.projectType == project.TypePackage {
+		cfgType = project.TypePackage
+	}
+	if err := project.WriteConfigFromTemplate(cfgPath, cfgTmpl, struct {
+		Type string
+		Root string
+		Name string
+	}{
+		Type: cfgType,
+		Root: project.ResolveRoot(cp.root),
+		Name: cp.name,
+	}); err != nil {
 		return fmt.Errorf("writing %s: %w", project.ConfigFileName, err)
 	}
 
 	// ai.yml in .codectx/.
-	aiCfg := project.DefaultAIConfig()
+	encoding := project.DefaultEncoding
 	if cp.encoding != "" {
-		aiCfg.Compilation.Encoding = cp.encoding
+		encoding = cp.encoding
 	}
 	aiPath := filepath.Join(cp.codectxDir, project.AIConfigFile)
-	if err := aiCfg.WriteToFile(aiPath); err != nil {
+	aiTmpl, err := embed.ReadConfigTemplate("ai.yml")
+	if err != nil {
+		return fmt.Errorf("reading ai.yml template: %w", err)
+	}
+	aiCfg := project.DefaultAIConfig()
+	if err := project.WriteConfigFromTemplate(aiPath, aiTmpl, struct {
+		Encoding      string
+		Model         string
+		ContextWindow int
+		ResultsCount  int
+		OutputFormat  string
+	}{
+		Encoding:      encoding,
+		Model:         aiCfg.Consumption.Model,
+		ContextWindow: aiCfg.Consumption.ContextWindow,
+		ResultsCount:  aiCfg.Consumption.ResultsCount,
+		OutputFormat:  aiCfg.OutputFormat,
+	}); err != nil {
 		return fmt.Errorf("writing %s: %w", project.AIConfigFile, err)
 	}
 
 	// preferences.yml in .codectx/.
-	prefsCfg := project.DefaultPreferencesConfig()
 	prefsPath := filepath.Join(cp.codectxDir, project.PreferencesFile)
-	if err := prefsCfg.WriteToFile(prefsPath); err != nil {
+	prefsTmpl, err := embed.ReadConfigTemplate("preferences.yml")
+	if err != nil {
+		return fmt.Errorf("reading preferences.yml template: %w", err)
+	}
+	// preferences.yml template uses no dynamic values — all defaults are
+	// hardcoded in the template to match DefaultPreferencesConfig().
+	if err := project.WriteConfigFromTemplate(prefsPath, prefsTmpl, nil); err != nil {
 		return fmt.Errorf("writing %s: %w", project.PreferencesFile, err)
 	}
 
@@ -460,10 +497,21 @@ func InitPackage(opts PackageOptions) (*PackageResult, error) {
 		result.DirsCreated++
 	}
 
-	// 2. Write package/codectx.yml.
-	manifest := project.DefaultPackageManifest(opts.Name, opts.Author, opts.Description)
+	// 2. Write package/codectx.yml using commented template.
 	manifestPath := project.PackageConfigPath(absDir)
-	if err := manifest.WriteToFile(manifestPath); err != nil {
+	pkgTmpl, err := embed.ReadConfigTemplate("package-codectx.yml")
+	if err != nil {
+		return nil, fmt.Errorf("reading package manifest template: %w", err)
+	}
+	if err := project.WriteConfigFromTemplate(manifestPath, pkgTmpl, struct {
+		Name        string
+		Author      string
+		Description string
+	}{
+		Name:        opts.Name,
+		Author:      opts.Author,
+		Description: opts.Description,
+	}); err != nil {
 		return nil, fmt.Errorf("writing package manifest: %w", err)
 	}
 	result.FilesCreated++

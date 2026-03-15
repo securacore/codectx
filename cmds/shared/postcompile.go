@@ -39,10 +39,7 @@ func RunPostInitCompile(projectDir string) error {
 		return fmt.Errorf("loading AI config: %w", err)
 	}
 
-	prefsCfg, err := project.LoadPreferencesConfigForProject(projectDir, cfg)
-	if err != nil {
-		return fmt.Errorf("loading preferences: %w", err)
-	}
+	prefsCfg := LoadPreferencesOrDefault(projectDir, cfg)
 
 	compileCfg := compile.BuildConfig(projectDir, rootDir, cfg, aiCfg, prefsCfg)
 

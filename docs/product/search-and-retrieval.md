@@ -206,34 +206,51 @@ query:
 
 ## Query Output
 
-The final output is a ranked list with full metadata:
+The final output is a unified ranked list with full metadata. Object, spec, and system chunks appear interleaved based on their fused RRF scores:
 
 ```
-Results for: "jwt refresh token validation"
-Expanded: "jwt json-web-token bearer-token refresh-token token-validation"
+-> Results for: "jwt refresh token validation"
+  Expanded: jwt json-web-token bearer-token refresh-token token-validation
 
-Instructions:
-1. [score: 8.42] obj:a1b2c3.03 -- Authentication > JWT Tokens > Refresh Flow
-   Source: docs/topics/authentication/jwt-tokens.md (chunk 3/7, 462 tokens)
+Results (5, bm25f + rrf)
+  1. [score: 0.0234] obj:a1b2c3.03 — Authentication > JWT Tokens > Refresh Flow
+     Source: docs/topics/authentication/jwt-tokens.md (chunk 3/7, 462 tokens)
+     Indexes: objects:#1, specs:#3
 
-2. [score: 7.18] obj:a1b2c3.04 -- Authentication > JWT Tokens > Validation Rules
-   Source: docs/topics/authentication/jwt-tokens.md (chunk 4/7, 488 tokens)
+  2. [score: 0.0198] obj:a1b2c3.04 — Authentication > JWT Tokens > Validation Rules
+     Source: docs/topics/authentication/jwt-tokens.md (chunk 4/7, 488 tokens)
+     Indexes: objects:#2
 
-Reasoning:
-1. [score: 6.85] spec:f7g8h9.02 -- Authentication > JWT Tokens > Refresh Flow
-   Source: docs/topics/authentication/jwt-tokens.spec.md (chunk 2/3, 380 tokens)
+  3. [score: 0.0165] spec:f7g8h9.02 — Authentication > JWT Tokens > Refresh Flow
+     Source: docs/topics/authentication/jwt-tokens.spec.md (chunk 2/3, 380 tokens)
+     Indexes: specs:#1, objects:#5
+
+  4. [score: 0.0142] obj:a1b2c3.05 — Authentication > JWT Tokens > Error Handling
+     Source: docs/topics/authentication/jwt-tokens.md (chunk 5/7, 412 tokens)
+     Indexes: objects:#4
+
+  5. [score: 0.0098] sys:m3n4o5.01 — Documentation Protocol > Mandatory Workflow
+     Source: system/foundation/documentation-protocol/README.md (chunk 1/10, 107 tokens)
+     Indexes: system:#2
+
+  Total: 1,849 tokens across 5 results
 
 Related chunks (adjacent to top results, not scored):
-  obj:a1b2c3.02 -- Authentication > JWT Tokens > Token Structure
-  obj:a1b2c3.05 -- Authentication > JWT Tokens > Error Handling
+  obj:a1b2c3.02 — Authentication > JWT Tokens > Token Structure (488 tokens)
+
+Run "codectx generate" with the top chunk IDs above to read their full content.
+Try additional queries with different terms to explore related areas before deciding.
 ```
 
 Each result includes:
-- The chunk ID (with type prefix)
-- BM25F or RRF score
-- Heading hierarchy
+- The chunk ID (with type prefix — `obj:`, `spec:`, or `sys:`)
+- Fused RRF score
+- Heading hierarchy (using em dash `—` separator)
 - Source file and chunk position
 - Token count (for budget-aware decisions)
+- `Indexes:` metadata showing which indexes contributed and at what rank
+
+The header shows the result count and the active scoring pipeline (`bm25f + rrf`). The total token count across all results helps the AI plan its budget. The footer guides the AI toward the next steps — generating a document from the results or running additional queries.
 
 The "Related chunks" section lists chunks that are adjacent to top-scoring results but didn't score highly enough to appear in the ranked list. These are candidates for the AI to request if it needs more context.
 

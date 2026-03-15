@@ -196,6 +196,11 @@ validation:
   require_spec: false
   max_file_tokens: 10000
   require_headings: true
+
+# Prompt command auto-selection
+prompt:
+  budget_multiplier: 4.0
+  budget_delta: 0.0
 ```
 
 ### Chunking Settings
@@ -231,6 +236,15 @@ validation:
 | `require_spec` | false | Spec files recommended but not required. |
 | `max_file_tokens` | 10000 | Warn if a single source file exceeds this token count. |
 | `require_headings` | true | Warn if a file has no heading structure. |
+
+### Prompt Settings
+
+The `codectx prompt` command auto-selects chunks within a computed token budget: `budget = target_tokens x budget_multiplier x (1 + budget_delta)`.
+
+| Field | Default | Purpose |
+|-------|---------|---------|
+| `budget_multiplier` | 4.0 | Base multiplier. Controls how many chunks worth of content are included. At the default chunk target of 450 tokens, multiplier 4 = ~1,800 tokens (~4 chunks). |
+| `budget_delta` | 0.0 | Incremental scaling. `0.1` = +10% budget, `-0.2` = -20%. Override per-call with `codectx prompt --delta 0.5`. |
 
 ### Scaffold Maintenance
 

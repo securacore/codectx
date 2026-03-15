@@ -50,7 +50,6 @@ func TestInit_CreatesFullDirectoryStructure(t *testing.T) {
 		"docs/topics",
 		"docs/plans",
 		"docs/prompts",
-		"docs/system/foundation/compiler-philosophy",
 		"docs/system/foundation/documentation-protocol",
 		"docs/system/foundation/history",
 
@@ -151,10 +150,8 @@ func TestInit_CreatesSystemDefaults(t *testing.T) {
 
 	// Verify all default system documentation files exist and have content.
 	expectedFiles := map[string]string{
-		"system/foundation/compiler-philosophy/README.md":      "Compiler Philosophy",
-		"system/foundation/compiler-philosophy/README.spec.md": "Compiler Philosophy Reasoning",
-		"system/foundation/documentation-protocol/README.md":   "Documentation Protocol",
-		"system/foundation/history/README.md":                  "History",
+		"system/foundation/documentation-protocol/README.md": "Documentation Protocol",
+		"system/foundation/history/README.md":                "History",
 
 		"system/topics/context-assembly/README.md": "Context Assembly Instructions",
 	}

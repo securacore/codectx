@@ -12,10 +12,10 @@ func TestValidateFile_WithHeadings(t *testing.T) {
 	doc := Parse([]byte("# Title\n\nSome content.\n"))
 	result := ValidateFile(doc, true)
 
-	if !result.OK() {
+	if !result.ok() {
 		t.Error("expected OK for file with headings")
 	}
-	if result.HasWarnings() {
+	if result.hasWarnings() {
 		t.Errorf("expected no warnings, got %v", result.Warnings)
 	}
 }
@@ -24,10 +24,10 @@ func TestValidateFile_NoHeadings_Required(t *testing.T) {
 	doc := Parse([]byte("Just text without headings.\n"))
 	result := ValidateFile(doc, true)
 
-	if !result.OK() {
+	if !result.ok() {
 		t.Error("no-heading should be a warning, not an error")
 	}
-	if !result.HasWarnings() {
+	if !result.hasWarnings() {
 		t.Error("expected warning for file without headings")
 	}
 	if len(result.Warnings) != 1 {
@@ -39,7 +39,7 @@ func TestValidateFile_NoHeadings_NotRequired(t *testing.T) {
 	doc := Parse([]byte("Just text without headings.\n"))
 	result := ValidateFile(doc, false)
 
-	if result.HasWarnings() {
+	if result.hasWarnings() {
 		t.Error("should not warn when headings are not required")
 	}
 }
@@ -48,7 +48,7 @@ func TestValidateFile_EmptyDocument(t *testing.T) {
 	doc := Parse([]byte(""))
 	result := ValidateFile(doc, true)
 
-	if !result.HasWarnings() {
+	if !result.hasWarnings() {
 		t.Error("expected warning for empty document with require_headings=true")
 	}
 }
@@ -59,17 +59,17 @@ func TestValidateFile_EmptyDocument(t *testing.T) {
 
 func TestValidationResult_OK(t *testing.T) {
 	r := &ValidationResult{}
-	if !r.OK() {
+	if !r.ok() {
 		t.Error("empty result should be OK")
 	}
 
 	r.Warnings = append(r.Warnings, "a warning")
-	if !r.OK() {
+	if !r.ok() {
 		t.Error("result with only warnings should still be OK")
 	}
 
 	r.Errors = append(r.Errors, "an error")
-	if r.OK() {
+	if r.ok() {
 		t.Error("result with errors should not be OK")
 	}
 }
@@ -84,7 +84,7 @@ func TestValidationResult_Merge(t *testing.T) {
 		Errors:   []string{"e2"},
 	}
 
-	a.Merge(b)
+	a.merge(b)
 
 	if len(a.Warnings) != 3 {
 		t.Errorf("expected 3 warnings, got %d", len(a.Warnings))
@@ -96,7 +96,7 @@ func TestValidationResult_Merge(t *testing.T) {
 
 func TestValidationResult_MergeNil(t *testing.T) {
 	a := &ValidationResult{Warnings: []string{"w1"}}
-	a.Merge(nil) // should not panic
+	a.merge(nil) // should not panic
 	if len(a.Warnings) != 1 {
 		t.Error("merge nil should not change warnings")
 	}

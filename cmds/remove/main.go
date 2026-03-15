@@ -341,18 +341,8 @@ func resolveTarget(
 	flagPackage := cmd.Bool("package")
 	flagBoth := cmd.Bool("both")
 
-	flagCount := shared.BoolCount(flagProject, flagPackage, flagBoth)
-	if flagCount > 1 {
-		fmt.Print(tui.ErrorMsg{
-			Title: "Conflicting flags",
-			Detail: []string{
-				fmt.Sprintf("Only one of %s, %s, or %s may be specified.",
-					tui.StyleCommand.Render("--project"),
-					tui.StyleCommand.Render("--package"),
-					tui.StyleCommand.Render("--both"),
-				),
-			},
-		}.Render())
+	if errMsg := shared.ValidateExclusiveTargetFlags(flagProject, flagPackage, flagBoth); errMsg != "" {
+		fmt.Print(errMsg)
 		return 0, fmt.Errorf("conflicting target flags")
 	}
 

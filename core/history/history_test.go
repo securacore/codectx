@@ -862,3 +862,100 @@ func TestCompileHash_MissingFile(t *testing.T) {
 		t.Fatal("expected error for missing hashes.yml")
 	}
 }
+
+// --- Malformed JSON resilience ---
+
+func TestReadQueryHistory_SkipsMalformedJSON(t *testing.T) {
+	histDir := t.TempDir()
+	queriesDir := filepath.Join(histDir, QueriesDir)
+	if err := os.MkdirAll(queriesDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write a valid query entry.
+	validEntry := QueryEntry{
+		Ts:          1700000001000000000,
+		QueryHash:   QueryHash("valid query"),
+		Raw:         "valid query",
+		Expanded:    "valid query expanded",
+		ResultCount: 5,
+		CompileHash: "sha256:compilehash000000000000000000000000000000000000000000000000",
+		Caller:      "test",
+		SessionID:   "sess_test",
+		Model:       "test-model",
+	}
+	validData, err := json.MarshalIndent(validEntry, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	validFilename := fmt.Sprintf("%d.%s.json", validEntry.Ts, ShortHash(validEntry.QueryHash))
+	if err := os.WriteFile(filepath.Join(queriesDir, validFilename), validData, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write a malformed JSON file.
+	malformedFilename := "1700000002000000000.badbadbad000.json"
+	if err := os.WriteFile(filepath.Join(queriesDir, malformedFilename), []byte("{invalid json"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := ReadQueryHistory(histDir, 0)
+	if err != nil {
+		t.Fatalf("ReadQueryHistory should not error on malformed files: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 valid entry (skipping malformed), got %d", len(entries))
+	}
+	if entries[0].Raw != "valid query" {
+		t.Errorf("expected valid entry, got %q", entries[0].Raw)
+	}
+}
+
+func TestReadChunksHistory_SkipsMalformedJSON(t *testing.T) {
+	histDir := t.TempDir()
+	chunksDir := filepath.Join(histDir, ChunksDir)
+	if err := os.MkdirAll(chunksDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write a valid chunks entry.
+	chunks := []string{"obj:abc.01"}
+	validEntry := ChunksEntry{
+		Ts:           1700000001000000000,
+		ChunkSetHash: ChunkSetHash(chunks),
+		Chunks:       chunks,
+		TokenCount:   500,
+		ContentHash:  "sha256:contenthash00000000000000000000000000000000000000000000000000",
+		CompileHash:  "sha256:compilehash000000000000000000000000000000000000000000000000",
+		DocFile:      "1700000001000000000.contenthash0.md",
+		CacheHit:     false,
+		Caller:       "test",
+		SessionID:    "sess_test",
+		Model:        "test-model",
+	}
+	validData, err := json.MarshalIndent(validEntry, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	validFilename := fmt.Sprintf("%d.%s.json", validEntry.Ts, ShortHash(validEntry.ChunkSetHash))
+	if err := os.WriteFile(filepath.Join(chunksDir, validFilename), validData, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write a malformed JSON file.
+	malformedFilename := "1700000002000000000.badbadbad000.json"
+	if err := os.WriteFile(filepath.Join(chunksDir, malformedFilename), []byte("{invalid json"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := ReadChunksHistory(histDir, 0)
+	if err != nil {
+		t.Fatalf("ReadChunksHistory should not error on malformed files: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 valid entry (skipping malformed), got %d", len(entries))
+	}
+	if entries[0].Caller != "test" {
+		t.Errorf("expected valid entry with caller %q, got %q", "test", entries[0].Caller)
+	}
+}

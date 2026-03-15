@@ -80,11 +80,7 @@ func run(_ context.Context, cmd *cli.Command) error {
 	topN := shared.ResolveTopN(int(cmd.Int("top")), projectDir, cfg)
 
 	// --- Step 4: Load preferences for indexer selection ---
-	prefsCfg, prefsErr := project.LoadPreferencesConfigForProject(projectDir, cfg)
-	if prefsErr != nil {
-		shared.WarnBestEffort("Loading preferences", prefsErr)
-		prefsCfg = &project.PreferencesConfig{}
-	}
+	prefsCfg := shared.LoadPreferencesOrDefault(projectDir, cfg)
 
 	// --- Step 5: Run the query ---
 	var result *corequery.QueryResult

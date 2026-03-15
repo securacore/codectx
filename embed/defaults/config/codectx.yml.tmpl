@@ -1,0 +1,60 @@
+# codectx project configuration
+# See: https://github.com/securacore/codectx
+# Full reference: https://github.com/securacore/codectx/docs/product/configuration.md
+
+{{- if .Type}}
+
+# Project type: "project" is a full documentation environment;
+# "package" is a documentation package authoring project with a
+# package/ directory containing publishable content.
+type: {{.Type}}
+{{- end}}
+
+# Documentation root directory relative to the project root.
+# Change if "docs" conflicts with existing content in your repository.
+# All documentation paths and CLI operations are relative to this root.
+root: {{.Root}}
+
+# Package/project name. Used by the package manager for identity and
+# referenced in dependency declarations (e.g., "my-project@myteam").
+name: {{.Name}}
+
+# GitHub username or organization that owns this package.
+# Used for package resolution: name@author maps to
+# github.com/author/codectx-name on the registry.
+author: ""
+
+# Package version in semver format (major.minor.patch).
+# Bump with: codectx version bump [major|minor|patch]
+version: "0.1.0"
+
+# One-line description shown in search results and package listings.
+description: ""
+
+# Always-loaded session context.
+# These documents are compiled into .codectx/compiled/context.md and
+# loaded by the AI at the start of every session. Order matters —
+# documents appear in context.md in this order.
+# Supports local paths (e.g., foundation/coding-standards) and
+# package references (e.g., react-patterns@community/foundation/hooks).
+session:
+  always_loaded:
+    - system/foundation/documentation-protocol
+    - system/foundation/history
+
+  # Maximum token budget for assembled session context.
+  # The compiler warns if content exceeds this limit.
+  # Every token here is a token the AI can't use for task-specific content.
+  budget: 30000
+
+# Package dependencies.
+# Format: "name@author:version" with an active flag.
+# Active packages are included in compilation; inactive packages remain
+# installed but are excluded from compiled output and consume zero tokens.
+# Use `codectx add <dep>` and `codectx remove <dep>` to manage.
+dependencies: {}
+
+# Package registry for resolving dependencies.
+# Packages are GitHub repos using the codectx-[name] naming convention.
+# e.g., react-patterns@community resolves to github.com/community/codectx-react-patterns
+registry: github.com

@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/securacore/codectx/cmds/shared"
 	"github.com/securacore/codectx/core/registry"
 )
 
@@ -394,7 +395,7 @@ func TestFilterInstallable(t *testing.T) {
 		{Name: "c", Author: "x", HasRelease: true},
 	}
 
-	filtered, hidden := filterInstallable(results)
+	filtered, hidden := shared.FilterInstallable(results)
 	if len(filtered) != 2 {
 		t.Fatalf("expected 2 installable, got %d", len(filtered))
 	}
@@ -411,7 +412,7 @@ func TestFilterInstallable_AllHidden(t *testing.T) {
 		{Name: "b", Author: "x", HasRelease: false},
 	}
 
-	filtered, hidden := filterInstallable(results)
+	filtered, hidden := shared.FilterInstallable(results)
 	if len(filtered) != 0 {
 		t.Fatalf("expected 0 installable, got %d", len(filtered))
 	}
