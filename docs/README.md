@@ -21,16 +21,20 @@ At the start of every session, load [metadata.yml](metadata.yml) and all foundat
 
 ## Product
 
-| Document                                            | Purpose                                             |
-| --------------------------------------------------- | --------------------------------------------------- |
-| [Architecture](product/README.md)                   | System architecture overview and core concepts       |
-| [Package Format](product/packages.md)               | Package structure, manifest, naming, and resolution  |
-| [Compilation](product/compilation.md)               | Compile process, content addressing, decomposition   |
-| [Compression](product/compression.md)               | Markdown compression pipeline and benchmarks         |
-| [Configuration](product/configuration.md)           | Settings, activation, conflicts, and directory layout|
-| [Preference Management](product/set-command.md)     | The `codectx set` command and user-local preferences |
-| [AI Integration](product/ai-integration.md)         | Entry point linking, loading protocol, watch mode    |
-| [Design Decisions](product/spec/README.md)          | Reasoning behind every architectural choice          |
+| Document                                                          | Purpose                                                     |
+| ----------------------------------------------------------------- | ----------------------------------------------------------- |
+| [Overview](product/README.md)                                     | Product overview, key capabilities, and why codectx exists  |
+| [Getting Started](product/getting-started.md)                     | Install, initialize, compile, and query your first project  |
+| [How It Works](product/how-it-works.md)                           | The compilation pipeline from markdown to searchable chunks |
+| [Documentation Structure](product/documentation-structure.md)     | Foundation, topics, plans, prompts, and .spec.md convention |
+| [Search and Retrieval](product/search-and-retrieval.md)           | BM25F scoring, taxonomy expansion, RRF, graph re-ranking   |
+| [Session Context](product/session-context.md)                     | Always-loaded context, token budgets, and context assembly  |
+| [Package Manager](product/package-manager.md)                     | Installing, publishing, and managing documentation packages |
+| [Plans](product/plans.md)                                         | Resumable AI workflows with state tracking and drift detection |
+| [History and Caching](product/history-and-caching.md)             | Query/generate history, document caching, and usage metrics |
+| [CLI Reference](product/cli-reference.md)                         | Complete command reference with flags and examples          |
+| [Configuration](product/configuration.md)                         | codectx.yml, ai.yml, preferences.yml, and local overrides  |
+| [AI Tool Integration](product/ai-tool-integration.md)             | Entry point files and how AI tools interact with codectx    |
 
 ## Schemas
 
